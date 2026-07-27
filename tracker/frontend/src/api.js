@@ -123,3 +123,9 @@ export async function testConnection(service) {
   if (!res.ok) throw new Error('Failed to test connection');
   return res.json();
 }
+
+export async function fetchFreeModels() {
+  const res = await fetch(`${BASE_URL}/settings/models`);
+  if (!res.ok) throw new Error('Failed to fetch models');
+  return res.json();
+}

@@ -26,7 +26,8 @@ ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
 SETTINGS_KEYS = [
     {"key": "TELEGRAM_BOT_TOKEN", "label": "Telegram Bot Token", "group": "Telegram", "placeholder": "e.g. 123456:ABC-DEF..."},
     {"key": "TELEGRAM_CHAT_ID", "label": "Telegram Chat ID", "group": "Telegram", "placeholder": "e.g. 7669562648"},
-    {"key": "OPENAI_API_KEY", "label": "OpenAI API Key", "group": "AI", "placeholder": "e.g. sk-proj-..."},
+    {"key": "OPENAI_API_KEY", "label": "OpenRouter API Key", "group": "AI (OpenRouter)", "placeholder": "e.g. sk-or-v1-..."},
+    {"key": "AI_MODEL", "label": "AI Model", "group": "AI (OpenRouter)", "placeholder": "e.g. openrouter/free"},
     {"key": "LINKEDIN_EMAIL", "label": "LinkedIn Email", "group": "LinkedIn", "placeholder": "your-email@example.com"},
     {"key": "LINKEDIN_PASSWORD", "label": "LinkedIn Password", "group": "LinkedIn", "placeholder": "••••••••", "sensitive": True},
 ]
@@ -198,7 +199,7 @@ def test_telegram():
 
 @router.post("/test/openai", response_model=TestResult)
 def test_openai():
-    """Test OpenAI API key by making a minimal API call."""
+    """Test OpenRouter API key (OpenAI-compatible) by listing models."""
     env_values = _load_env()
     api_key = env_values.get("OPENAI_API_KEY", "")
 
@@ -206,15 +207,21 @@ def test_openai():
         return TestResult(success=False, message="API key not configured. Please set it first.")
 
     try:
-        # Call OpenAI models endpoint (cheapest way to verify key)
+        # OpenRouter uses the same /v1/models endpoint
         response = httpx_client.get(
-            "https://api.openai.com/v1/models",
+            "https://openrouter.ai/api/v1/models",
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=10,
         )
 
         if response.status_code == 200:
-            return TestResult(success=True, message="API key is valid! Connected to OpenAI.")
+            data = response.json()
+            model_count = len(data.get("data", []))
+            free_models = [m for m in data.get("data", []) if ":free" in m.get("id", "")]
+            return TestResult(
+                success=True,
+                message=f"Connected to OpenRouter! {model_count} models available ({len(free_models)} free).",
+            )
         elif response.status_code == 401:
             return TestResult(success=False, message="Invalid API key. Please check and re-enter.")
         elif response.status_code == 429:
@@ -223,11 +230,57 @@ def test_openai():
             return TestResult(success=False, message=f"Unexpected response: {response.status_code}")
 
     except httpx_client.ConnectError:
-        return TestResult(success=False, message="Network error — can't reach OpenAI API.")
+        return TestResult(success=False, message="Network error — can't reach OpenRouter API.")
     except httpx_client.TimeoutException:
-        return TestResult(success=False, message="Timeout — OpenAI API not responding.")
+        return TestResult(success=False, message="Timeout — OpenRouter API not responding.")
     except Exception as e:
         return TestResult(success=False, message=f"Error: {str(e)[:100]}")
+
+
+@router.get("/models")
+def list_free_models():
+    """List available free models from OpenRouter."""
+    env_values = _load_env()
+    api_key = env_values.get("OPENAI_API_KEY", "")
+
+    if not api_key or api_key.startswith("placeholder"):
+        return {"models": [], "error": "API key not configured"}
+
+    try:
+        response = httpx_client.get(
+            "https://openrouter.ai/api/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=15,
+        )
+
+        if response.status_code != 200:
+            return {"models": [], "error": f"API returned {response.status_code}"}
+
+        data = response.json()
+        all_models = data.get("data", [])
+
+        # Filter free models and format them
+        free_models = []
+        for m in all_models:
+            model_id = m.get("id", "")
+            pricing = m.get("pricing", {})
+            prompt_price = float(pricing.get("prompt", "1") or "1")
+            completion_price = float(pricing.get("completion", "1") or "1")
+
+            if prompt_price == 0 and completion_price == 0:
+                free_models.append({
+                    "id": model_id,
+                    "name": m.get("name", model_id),
+                    "context_length": m.get("context_length", 0),
+                })
+
+        # Sort by name
+        free_models.sort(key=lambda x: x["name"])
+
+        return {"models": free_models, "total": len(free_models)}
+
+    except Exception as e:
+        return {"models": [], "error": str(e)[:100]}
 
 
 @router.post("/test/linkedin", response_model=TestResult)

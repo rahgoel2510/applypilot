@@ -97,8 +97,13 @@ class InMailDrafter:
             config: The application Settings instance (from get_config()).
         """
         self._config = config
-        self._client = AsyncOpenAI(api_key=config.openai_api_key)
-        self._model = "gpt-4o-mini"
+        self._client = AsyncOpenAI(
+            api_key=config.openai_api_key,
+            base_url="https://openrouter.ai/api/v1",
+        )
+        # Use AI_MODEL from env, fallback to free router
+        import os
+        self._model = os.environ.get("AI_MODEL", "openrouter/free")
         self._max_length = config.inmail.max_length  # word limit
         self._tone = config.inmail.tone
         self._cache: dict[str, dict[str, Any]] = {}

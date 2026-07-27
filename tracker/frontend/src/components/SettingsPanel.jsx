@@ -3,17 +3,17 @@ import {
   Settings, Shield, Eye, EyeOff, Save, Check, AlertCircle,
   Key, Bot, Brain, Globe, Lock, RefreshCw, Plug, Loader2, X,
 } from 'lucide-react';
-import { getSettings, updateSettings, testConnection } from '../api';
+import { getSettings, updateSettings, testConnection, fetchFreeModels } from '../api';
 
 const GROUP_ICONS = {
   Telegram: Bot,
-  AI: Brain,
+  'AI (OpenRouter)': Brain,
   LinkedIn: Globe,
 };
 
 const GROUP_COLORS = {
   Telegram: { bg: 'bg-sky-50', border: 'border-sky-200', icon: 'text-sky-600', badge: 'bg-sky-100 text-sky-700' },
-  AI: { bg: 'bg-purple-50', border: 'border-purple-200', icon: 'text-purple-600', badge: 'bg-purple-100 text-purple-700' },
+  'AI (OpenRouter)': { bg: 'bg-purple-50', border: 'border-purple-200', icon: 'text-purple-600', badge: 'bg-purple-100 text-purple-700' },
   LinkedIn: { bg: 'bg-blue-50', border: 'border-blue-200', icon: 'text-blue-600', badge: 'bg-blue-100 text-blue-700' },
 };
 
@@ -28,6 +28,8 @@ export default function SettingsPanel() {
   const [loading, setLoading] = useState(true);
   const [testResults, setTestResults] = useState({});
   const [testing, setTesting] = useState({});
+  const [freeModels, setFreeModels] = useState([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
 
   const loadSettings = async () => {
     try {
@@ -76,7 +78,7 @@ export default function SettingsPanel() {
   const hasChanges = Object.values(editValues).some(v => v.trim().length > 0);
 
   const handleTestConnection = async (group) => {
-    const serviceMap = { Telegram: 'telegram', AI: 'openai', LinkedIn: 'linkedin' };
+    const serviceMap = { Telegram: 'telegram', 'AI (OpenRouter)': 'openai', LinkedIn: 'linkedin' };
     const service = serviceMap[group];
     if (!service) return;
 
@@ -85,6 +87,16 @@ export default function SettingsPanel() {
     try {
       const result = await testConnection(service);
       setTestResults(prev => ({ ...prev, [group]: result }));
+
+      // If AI test succeeded, fetch available free models
+      if (group === 'AI (OpenRouter)' && result.success) {
+        setModelsLoading(true);
+        try {
+          const modelsData = await fetchFreeModels();
+          setFreeModels(modelsData.models || []);
+        } catch (e) { /* ignore */ }
+        finally { setModelsLoading(false); }
+      }
     } catch (e) {
       setTestResults(prev => ({ ...prev, [group]: { success: false, message: 'Request failed' } }));
     } finally {
@@ -202,6 +214,33 @@ export default function SettingsPanel() {
                 <button onClick={() => setTestResults(prev => ({ ...prev, [groupName]: null }))} className="p-0.5 hover:opacity-70">
                   <X className="h-3.5 w-3.5" />
                 </button>
+              </div>
+            )}
+
+            {/* Model selector — shown after successful AI test */}
+            {groupName === 'AI (OpenRouter)' && testResults[groupName]?.success && freeModels.length > 0 && (
+              <div className="mb-4 rounded-xl border border-purple-200 bg-purple-50/50 p-4">
+                <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-purple-800">
+                  <Brain className="h-4 w-4" />
+                  Choose a Model ({freeModels.length} free models available)
+                </label>
+                <select
+                  value={editValues['AI_MODEL'] || ''}
+                  onChange={(e) => setEditValues(prev => ({ ...prev, AI_MODEL: e.target.value }))}
+                  className="w-full rounded-lg border-2 border-purple-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20"
+                >
+                  <option value="">— Select a free model —</option>
+                  <option value="openrouter/free">🎲 Auto (Free Router — picks randomly)</option>
+                  {freeModels.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.context_length ? `${Math.round(m.context_length/1000)}k ctx` : ''})
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-[11px] text-purple-600">
+                  Pick a model for InMail drafting. "Auto" works great — it picks from all free models.
+                </p>
+                {modelsLoading && <p className="mt-1 text-xs text-purple-500 animate-pulse">Loading models...</p>}
               </div>
             )}
 
