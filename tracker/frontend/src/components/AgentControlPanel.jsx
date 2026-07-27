@@ -384,12 +384,22 @@ export default function AgentControlPanel() {
                 </p>
               </div>
             ) : (
-              output.map((line, i) => (
-                <div key={i} className={`${getLineColor(line)} whitespace-pre-wrap break-all`}>
-                  <span className="mr-3 select-none text-slate-700">{String(i + 1).padStart(3)}</span>
-                  {line}
-                </div>
-              ))
+              output
+                .filter(line => line.trim().length > 0 && !line.match(/^\s{10,}/))
+                .map((line, i) => {
+                  // Clean up Rich logger formatting
+                  const cleaned = line
+                    .replace(/\[\d{2}\/\d{2}\/\d{2}\s\d{2}:\d{2}:\d{2}\]\s*/, '')
+                    .replace(/\s{2,}\S+\.py:\d+\s*$/, '')
+                    .trim();
+                  if (!cleaned) return null;
+                  return (
+                    <div key={i} className={`${getLineColor(cleaned)} whitespace-pre-wrap break-all`}>
+                      <span className="mr-3 select-none text-slate-700">{String(i + 1).padStart(3)}</span>
+                      {cleaned}
+                    </div>
+                  );
+                })
             )}
           </div>
         )}

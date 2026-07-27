@@ -26,7 +26,13 @@ const TABS = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // URL-based tab routing
+  const getTabFromHash = () => {
+    const hash = window.location.hash.replace('#', '');
+    return TABS.find(t => t.id === hash)?.id || 'dashboard';
+  };
+
+  const [activeTab, setActiveTab] = useState(getTabFromHash);
   const [jobs, setJobs] = useState([]);
   const [search, setSearch] = useState('');
   const [companyFilter, setCompanyFilter] = useState('all');
@@ -39,6 +45,18 @@ export default function App() {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
+
+  // Sync tab with URL hash
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    window.location.hash = tabId;
+  };
+
+  useEffect(() => {
+    const onHashChange = () => setActiveTab(getTabFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   // Fetch jobs
   const loadJobs = useCallback(async () => {
@@ -150,7 +168,7 @@ export default function App() {
               {TABS.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
-                  onClick={() => setActiveTab(id)}
+                  onClick={() => handleTabChange(id)}
                   className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                     activeTab === id
                       ? 'bg-[#ECFAFA] text-[#117D84]'
