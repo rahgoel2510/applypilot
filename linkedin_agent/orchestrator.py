@@ -246,14 +246,19 @@ class JobAgent:
 
         try:
             # b. Launch browser + session check
+            import time as _time
+            t0 = _time.time()
             self.log.info("Launching browser...")
             await self.browser.launch()
+            self.log.info(f"Browser ready ({_time.time()-t0:.1f}s)")
+
+            t1 = _time.time()
             self.log.info("Checking LinkedIn session...")
             await self.browser.login(
                 email=self.config.linkedin_email,
                 password=self.config.linkedin_password,
             )
-            self.log.info("LinkedIn connected ✓")
+            self.log.info(f"LinkedIn connected ✓ ({_time.time()-t1:.1f}s)")
 
             # Initialize the application executor for this cycle
             self._applicant = ApplicationExecutor(
