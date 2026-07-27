@@ -339,54 +339,50 @@ class JobAgent:
                         continue
 
                     # Check if external apply
+                    is_external = False
                     if self.config.job_search.skip_external_apply:
                         is_external = await self.browser.is_external_apply()
-                        if is_external:
-                            self.log.info(f"  → Skipping (external apply)")
-                            self.tally.record(JobStatus.SKIPPED)
-                            await self.tracker.push_event(
-                                event="skipped", title=job_title, company=company,
-                                location=job.get("location"), posting_url=job.get("url"),
-                            )
-                            continue
 
-                    # Get match score from "Show match details"
+                    # Get match score from LinkedIn Premium "Show match details"
                     matched, total = await self.browser.get_match_score()
-                    if total > 0:
-                        score = matched / total
-                        job["match_score"] = score
-                        self.log.info(f"  → Match: {matched}/{total} ({score:.0%})")
-                    else:
-                        score = None
-                        self.log.info(f"  → No match data available (applying anyway)")
+                    score = matched / total if total > 0 else None
+                    job["match_score"] = score
 
-                    # Apply threshold
-                    if score is not None and not self.matcher.meets_threshold(score):
-                        self.log.info(f"  → Skipping (below {self.config.job_search.match_threshold:.0%} threshold)")
-                        self.tally.record(JobStatus.SKIPPED)
-                        await self.tracker.push_event(
-                            event="skipped", title=job_title, company=company,
-                            location=job.get("location"), match_score=score,
-                            posting_url=job.get("url"),
-                        )
-                        continue
+                    score_display = f"{matched}/{total} ({score:.0%})" if score else "no score available"
+                    self.log.info(f"  → Score: {score_display} | External: {is_external}")
 
-                    # Passed threshold — mark as DISCOVERED in tracker
-                    self.log.info(f"  ✓ Match! Adding to tracker as 'discovered'")
+                    # Add ALL jobs to tracker as 'discovered' (user can see them)
                     await self.tracker.push_event(
                         event="discovered", title=job_title, company=company,
                         location=job.get("location"), match_score=score,
                         posting_url=job.get("url"),
                     )
 
-                    # Apply (or dry-run log)
+                    # External apply → mark discovered, user applies manually
+                    if is_external:
+                        self.log.info(f"  → Discovered (external apply — user will apply manually)")
+                        self.tally.record(JobStatus.SKIPPED)
+                        continue
+
+                    # Below threshold → skip (but still visible in tracker as discovered)
+                    if score is not None and not self.matcher.meets_threshold(score):
+                        self.log.info(f"  → Below threshold ({score:.0%} < {self.config.job_search.match_threshold:.0%})")
+                        self.tally.record(JobStatus.SKIPPED)
+                        continue
+
+                    # No score available → skip (don't blindly apply)
+                    if score is None:
+                        self.log.info(f"  → No LinkedIn Premium score — keeping as discovered for review")
+                        self.tally.record(JobStatus.SKIPPED)
+                        continue
+
+                    # Passed threshold + Easy Apply → apply (or dry-run)
                     if self.dry_run:
-                        score_str = f"{score:.0%}" if score is not None else "no score"
-                        self.log.info(f"  ✓ [DRY RUN] Would APPLY (score: {score_str})")
+                        score_str = f"{matched}/{total} ({score:.0%})"
+                        self.log.info(f"  ✓ [DRY RUN] Would APPLY ({score_str})")
                         self.tally.record(JobStatus.SUBMITTED)
                     else:
-                        # Actually apply — will update discovered→applied in tracker
-                        job["match_score"] = score
+                        # Actually apply via Easy Apply
                         job["id"] = job_id
                         result = await self._applicant.apply_to_job(job)
                         status = self._map_result_status(result.status)
@@ -409,7 +405,6 @@ class JobAgent:
                                 posting_url=job.get("url"),
                             )
 
-                    # Log result
                     self.log.info(f"  Done: {job_title} @ {company}")
 
                 except Exception as job_exc:

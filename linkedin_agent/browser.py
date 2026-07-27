@@ -564,36 +564,79 @@ class LinkedInBrowser:
             return False
 
     async def get_match_score(self) -> tuple[int, int]:
-        """Get the qualification match score for the current job.
+        """Get the qualification match score from LinkedIn Premium's match panel.
 
-        Clicks 'Show match details' and parses the match text.
+        Tries multiple approaches:
+        1. Click 'Show match details' / 'See how you compare' button
+        2. Look for match text in various formats LinkedIn uses:
+           - "Matches 6 of 7 required qualifications"
+           - "6 of 7 match"
+           - "6 out of 7"
+           - "6/7 qualifications matched"
 
         Returns:
-            Tuple of (matched, total) qualifications. e.g. (3, 5).
-            Returns (0, 0) if match info is unavailable.
+            Tuple of (matched, total) qualifications. e.g. (6, 7).
+            Returns (0, 0) if Premium match info is unavailable.
         """
         page = self.page
 
         try:
-            # Click the match details button
-            # NOTE: Button text may vary ('Show match details', 'See how you compare')
-            match_btn = await page.query_selector(SELECTORS["match_details_button"])
-            if match_btn:
-                await match_btn.click()
-                await asyncio.sleep(2)  # Wait for match details to load
+            # Try clicking the match details button (multiple possible labels)
+            button_texts = [
+                "Show match details",
+                "See how you compare",
+                "match details",
+                "qualification",
+            ]
+            clicked = False
+            for text in button_texts:
+                try:
+                    btn = page.locator(f"button:has-text('{text}')").first
+                    if await btn.is_visible():
+                        await btn.click()
+                        clicked = True
+                        await asyncio.sleep(3)  # Wait for panel to render
+                        break
+                except Exception:
+                    continue
 
-            # Parse match text like "Matches 3 of 5 required qualifications"
+            if not clicked:
+                # Also try clicking any element that mentions "match"
+                try:
+                    match_link = page.locator("[class*='match'], [class*='skill-match'], [data-test*='match']").first
+                    if await match_link.is_visible():
+                        await match_link.click()
+                        await asyncio.sleep(2)
+                except Exception:
+                    pass
+
+            # Get full page text content
             content = await page.content()
-            pattern = r"Matches?\s+(\d+)\s+of\s+(\d+)\s+(?:required\s+)?qualifications?"
-            match = re.search(pattern, content, re.IGNORECASE)
+            text_content = await page.inner_text("body")
 
-            if match:
-                matched = int(match.group(1))
-                total = int(match.group(2))
-                logger.info("Match score: %d/%d", matched, total)
-                return (matched, total)
+            # Try multiple regex patterns that LinkedIn uses
+            patterns = [
+                r"[Mm]atches?\s+(\d+)\s+of\s+(\d+)\s+(?:required\s+)?qualifications?",
+                r"(\d+)\s+of\s+(\d+)\s+(?:required\s+)?qualifications?\s+match",
+                r"(\d+)\s+out\s+of\s+(\d+)\s+(?:required\s+)?qualifications?",
+                r"(\d+)/(\d+)\s+qualifications?\s+match",
+                r"(\d+)\s+of\s+(\d+)\s+match",
+                r"[Yy]ou\s+match\s+(\d+)\s+of\s+(\d+)",
+                r"(\d+)\s+of\s+(\d+)\s+skills?\s+match",
+            ]
 
-            logger.warning("Could not parse match score from page content.")
+            for pattern in patterns:
+                match = re.search(pattern, text_content)
+                if not match:
+                    match = re.search(pattern, content)
+                if match:
+                    matched = int(match.group(1))
+                    total = int(match.group(2))
+                    if total > 0 and matched <= total:
+                        logger.info("Match score: %d/%d (%.0f%%)", matched, total, matched/total*100)
+                        return (matched, total)
+
+            logger.warning("LinkedIn Premium match score not found on this page.")
             return (0, 0)
 
         except Exception as exc:
