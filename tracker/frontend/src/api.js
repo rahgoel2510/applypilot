@@ -101,6 +101,18 @@ export async function getAgentOutput(tail = 100) {
   return res.json();
 }
 
+export async function getAgentRuns(limit = 20) {
+  const res = await fetch(`${BASE_URL}/agent/runs?limit=${limit}`);
+  if (!res.ok) throw new Error('Failed to get agent runs');
+  return res.json();
+}
+
+export async function getAgentRunDetail(runId) {
+  const res = await fetch(`${BASE_URL}/agent/runs/${runId}`);
+  if (!res.ok) throw new Error('Failed to get run detail');
+  return res.json();
+}
+
 // Settings API
 export async function getSettings() {
   const res = await fetch(`${BASE_URL}/settings`);

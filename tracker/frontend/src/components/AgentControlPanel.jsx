@@ -8,6 +8,7 @@ import {
 import { triggerAgent, stopAgent, getAgentStatus, getAgentOutput, getSettings } from '../api';
 import AgentPipelineView from './AgentPipelineView';
 import MissingSettingsModal from './MissingSettingsModal';
+import RunHistory from './RunHistory';
 
 export default function AgentControlPanel() {
   const [status, setStatus] = useState({ state: 'idle', pid: null, started_at: null, uptime_seconds: 0, config: {}, last_error: null });
@@ -380,6 +381,9 @@ export default function AgentControlPanel() {
               </p>
             </div>
           </div>
+
+      {/* Run History */}
+      <RunHistory />
 
       {/* Missing Settings Modal */}
       <MissingSettingsModal

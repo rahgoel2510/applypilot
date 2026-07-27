@@ -240,7 +240,7 @@ class AgentController:
             if run:
                 run.finished_at = datetime.now()
                 run.status = final_status
-                run.output_log = "\n".join(self._output_lines[-200:])  # Keep last 200 lines
+                run.output_log = "\n".join(self._output_lines)  # Store full output
                 run.error_message = error
                 if run.started_at:
                     run.duration_seconds = str(int((datetime.now() - run.started_at).total_seconds()))
