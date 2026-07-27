@@ -57,10 +57,13 @@ class CandidateConfig:
 class JobSearchConfig:
     """Job search behaviour settings."""
 
+    keywords: list[str] = field(default_factory=lambda: ["Software Engineer"])
+    locations: list[str] = field(default_factory=lambda: ["India"])
     match_threshold: float = 0.80
     max_postings_per_run: int = 50
     collection: str = "Recommended"
     skip_external_apply: bool = True
+    posted_within: str = "week"  # day, week, month
 
 
 @dataclass(frozen=True)
@@ -172,10 +175,13 @@ def _build_settings(yaml_data: dict[str, Any]) -> Settings:
     # --- Job search ---
     js = yaml_data.get("job_search", {})
     job_search = JobSearchConfig(
+        keywords=js.get("keywords", ["Software Engineer"]),
+        locations=js.get("locations", ["India"]),
         match_threshold=float(_env("MATCH_THRESHOLD", str(js.get("match_threshold", 0.80)))),
         max_postings_per_run=int(_env("MAX_POSTINGS_PER_RUN", str(js.get("max_postings_per_run", 50)))),
         collection=js.get("collection", "Recommended"),
         skip_external_apply=js.get("skip_external_apply", True),
+        posted_within=js.get("posted_within", "week"),
     )
 
     # --- Scheduler ---

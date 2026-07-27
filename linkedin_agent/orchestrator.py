@@ -281,74 +281,131 @@ class JobAgent:
                 },
             )
 
-            # c. Navigate to job collection
-            await self.browser.navigate_to_jobs(collection=collection)
+            # c. Search jobs by keywords (not just browse Recommended)
+            keywords = self.config.job_search.keywords
+            locations = self.config.job_search.locations
+            posted_within = self.config.job_search.posted_within
+            all_jobs: list[dict] = []
 
-            # d. Get job listings
-            jobs = await self.browser.get_job_listings(max_count=max_postings)
-            self.log.info(f"Found {len(jobs)} job(s) to process")
+            # Search each keyword + location combo
+            for keyword in keywords:
+                if self._shutdown_event.is_set():
+                    break
+                if len(all_jobs) >= max_postings:
+                    break
 
-            # e. Process each job
-            for job in jobs:
+                location = locations[0] if locations else ""
+                self.log.info(f"Searching: '{keyword}' in '{location}'")
+
+                await self.browser.search_jobs(
+                    keyword=keyword,
+                    location=location,
+                    posted_within=posted_within,
+                )
+
+                # Get job listings from search results
+                remaining = max_postings - len(all_jobs)
+                page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 25))
+                all_jobs.extend(page_jobs)
+                self.log.info(f"  Found {len(page_jobs)} jobs for '{keyword}' (total: {len(all_jobs)})")
+
+            self.log.info(f"Total jobs to evaluate: {len(all_jobs)}")
+
+            # d. Process each job: open → score → decide → apply/skip
+            for job in all_jobs:
                 if self._shutdown_event.is_set():
                     self.log.info("Shutdown requested, stopping cycle")
                     break
 
                 try:
-                    result = await self.process_job(job)
-                    status = self._map_result_status(result.status)
-                    self.tally.record(status)
+                    job_title = job.get("title", "Unknown")
+                    company = job.get("company", "Unknown")
+                    job_id = job.get("job_id", "")
 
-                    # Post-submission actions
-                    if status == JobStatus.SUBMITTED:
-                        if inmail_enabled:
-                            await self.send_inmail_for_job(job)
+                    self.log.info(f"Evaluating: {job_title} @ {company}")
 
-                    elif status == JobStatus.PAUSED:
-                        if notify_on_pause:
-                            blocking = result.blocking_fields or []
-                            fields_str = ", ".join(blocking) if blocking else "unknown"
+                    # Skip duplicates early
+                    if self.matcher.is_duplicate(company, job_title):
+                        self.log.info(f"  → Skipping (duplicate)")
+                        self.tally.record(JobStatus.SKIPPED)
+                        continue
 
-                            # Ask for human input
-                            response = await self.notifier.ask_human_input(
-                                job_title=job.get("title", "Unknown"),
-                                company=job.get("company", "Unknown"),
-                                fields=blocking,
-                                timeout=300,
+                    # Open the job page to check match score
+                    if job_id:
+                        await self.browser.open_job(job_id)
+                    else:
+                        self.log.warning(f"  → No job ID, skipping")
+                        self.tally.record(JobStatus.SKIPPED)
+                        continue
+
+                    # Check if external apply
+                    if self.config.job_search.skip_external_apply:
+                        is_external = await self.browser.is_external_apply()
+                        if is_external:
+                            self.log.info(f"  → Skipping (external apply)")
+                            self.tally.record(JobStatus.SKIPPED)
+                            await self.tracker.push_event(
+                                event="skipped", title=job_title, company=company,
+                                location=job.get("location"), posting_url=job.get("url"),
+                            )
+                            continue
+
+                    # Get match score from "Show match details"
+                    matched, total = await self.browser.get_match_score()
+                    if total > 0:
+                        score = matched / total
+                        job["match_score"] = score
+                        self.log.info(f"  → Match: {matched}/{total} ({score:.0%})")
+                    else:
+                        score = None
+                        self.log.info(f"  → No match data available (applying anyway)")
+
+                    # Apply threshold
+                    if score is not None and not self.matcher.meets_threshold(score):
+                        self.log.info(f"  → Skipping (below {self.config.job_search.match_threshold:.0%} threshold)")
+                        self.tally.record(JobStatus.SKIPPED)
+                        await self.tracker.push_event(
+                            event="skipped", title=job_title, company=company,
+                            location=job.get("location"), match_score=score,
+                            posting_url=job.get("url"),
+                        )
+                        continue
+
+                    # Passed threshold — apply (or dry-run log)
+                    if self.dry_run:
+                        self.log.info(f"  ✓ [DRY RUN] Would APPLY (score: {score})")
+                        self.tally.record(JobStatus.SUBMITTED)
+                        await self.tracker.push_event(
+                            event="submitted", title=job_title, company=company,
+                            location=job.get("location"), match_score=score,
+                            posting_url=job.get("url"),
+                        )
+                    else:
+                        # Actually apply
+                        job["match_score"] = score
+                        job["id"] = job_id
+                        result = await self._applicant.apply_to_job(job)
+                        status = self._map_result_status(result.status)
+                        self.tally.record(status)
+
+                        if result.status == "submitted":
+                            self.matcher.add_to_applied(company, job_title)
+                            await self.tracker.push_event(
+                                event="submitted", title=job_title, company=company,
+                                location=job.get("location"), match_score=score,
+                                posting_url=job.get("url"),
+                            )
+                            if inmail_enabled:
+                                await self.send_inmail_for_job(job)
+                        elif result.status == "paused":
+                            await self.tracker.push_event(
+                                event="paused", title=job_title, company=company,
+                                location=job.get("location"), match_score=score,
+                                posting_url=job.get("url"),
                             )
 
-                            if response.upper() == "SKIP":
-                                self.log.info("Human chose to skip paused job")
-                            elif response:
-                                self.log.info("Human provided input — retrying")
-                                retry_result = await self._applicant.apply_to_job(job)
-                                if retry_result.status == "submitted":
-                                    self.tally.paused -= 1
-                                    self.tally.submitted += 1
-
                     # Log result
-                    self.log.info(
-                        f"Result: {result.status} — "
-                        f"{job.get('title')} @ {job.get('company')}"
-                    )
-
-                    # Push to tracker (fire-and-forget, never blocks pipeline)
-                    tracker_event = {
-                        "submitted": "submitted",
-                        "paused": "paused",
-                        "skipped_threshold": "skipped",
-                        "skipped_external": "skipped",
-                        "duplicate": "skipped",
-                    }.get(result.status)
-                    if tracker_event:
-                        await self.tracker.push_event(
-                            event=tracker_event,
-                            title=job.get("title", "Unknown"),
-                            company=job.get("company", "Unknown"),
-                            location=job.get("location"),
-                            match_score=getattr(result, "match_score", None),
-                            posting_url=job.get("posting_url"),
-                        )
+                    self.log.info(f"  Done: {job_title} @ {company}")
 
                 except Exception as job_exc:
                     self.tally.record(JobStatus.ERROR)
@@ -359,11 +416,12 @@ class JobAgent:
                     await self.tracker.log_job_error(
                         title=job.get("title", "Unknown"),
                         company=job.get("company", "Unknown"),
-                        error=str(job_exc),
+                        error=str(job_exc)[:200],
                     )
+                    safe_error = str(job_exc)[:100].replace('<', '').replace('>', '')
                     await self.notifier.send_notification(
                         f"❌ Error on {job.get('title', '?')} @ "
-                        f"{job.get('company', '?')}: {job_exc}"
+                        f"{job.get('company', '?')}: {safe_error}"
                     )
 
         except Exception as cycle_exc:

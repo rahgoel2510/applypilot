@@ -13,10 +13,20 @@ candidate:
     - "Delhi NCR"
 
 job_search:
+  keywords:
+    - "Engineering Manager"
+    - "Technical Program Manager"
+    - "Senior Engineering Manager"
+    - "Director of Engineering"
+  locations:
+    - "India"
+    - "Bangalore"
+    - "Remote"
   match_threshold: 0.80
   max_postings_per_run: 50
   collection: "Recommended"
   skip_external_apply: true
+  posted_within: "week"  # day, week, month
 
 scheduler:
   interval_minutes: 60

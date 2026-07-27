@@ -364,6 +364,45 @@ class LinkedInBrowser:
 
         logger.info("Navigated to jobs collection: %s", collection)
 
+    async def search_jobs(
+        self,
+        keyword: str,
+        location: str = "",
+        posted_within: str = "week",
+    ) -> None:
+        """Search LinkedIn jobs by keyword and location.
+
+        Args:
+            keyword: Job title/keyword to search (e.g. "Engineering Manager").
+            location: Location filter (e.g. "India", "Bangalore").
+            posted_within: Time filter — "day", "week", "month", or "" for any.
+        """
+        page = self.page
+
+        # Build LinkedIn job search URL with parameters
+        # LinkedIn search URL format: /jobs/search/?keywords=X&location=Y&f_TPR=rN
+        import urllib.parse
+        params = {"keywords": keyword}
+        if location:
+            params["location"] = location
+
+        # Time posted filter
+        time_map = {"day": "r86400", "week": "r604800", "month": "r2592000"}
+        if posted_within in time_map:
+            params["f_TPR"] = time_map[posted_within]
+
+        # Easy Apply filter
+        params["f_AL"] = "true"  # Only show Easy Apply jobs
+
+        search_url = f"{LINKEDIN_JOBS}search/?{urllib.parse.urlencode(params)}"
+        await page.goto(search_url, wait_until="domcontentloaded")
+        await _human_delay(2, 4)
+
+        logger.info(
+            "Searched jobs: keyword='%s', location='%s', posted='%s'",
+            keyword, location, posted_within,
+        )
+
     # ------------------------------------------------------------------
     # Job Listings
     # ------------------------------------------------------------------
