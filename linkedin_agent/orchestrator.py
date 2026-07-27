@@ -371,17 +371,20 @@ class JobAgent:
                         )
                         continue
 
-                    # Passed threshold — apply (or dry-run log)
+                    # Passed threshold — mark as DISCOVERED in tracker
+                    self.log.info(f"  ✓ Match! Adding to tracker as 'discovered'")
+                    await self.tracker.push_event(
+                        event="discovered", title=job_title, company=company,
+                        location=job.get("location"), match_score=score,
+                        posting_url=job.get("url"),
+                    )
+
+                    # Apply (or dry-run log)
                     if self.dry_run:
-                        self.log.info(f"  ✓ [DRY RUN] Would APPLY (score: {score})")
+                        self.log.info(f"  ✓ [DRY RUN] Would APPLY (score: {score:.0%})")
                         self.tally.record(JobStatus.SUBMITTED)
-                        await self.tracker.push_event(
-                            event="submitted", title=job_title, company=company,
-                            location=job.get("location"), match_score=score,
-                            posting_url=job.get("url"),
-                        )
                     else:
-                        # Actually apply
+                        # Actually apply — will update discovered→applied in tracker
                         job["match_score"] = score
                         job["id"] = job_id
                         result = await self._applicant.apply_to_job(job)
@@ -390,6 +393,7 @@ class JobAgent:
 
                         if result.status == "submitted":
                             self.matcher.add_to_applied(company, job_title)
+                            # Update tracker: discovered → applied
                             await self.tracker.push_event(
                                 event="submitted", title=job_title, company=company,
                                 location=job.get("location"), match_score=score,

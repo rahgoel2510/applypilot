@@ -519,27 +519,49 @@ class LinkedInBrowser:
         """Check if the current job routes applications externally.
 
         Returns:
-            True if the job has 'Responses managed off LinkedIn' indicator.
+            True if the job explicitly shows 'Responses managed off LinkedIn'.
+            False if Easy Apply button is found OR no clear external indicator.
         """
         page = self.page
         try:
-            # NOTE: LinkedIn shows this text for jobs that redirect to external sites
+            # Wait a moment for the page to fully render
+            await asyncio.sleep(1)
+
+            # Check for explicit external indicator text
             external_indicator = await page.query_selector(
                 "text=Responses managed off LinkedIn"
             )
             if external_indicator:
-                logger.info("Job is external apply.")
+                logger.info("Job is external apply (explicit indicator).")
                 return True
+
+            # Look for Easy Apply button (wait up to 5 seconds)
+            try:
+                easy_apply = await page.wait_for_selector(
+                    SELECTORS["easy_apply_button"], timeout=5000
+                )
+                if easy_apply:
+                    return False  # Easy Apply found — not external
+            except PlaywrightTimeout:
+                pass
+
+            # If we searched with Easy Apply filter but button isn't visible,
+            # it might just be loading slow. Don't skip aggressively.
+            # Only skip if there's a clear "Apply" link pointing externally.
+            external_link = await page.query_selector(
+                'a[data-tracking-control-name*="apply_external"], '
+                'a[href*="applyWithLinkedIn=false"]'
+            )
+            if external_link:
+                logger.info("Job has external apply link.")
+                return True
+
+            # Default: not external (give it the benefit of doubt)
+            logger.info("No Easy Apply button found, but no external indicator either. Treating as Easy Apply.")
+            return False
+
         except Exception:
-            pass
-
-        # Also check if there's no Easy Apply button
-        easy_apply = await page.query_selector(SELECTORS["easy_apply_button"])
-        if not easy_apply:
-            logger.info("No Easy Apply button found — likely external.")
-            return True
-
-        return False
+            return False
 
     async def get_match_score(self) -> tuple[int, int]:
         """Get the qualification match score for the current job.

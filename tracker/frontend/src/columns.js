@@ -1,6 +1,18 @@
-import { Heart, FileText, Calendar, CircleCheckBig, X } from 'lucide-react';
+import { Heart, FileText, Calendar, CircleCheckBig, X, Radar } from 'lucide-react';
 
 export const COLUMNS = [
+  {
+    id: 'discovered',
+    label: 'Discovered',
+    icon: Radar,
+    barColor: 'bg-[#6366f1]',
+    textColor: 'text-[#4338ca]',
+    badgeBg: 'bg-[#e0e7ff]',
+    badgeText: 'text-[#3730a3]',
+    hoverBg: 'hover:bg-[#e0e7ff]',
+    emptyText: 'No jobs discovered yet',
+    emptyHint: 'Jobs matching your criteria will appear here.',
+  },
   {
     id: 'saved',
     label: 'Saved',

@@ -37,7 +37,7 @@ class TrackerClient:
 
     async def push_event(
         self,
-        event: Literal["submitted", "paused", "skipped"],
+        event: Literal["discovered", "submitted", "paused", "skipped"],
         title: str,
         company: str,
         location: str | None = None,

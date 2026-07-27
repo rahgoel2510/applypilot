@@ -167,24 +167,55 @@ def get_stats(db: Session = Depends(get_db)):
 
 @router.post("/webhook/agent", response_model=JobResponse, status_code=201)
 def webhook_agent(payload: WebhookPayload, db: Session = Depends(get_db)):
-    """Webhook for LinkedIn agent to push events. Also creates an activity log."""
+    """Webhook for LinkedIn agent to push events.
+
+    - 'discovered': creates a new job in discovered stage
+    - 'submitted': updates discovered→applied (or creates if not found)
+    - 'paused'/'skipped': updates discovered→saved (or creates if not found)
+    Prevents duplicate jobs by matching on title + company.
+    """
     stage = EVENT_STAGE_MAP[payload.event]
 
-    job = Job(
-        id=str(uuid.uuid4()),
-        title=payload.title,
-        company=payload.company,
-        location=payload.location,
-        stage=stage,
-        posting_url=payload.posting_url,
-        match_score=payload.match_score,
-        source=JobSource.agent,
-    )
+    # Check if this job already exists in tracker (prevent duplicates)
+    existing = db.query(Job).filter(
+        Job.title == payload.title,
+        Job.company == payload.company,
+    ).first()
 
-    db.add(job)
+    if existing:
+        # Update existing job's stage (discovered → applied, etc.)
+        if stage.value in ("applied",) or (
+            existing.stage in (JobStage.discovered, JobStage.saved) and stage != JobStage.saved
+        ):
+            existing.stage = stage
+        if payload.match_score is not None:
+            existing.match_score = payload.match_score
+        if payload.posting_url:
+            existing.posting_url = payload.posting_url
+        if payload.location:
+            existing.location = payload.location
+        db.commit()
+        db.refresh(existing)
+        job = existing
+    else:
+        # Create new job
+        job = Job(
+            id=str(uuid.uuid4()),
+            title=payload.title,
+            company=payload.company,
+            location=payload.location,
+            stage=stage,
+            posting_url=payload.posting_url,
+            match_score=payload.match_score,
+            source=JobSource.agent,
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
 
     # Map agent event to log event type and severity
     event_log_map = {
+        "discovered": (LogEventType.info, LogSeverity.info),
         "submitted": (LogEventType.job_submitted, LogSeverity.success),
         "paused": (LogEventType.job_paused, LogSeverity.warning),
         "skipped": (LogEventType.job_skipped, LogSeverity.info),
@@ -196,6 +227,7 @@ def webhook_agent(payload: WebhookPayload, db: Session = Depends(get_db)):
     # Build descriptive message
     score_str = f" (match: {payload.match_score:.0%})" if payload.match_score else ""
     messages = {
+        "discovered": f"Job discovered — meets threshold{score_str}",
         "submitted": f"Application submitted{score_str}",
         "paused": f"Saved as draft — needs human input{score_str}",
         "skipped": f"Skipped — below threshold or external{score_str}",
