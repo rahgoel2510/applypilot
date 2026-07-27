@@ -121,6 +121,10 @@ class AgentController:
         if match_threshold is not None:
             env["MATCH_THRESHOLD"] = str(match_threshold)
 
+        # Enable verbose/debug output for full tech logs
+        env["LOG_LEVEL"] = "DEBUG"
+        env["PYTHONUNBUFFERED"] = "1"
+
         try:
             self._output_lines.clear()
             run_id = str(uuid.uuid4())

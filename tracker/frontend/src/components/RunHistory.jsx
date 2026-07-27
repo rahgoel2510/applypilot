@@ -162,36 +162,37 @@ export default function RunHistory() {
                               className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium hover:bg-slate-50"
                             >
                               {copied === run.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                              {copied === run.id ? 'Copied!' : 'Copy Logs'}
+                              {copied === run.id ? 'Copied!' : 'Copy Full Log'}
                             </button>
                             <button
                               onClick={() => handleDownload(run, runDetail.output_log || '')}
                               className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium hover:bg-slate-50"
                             >
-                              <Download className="h-3 w-3" /> Download
+                              <Download className="h-3 w-3" /> Download .log
                             </button>
                           </div>
                         </div>
 
                         {/* Error message if failed */}
                         {runDetail.error_message && (
-                          <div className="mx-5 mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+                          <div className="mx-5 mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700 select-text">
                             <strong>Error:</strong> {runDetail.error_message}
                           </div>
                         )}
 
-                        {/* Full log output */}
-                        <div className="max-h-[500px] overflow-y-auto bg-[#0d1117] p-4 font-mono text-[12px] leading-5 select-text">
-                          {runDetail.output_log ? (
-                            runDetail.output_log.split('\n').map((line, i) => (
-                              <div key={i} className={`flex hover:bg-slate-800/50 rounded px-1 ${getLogColor(line)}`}>
-                                <span className="mr-4 min-w-[4ch] select-none text-right text-slate-700">{i + 1}</span>
-                                <span className="whitespace-pre-wrap break-all flex-1">{line}</span>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="text-slate-600 text-center py-8">No output captured for this run.</div>
-                          )}
+                        {/* Full raw tech log — no formatting, exactly as captured */}
+                        <div className="border-t border-slate-800 bg-[#0d1117]">
+                          <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800">
+                            <span className="text-[11px] font-mono text-slate-500">
+                              RAW OUTPUT — {runDetail.output_log?.split('\n').length || 0} lines
+                            </span>
+                            <span className="text-[10px] text-slate-600">
+                              Includes timestamps, file refs, tracebacks, Playwright call logs
+                            </span>
+                          </div>
+                          <pre className="max-h-[600px] overflow-y-auto p-4 font-mono text-[11px] leading-5 text-slate-300 select-text whitespace-pre-wrap break-words">
+                            {runDetail.output_log || 'No output captured.'}
+                          </pre>
                         </div>
                       </div>
                     ) : null}
