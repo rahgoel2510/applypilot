@@ -257,19 +257,31 @@ class LinkedInBrowser:
         await _human_delay()
 
         # Fill credentials
-        await page.fill(SELECTORS["login_email"], email)
-        await _human_delay(0.5, 1.0)
-        await page.fill(SELECTORS["login_password"], password)
-        await _human_delay(0.5, 1.5)
+        try:
+            await page.fill(SELECTORS["login_email"], email)
+            await _human_delay(0.5, 1.0)
+            await page.fill(SELECTORS["login_password"], password)
+            await _human_delay(0.5, 1.5)
 
-        # Submit
-        await page.click(SELECTORS["login_submit"])
+            # Submit
+            await page.click(SELECTORS["login_submit"])
+        except PlaywrightTimeout:
+            # Form fill timed out — check if we ended up on feed anyway
+            # (LinkedIn sometimes auto-redirects through challenge → feed)
+            if "/feed" in page.url:
+                logger.info("Login successful (redirected through challenge).")
+                return
+            raise
 
         # Wait for navigation to feed (or security challenge)
         try:
-            await page.wait_for_url("**/feed/**", timeout=30000)
+            await page.wait_for_url("**/feed/**", timeout=60000)
             logger.info("Login successful.")
         except PlaywrightTimeout:
+            # Check if we landed on feed despite timeout
+            if "/feed" in page.url:
+                logger.info("Login successful (late redirect).")
+                return
             # May have hit a security challenge (CAPTCHA, verification)
             current_url = page.url
             logger.warning(

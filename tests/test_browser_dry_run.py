@@ -72,10 +72,20 @@ async def run_dry_run(limit: int = 5, collection: str = "Recommended"):
         await browser.login(email=config.linkedin_email, password=config.linkedin_password)
         print("   ✅ Logged in")
     except Exception as exc:
-        print(f"   ⚠️  Auto-login failed: {exc}")
-        print("   Please log in manually in the browser window.")
-        print("   ⏳ Waiting 60s for you to log in...")
-        await asyncio.sleep(60)
+        # Check if we actually ended up on feed (challenge completed during timeout)
+        if browser.page and "/feed" in browser.page.url:
+            print("   ✅ Logged in (passed security challenge)")
+        else:
+            print(f"   ⚠️  Auto-login needs help: {str(exc)[:60]}")
+            print("   Please log in manually in the browser window.")
+            print("   ⏳ Waiting 60s for you to log in...")
+            await asyncio.sleep(60)
+            # Verify after manual login
+            if "/feed" not in browser.page.url:
+                print("   ❌ Still not logged in. Exiting.")
+                await browser.close()
+                sys.exit(1)
+            print("   ✅ Manual login successful!")
 
     print(f"\n📂 Navigating to '{collection}' collection...")
     try:
