@@ -14,16 +14,16 @@ import { getAgentStatus, getAgentOutput } from '../api';
 // --- Pipeline Steps (realistic workflow — no login step) ---
 
 const PIPELINE_STEPS = [
-  { id: 'init', label: 'Initialize', emoji: '⚡', description: 'Load config & connect services', x: 0, y: 80 },
-  { id: 'browser', label: 'Open Browser', emoji: '🌐', description: 'Launch Chromium instance', x: 220, y: 80 },
-  { id: 'session', label: 'Session Check', emoji: '🔐', description: 'Verify LinkedIn cookies', x: 440, y: 80 },
-  { id: 'navigate', label: 'Job Collection', emoji: '📋', description: 'Navigate to LinkedIn jobs', x: 660, y: 80 },
-  { id: 'scan', label: 'Scan Listings', emoji: '🔍', description: 'Extract job cards from page', x: 880, y: 80 },
-  { id: 'match', label: 'Score & Match', emoji: '🎯', description: 'Evaluate fit against profile', x: 880, y: 260 },
-  { id: 'apply', label: 'Easy Apply', emoji: '📝', description: 'Fill & submit application', x: 660, y: 260 },
-  { id: 'notify', label: 'Telegram Alert', emoji: '📱', description: 'Notify + log to tracker', x: 440, y: 260 },
-  { id: 'inmail', label: 'Draft InMail', emoji: '✉️', description: 'AI message to recruiter', x: 440, y: 400 },
-  { id: 'complete', label: 'Report & Close', emoji: '🏁', description: 'Tally results + close browser', x: 220, y: 260 },
+  { id: 'init', label: 'Initialize', emoji: '⚡', description: 'Load config & connect', x: 50, y: 120 },
+  { id: 'browser', label: 'Open Browser', emoji: '🌐', description: 'Launch Chromium', x: 280, y: 120 },
+  { id: 'session', label: 'Session Check', emoji: '🔐', description: 'Verify LinkedIn', x: 510, y: 120 },
+  { id: 'navigate', label: 'Job Search', emoji: '📋', description: 'Search by keywords', x: 740, y: 120 },
+  { id: 'scan', label: 'Scan Listings', emoji: '🔍', description: 'Extract job cards', x: 970, y: 120 },
+  { id: 'match', label: 'Score & Match', emoji: '🎯', description: 'Check fit ≥ 80%', x: 970, y: 320 },
+  { id: 'apply', label: 'Easy Apply', emoji: '📝', description: 'Submit application', x: 740, y: 320 },
+  { id: 'notify', label: 'Notify', emoji: '📱', description: 'Telegram + Tracker', x: 510, y: 320 },
+  { id: 'inmail', label: 'Draft InMail', emoji: '✉️', description: 'AI outreach', x: 510, y: 480 },
+  { id: 'complete', label: 'Report', emoji: '🏁', description: 'Tally & close', x: 280, y: 320 },
 ];
 
 const PIPELINE_EDGES = [
@@ -58,14 +58,14 @@ function PipelineNode({ data }) {
 
   return (
     <div
-      className={`relative rounded-2xl border-2 ${style.border} ${style.bg} px-5 py-4 min-w-[170px] transition-all duration-500 ${
+      className={`relative rounded-2xl border-2 ${style.border} ${style.bg} px-4 py-3 min-w-[150px] max-w-[180px] transition-all duration-500 cursor-grab active:cursor-grabbing ${
         isActive ? 'ring-4 ring-teal-400/20 shadow-lg shadow-teal-500/20' : ''
       } ${data.status === 'error' ? 'ring-4 ring-red-400/20 shadow-lg shadow-red-500/20' : ''}`}
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
-      <Handle type="target" position={Position.Left} className="!bg-slate-300 !w-2 !h-2" />
-      <Handle type="source" position={Position.Right} className="!bg-slate-300 !w-2 !h-2" />
+      <Handle type="target" position={Position.Left} className="!bg-slate-300 !w-2.5 !h-2.5 !border-2 !border-white" />
+      <Handle type="source" position={Position.Right} className="!bg-slate-300 !w-2.5 !h-2.5 !border-2 !border-white" />
 
       {isActive && (
         <div className="absolute -top-1 -right-1 flex h-4 w-4">
@@ -74,11 +74,11 @@ function PipelineNode({ data }) {
         </div>
       )}
 
-      <div className="flex items-center gap-3">
-        <span className="text-2xl">{data.emoji}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-xl">{data.emoji}</span>
         <div>
-          <p className={`text-sm font-bold ${style.text}`}>{data.label}</p>
-          <p className="text-[11px] text-slate-400">{data.description}</p>
+          <p className={`text-xs font-bold ${style.text}`}>{data.label}</p>
+          <p className="text-[10px] text-slate-400 leading-tight">{data.description}</p>
         </div>
       </div>
 
@@ -417,23 +417,23 @@ export default function AgentPipelineView() {
       </div>
 
       {/* React Flow */}
-      <div className="h-[480px] rounded-2xl border border-slate-200 bg-[#fafbfc] overflow-hidden shadow-sm">
+      <div className="h-[520px] rounded-2xl border border-slate-200 bg-[#fafbfc] overflow-hidden shadow-sm">
         <ReactFlow
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
           fitView
-          fitViewOptions={{ padding: 0.25 }}
+          fitViewOptions={{ padding: 0.2 }}
           proOptions={{ hideAttribution: true }}
-          nodesDraggable={false}
+          nodesDraggable={true}
           nodesConnectable={false}
-          elementsSelectable={false}
+          elementsSelectable={true}
           panOnDrag={true}
           zoomOnScroll={true}
-          minZoom={0.5}
-          maxZoom={1.5}
+          minZoom={0.4}
+          maxZoom={2}
         >
-          <Background color="#e2e8f0" gap={24} size={1} />
+          <Background color="#e2e8f0" gap={20} size={1} />
           <Controls showInteractive={false} />
         </ReactFlow>
       </div>
