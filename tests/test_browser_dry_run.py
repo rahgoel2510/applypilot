@@ -37,7 +37,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 async def run_dry_run(limit: int = 5, collection: str = "Recommended"):
     """Execute a browser dry-run scan."""
     from linkedin_agent.config import get_config
-    from linkedin_agent.browser import BrowserManager
+    from linkedin_agent.browser import LinkedInBrowser
     from linkedin_agent.matcher import JobMatcher
 
     print("=" * 60)
@@ -56,7 +56,7 @@ async def run_dry_run(limit: int = 5, collection: str = "Recommended"):
         sys.exit(1)
 
     matcher = JobMatcher(threshold=config.job_search.match_threshold)
-    browser = BrowserManager(config)
+    browser = LinkedInBrowser()
 
     print("🌐 Launching browser (headed mode)...")
     try:
@@ -66,6 +66,16 @@ async def run_dry_run(limit: int = 5, collection: str = "Recommended"):
     except Exception as exc:
         print(f"   ❌ Browser launch failed: {exc}")
         sys.exit(1)
+
+    print("\n🔐 Checking LinkedIn session...")
+    try:
+        await browser.login(email=config.linkedin_email, password=config.linkedin_password)
+        print("   ✅ Logged in")
+    except Exception as exc:
+        print(f"   ⚠️  Auto-login failed: {exc}")
+        print("   Please log in manually in the browser window.")
+        print("   ⏳ Waiting 60s for you to log in...")
+        await asyncio.sleep(60)
 
     print(f"\n📂 Navigating to '{collection}' collection...")
     try:
@@ -82,7 +92,7 @@ async def run_dry_run(limit: int = 5, collection: str = "Recommended"):
 
     print(f"\n🔍 Reading job listings (limit: {limit})...")
     try:
-        jobs = await browser.get_job_listings(limit=limit)
+        jobs = await browser.get_job_listings(max_count=limit)
         print(f"   ✅ Found {len(jobs)} job(s)")
     except Exception as exc:
         print(f"   ❌ Failed to read job listings: {exc}")
