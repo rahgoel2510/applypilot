@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
-import {
+import { useState, useEffect } from 'react';import {
   History, ChevronDown, ChevronRight, Copy, Check, Clock,
-  CheckCircle2, XCircle, StopCircle, Loader2, Download,
+  CheckCircle2, XCircle, StopCircle, Loader2, Download, Wrench, Brain,
 } from 'lucide-react';
-import { getAgentRuns, getAgentRunDetail } from '../api';
+import { getAgentRuns, getAgentRunDetail, diagnoseRun, autoRepair } from '../api';
 
 const STATUS_STYLES = {
   completed: { icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50', badge: 'bg-emerald-100 text-emerald-700' },
@@ -19,6 +18,9 @@ export default function RunHistory() {
   const [runDetail, setRunDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [copied, setCopied] = useState(null);
+  const [diagnosing, setDiagnosing] = useState(null);
+  const [diagnosisResult, setDiagnosisResult] = useState(null);
+  const [repairing, setRepairing] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -62,6 +64,31 @@ export default function RunHistory() {
     a.download = `applypilot-run-${run.started_at?.slice(0, 16) || run.id.slice(0, 8)}.log`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleDiagnose = async (runId) => {
+    setDiagnosing(runId);
+    setDiagnosisResult(null);
+    try {
+      const result = await diagnoseRun(runId);
+      setDiagnosisResult(result);
+    } catch (e) {
+      setDiagnosisResult({ diagnosed: false, message: 'Failed to reach diagnosis API.' });
+    } finally {
+      setDiagnosing(null);
+    }
+  };
+
+  const handleAutoRepair = async () => {
+    setRepairing(true);
+    try {
+      const result = await autoRepair();
+      setDiagnosisResult(result);
+    } catch (e) {
+      setDiagnosisResult({ diagnosed: false, message: 'Auto-repair request failed.' });
+    } finally {
+      setRepairing(false);
+    }
   };
 
   const formatDuration = (sec) => {
@@ -180,6 +207,34 @@ export default function RunHistory() {
                           </div>
                         )}
 
+                        {/* AI Diagnosis section */}
+                        {(run.status === 'failed' || runDetail.error_message) && (
+                          <div className="mx-5 mt-3">
+                            {!diagnosisResult || diagnosisResult.run_id !== run.id ? (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleDiagnose(run.id)}
+                                  disabled={diagnosing === run.id}
+                                  className="flex items-center gap-2 rounded-lg bg-purple-50 border border-purple-200 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100 transition-colors disabled:opacity-50"
+                                >
+                                  {diagnosing === run.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+                                  {diagnosing === run.id ? 'Analyzing...' : 'AI Diagnose'}
+                                </button>
+                                <button
+                                  onClick={handleAutoRepair}
+                                  disabled={repairing}
+                                  className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                                >
+                                  {repairing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+                                  {repairing ? 'Repairing...' : 'Auto-Repair & Retry'}
+                                </button>
+                              </div>
+                            ) : (
+                              <DiagnosisCard diagnosis={diagnosisResult} />
+                            )}
+                          </div>
+                        )}
+
                         {/* Full raw tech log — no formatting, exactly as captured */}
                         <div className="border-t border-slate-800 bg-[#0d1117]">
                           <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800">
@@ -213,4 +268,88 @@ function getLogColor(line) {
   if (line.includes('✅') || line.includes('submitted') || line.includes('SUCCESS')) return 'text-emerald-400';
   if (line.includes('INFO') || line.includes('🚀')) return 'text-sky-300';
   return 'text-slate-300';
+}
+
+function DiagnosisCard({ diagnosis }) {
+  if (!diagnosis?.diagnosed) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        {diagnosis?.message || 'No diagnosis available.'}
+      </div>
+    );
+  }
+
+  const d = diagnosis.diagnosis;
+  const severityColors = {
+    low: 'bg-blue-100 text-blue-700',
+    medium: 'bg-amber-100 text-amber-700',
+    high: 'bg-orange-100 text-orange-700',
+    critical: 'bg-red-100 text-red-700',
+  };
+  const categoryIcons = {
+    session: '🔐', selector: '🎯', network: '🌐', timeout: '⏳',
+    config: '⚙️', permission: '🔒', unknown: '❓',
+  };
+
+  const [copied, setCopied] = useState(false);
+  const copyDiagnosis = () => {
+    const text = [
+      `═══ AI Diagnosis ═══`,
+      `Category: ${d.category}`,
+      `Severity: ${d.severity}`,
+      `Confidence: ${Math.round(d.confidence * 100)}%`,
+      ``,
+      `Diagnosis: ${d.diagnosis}`,
+      ``,
+      `Fix: ${d.fix_description}`,
+      d.auto_fixable ? `\nAuto-fixable: Yes` : `\nUser action required: ${d.user_action_required}`,
+      d.model_used ? `\nModel: ${d.model_used}` : '',
+    ].join('\n');
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50 to-white p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-purple-600" />
+          <span className="text-sm font-semibold text-purple-800">AI Diagnosis</span>
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${severityColors[d.severity] || severityColors.medium}`}>
+            {d.severity?.toUpperCase()}
+          </span>
+          <span className="text-xs text-slate-500">
+            {categoryIcons[d.category] || '❓'} {d.category}
+          </span>
+        </div>
+        <button onClick={copyDiagnosis} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700">
+          {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+
+      <p className="text-sm text-slate-800 font-medium mb-2">{d.diagnosis}</p>
+      <p className="text-xs text-slate-600 mb-3">{d.fix_description}</p>
+
+      {d.auto_fixable ? (
+        <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          <span className="text-xs text-emerald-700 font-medium">Auto-fixable — retry was triggered with adjusted parameters</span>
+        </div>
+      ) : d.user_action_required ? (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+          <Wrench className="h-4 w-4 text-amber-600" />
+          <span className="text-xs text-amber-700">{d.user_action_required}</span>
+        </div>
+      ) : null}
+
+      {d.confidence > 0 && (
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
+          <span>Confidence: {Math.round(d.confidence * 100)}%</span>
+          {d.model_used && <span>· Model: {d.model_used}</span>}
+        </div>
+      )}
+    </div>
+  );
 }

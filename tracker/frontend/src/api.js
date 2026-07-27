@@ -113,6 +113,18 @@ export async function getAgentRunDetail(runId) {
   return res.json();
 }
 
+export async function diagnoseRun(runId) {
+  const res = await fetch(`${BASE_URL}/agent/diagnose/${runId}`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to diagnose');
+  return res.json();
+}
+
+export async function autoRepair() {
+  const res = await fetch(`${BASE_URL}/agent/repair`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to auto-repair');
+  return res.json();
+}
+
 // Settings API
 export async function getSettings() {
   const res = await fetch(`${BASE_URL}/settings`);

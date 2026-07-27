@@ -326,7 +326,7 @@ def _create_log(
 # ===========================================================================
 
 from pydantic import BaseModel as PydanticBaseModel
-from agent_control import get_controller
+from agent_control import get_controller, AgentState
 
 
 class AgentTriggerRequest(PydanticBaseModel):
@@ -445,4 +445,114 @@ def get_agent_run(run_id: str, db: Session = Depends(get_db)):
         "duration_seconds": run.duration_seconds,
         "error_message": run.error_message,
         "output_log": run.output_log,
+    }
+
+
+@router.post("/agent/diagnose")
+def diagnose_agent_failure(db: Session = Depends(get_db)):
+    """Diagnose the last failed run using LLM auto-repair."""
+    from models import AgentRun
+    from auto_repair import diagnose_error, DiagnosisResult
+
+    # Get the most recent failed or completed-with-error run
+    run = db.query(AgentRun).filter(
+        AgentRun.status.in_(["failed", "completed"])
+    ).order_by(AgentRun.started_at.desc()).first()
+
+    if not run:
+        return {"diagnosed": False, "message": "No runs found to diagnose."}
+
+    if not run.error_message and not run.output_log:
+        return {"diagnosed": False, "message": "Last run has no error or output to analyze."}
+
+    error_context = run.error_message or ""
+    output_context = run.output_log or ""
+
+    diagnosis = diagnose_error(error_context, output_context)
+
+    return {
+        "diagnosed": True,
+        "run_id": run.id,
+        "run_status": run.status,
+        "diagnosis": diagnosis.model_dump(),
+    }
+
+
+@router.post("/agent/diagnose/{run_id}")
+def diagnose_specific_run(run_id: str, db: Session = Depends(get_db)):
+    """Diagnose a specific run using LLM auto-repair."""
+    from models import AgentRun
+    from auto_repair import diagnose_error
+
+    run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    error_context = run.error_message or ""
+    output_context = run.output_log or ""
+
+    if not error_context and not output_context:
+        return {"diagnosed": False, "message": "No error or output to analyze."}
+
+    diagnosis = diagnose_error(error_context, output_context)
+
+    return {
+        "diagnosed": True,
+        "run_id": run.id,
+        "diagnosis": diagnosis.model_dump(),
+    }
+
+
+@router.post("/agent/repair")
+def auto_repair_and_retry(db: Session = Depends(get_db)):
+    """Diagnose last failure, apply fix, and retry the agent."""
+    from models import AgentRun
+    from auto_repair import diagnose_error, build_retry_params
+
+    controller = get_controller()
+
+    if controller.status.state == AgentState.running:
+        return {"message": "Agent is already running. Stop it first."}
+
+    # Get last failed run
+    run = db.query(AgentRun).filter(
+        AgentRun.status == "failed"
+    ).order_by(AgentRun.started_at.desc()).first()
+
+    if not run:
+        return {"diagnosed": False, "retried": False, "message": "No failed runs to repair."}
+
+    # Diagnose
+    diagnosis = diagnose_error(run.error_message or "", run.output_log or "")
+
+    if not diagnosis.auto_fixable:
+        return {
+            "diagnosed": True,
+            "diagnosis": diagnosis.model_dump(),
+            "retried": False,
+            "message": f"Not auto-fixable. {diagnosis.user_action_required}",
+        }
+
+    # Build retry params
+    original_config = {
+        "mode": run.mode or "single",
+        "dry_run": run.dry_run == "True",
+        "limit": int(run.limit) if run.limit else None,
+    }
+    retry_config = build_retry_params(diagnosis, original_config)
+
+    # Retry with adjusted params
+    result = controller.trigger(
+        mode=retry_config.get("mode", "single"),
+        dry_run=retry_config.get("dry_run", True),
+        limit=retry_config.get("limit"),
+    )
+
+    return {
+        "diagnosed": True,
+        "diagnosis": diagnosis.model_dump(),
+        "retried": True,
+        "retry_config": retry_config,
+        "agent_result": result,
+        "message": f"Diagnosed: {diagnosis.diagnosis}. Retrying with adjusted parameters.",
     }
