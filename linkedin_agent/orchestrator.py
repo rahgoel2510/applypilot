@@ -242,17 +242,18 @@ class JobAgent:
         # a. Notify start
         await self.notifier.send_notification("🚀 Starting scan cycle...")
         await self.tracker.log_cycle_start(max_postings, collection)
-        self.log.info("Scan cycle started")
+        self.log.info("Pipeline started")
 
         try:
-            # b. Launch browser
+            # b. Launch browser + session check
+            self.log.info("Launching browser...")
             await self.browser.launch()
-
-            # Login if needed (uses persistent session — only enters creds first time)
+            self.log.info("Checking LinkedIn session...")
             await self.browser.login(
                 email=self.config.linkedin_email,
                 password=self.config.linkedin_password,
             )
+            self.log.info("LinkedIn connected ✓")
 
             # Initialize the application executor for this cycle
             self._applicant = ApplicationExecutor(
@@ -281,11 +282,13 @@ class JobAgent:
                 },
             )
 
-            # c. Search jobs by keywords (not just browse Recommended)
+            # c. Search jobs by keywords
             keywords = self.config.job_search.keywords
             locations = self.config.job_search.locations
             posted_within = self.config.job_search.posted_within
             all_jobs: list[dict] = []
+
+            self.log.info(f"LinkedIn scanning started — keywords: {keywords}")
 
             # Search each keyword + location combo
             for keyword in keywords:
@@ -295,7 +298,6 @@ class JobAgent:
                     break
 
                 location = locations[0] if locations else ""
-                self.log.info(f"Searching: '{keyword}' in '{location}'")
 
                 await self.browser.search_jobs(
                     keyword=keyword,
@@ -307,82 +309,90 @@ class JobAgent:
                 remaining = max_postings - len(all_jobs)
                 page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 25))
                 all_jobs.extend(page_jobs)
-                self.log.info(f"  Found {len(page_jobs)} jobs for '{keyword}' (total: {len(all_jobs)})")
+                self.log.info(f"  '{keyword}' → {len(page_jobs)} jobs found")
 
-            self.log.info(f"Total jobs to evaluate: {len(all_jobs)}")
+            self.log.info(f"Found {len(all_jobs)} total jobs to evaluate")
 
             # d. Process each job: open → score → decide → apply/skip
-            for job in all_jobs:
+            total_jobs = len(all_jobs)
+            discovered_count = 0
+            applied_count = 0
+            external_count = 0
+            skipped_count = 0
+
+            for idx, job in enumerate(all_jobs, 1):
                 if self._shutdown_event.is_set():
                     self.log.info("Shutdown requested, stopping cycle")
                     break
 
                 try:
-                    job_title = job.get("title", "Unknown")
+                    job_title = job.get("title", "Unknown").split('\n')[0][:60]
                     company = job.get("company", "Unknown")
                     job_id = job.get("job_id", "")
 
-                    self.log.info(f"Evaluating: {job_title} @ {company}")
+                    self.log.info(f"Scanning {idx}/{total_jobs}: {job_title} @ {company}")
 
                     # Skip duplicates early
                     if self.matcher.is_duplicate(company, job_title):
-                        self.log.info(f"  → Skipping (duplicate)")
+                        self.log.info(f"  → Already applied (duplicate)")
+                        skipped_count += 1
                         self.tally.record(JobStatus.SKIPPED)
                         continue
 
-                    # Open the job page to check match score
-                    if job_id:
-                        await self.browser.open_job(job_id)
-                    else:
-                        self.log.warning(f"  → No job ID, skipping")
+                    # Open the job page
+                    if not job_id:
+                        skipped_count += 1
                         self.tally.record(JobStatus.SKIPPED)
                         continue
+                    await self.browser.open_job(job_id)
 
                     # Check if external apply
-                    is_external = False
-                    if self.config.job_search.skip_external_apply:
-                        is_external = await self.browser.is_external_apply()
+                    is_external = await self.browser.is_external_apply()
 
-                    # Get match score from LinkedIn Premium "Show match details"
+                    # Get match score from LinkedIn Premium
                     matched, total = await self.browser.get_match_score()
                     score = matched / total if total > 0 else None
                     job["match_score"] = score
 
-                    score_display = f"{matched}/{total} ({score:.0%})" if score else "no score available"
-                    self.log.info(f"  → Score: {score_display} | External: {is_external}")
+                    # Log score
+                    if score is not None:
+                        self.log.info(f"  → Match score: {matched}/{total} = {score:.0%}")
+                    else:
+                        self.log.info(f"  → No score (LinkedIn Premium needed)")
 
-                    # Add ALL jobs to tracker as 'discovered' (user can see them)
+                    # Add ALL to tracker as 'discovered'
                     await self.tracker.push_event(
                         event="discovered", title=job_title, company=company,
                         location=job.get("location"), match_score=score,
                         posting_url=job.get("url"),
                     )
+                    discovered_count += 1
 
-                    # External apply → mark discovered, user applies manually
+                    # Decision
                     if is_external:
-                        self.log.info(f"  → Discovered (external apply — user will apply manually)")
+                        self.log.info(f"  → Not Easy Apply. User must apply manually.")
+                        external_count += 1
                         self.tally.record(JobStatus.SKIPPED)
                         continue
 
-                    # Below threshold → skip (but still visible in tracker as discovered)
-                    if score is not None and not self.matcher.meets_threshold(score):
-                        self.log.info(f"  → Below threshold ({score:.0%} < {self.config.job_search.match_threshold:.0%})")
-                        self.tally.record(JobStatus.SKIPPED)
-                        continue
-
-                    # No score available → skip (don't blindly apply)
                     if score is None:
-                        self.log.info(f"  → No LinkedIn Premium score — keeping as discovered for review")
+                        self.log.info(f"  → No score — added to discovered for review")
                         self.tally.record(JobStatus.SKIPPED)
                         continue
 
-                    # Passed threshold + Easy Apply → apply (or dry-run)
+                    if not self.matcher.meets_threshold(score):
+                        self.log.info(f"  → Not worth applying ({score:.0%} < {self.config.job_search.match_threshold:.0%})")
+                        skipped_count += 1
+                        self.tally.record(JobStatus.SKIPPED)
+                        continue
+
+                    # Worth applying!
                     if self.dry_run:
-                        score_str = f"{matched}/{total} ({score:.0%})"
-                        self.log.info(f"  ✓ [DRY RUN] Would APPLY ({score_str})")
+                        self.log.info(f"  ✓ Worth applying! ({matched}/{total}) [DRY RUN — not submitting]")
+                        applied_count += 1
                         self.tally.record(JobStatus.SUBMITTED)
                     else:
-                        # Actually apply via Easy Apply
+                        self.log.info(f"  ✓ Worth applying! ({matched}/{total}) — submitting...")
                         job["id"] = job_id
                         result = await self._applicant.apply_to_job(job)
                         status = self._map_result_status(result.status)
@@ -390,12 +400,13 @@ class JobAgent:
 
                         if result.status == "submitted":
                             self.matcher.add_to_applied(company, job_title)
-                            # Update tracker: discovered → applied
                             await self.tracker.push_event(
                                 event="submitted", title=job_title, company=company,
                                 location=job.get("location"), match_score=score,
                                 posting_url=job.get("url"),
                             )
+                            applied_count += 1
+                            self.log.info(f"  ✓ Applied successfully!")
                             if inmail_enabled:
                                 await self.send_inmail_for_job(job)
                         elif result.status == "paused":
@@ -404,25 +415,30 @@ class JobAgent:
                                 location=job.get("location"), match_score=score,
                                 posting_url=job.get("url"),
                             )
-
-                    self.log.info(f"  Done: {job_title} @ {company}")
+                            self.log.info(f"  ⏸ Paused — needs human input")
 
                 except Exception as job_exc:
                     self.tally.record(JobStatus.ERROR)
-                    self.log.error(
-                        f"Error processing {job.get('title', '?')}: {job_exc}",
-                        exc_info=True,
-                    )
+                    self.log.error(f"  ✗ Error: {str(job_exc)[:80]}")
                     await self.tracker.log_job_error(
-                        title=job.get("title", "Unknown"),
+                        title=job.get("title", "Unknown")[:60],
                         company=job.get("company", "Unknown"),
                         error=str(job_exc)[:200],
                     )
-                    safe_error = str(job_exc)[:100].replace('<', '').replace('>', '')
+                    safe_error = str(job_exc)[:80].replace('<', '').replace('>', '')
                     await self.notifier.send_notification(
-                        f"❌ Error on {job.get('title', '?')} @ "
-                        f"{job.get('company', '?')}: {safe_error}"
+                        f"❌ Error: {job.get('title', '?')[:30]} @ {job.get('company', '?')}: {safe_error}"
                     )
+
+            # Final summary
+            self.log.info("─" * 40)
+            self.log.info(f"SUMMARY:")
+            self.log.info(f"  Total jobs found:    {total_jobs}")
+            self.log.info(f"  Discovered (in tracker): {discovered_count}")
+            self.log.info(f"  Applied/would apply: {applied_count}")
+            self.log.info(f"  External (manual):   {external_count}")
+            self.log.info(f"  Skipped (low score): {skipped_count}")
+            self.log.info("─" * 40)
 
         except Exception as cycle_exc:
             self.log.error(f"Scan cycle error: {cycle_exc}", exc_info=True)
