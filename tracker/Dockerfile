@@ -9,29 +9,7 @@ RUN npm run build
 
 
 # ─── Stage 2: Full ApplyPilot (Agent + Tracker + Chromium) ────────────
-FROM python:3.12-slim
-
-# Install system deps for Playwright/Chromium
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
-    ca-certificates \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    xdg-utils \
-    && rm -rf /var/lib/apt/lists/*
+FROM mcr.microsoft.com/playwright/python:v1.52.0-noble
 
 WORKDIR /app
 
@@ -39,9 +17,6 @@ WORKDIR /app
 COPY requirements.txt ./agent-requirements.txt
 COPY tracker/backend/requirements.txt ./tracker-requirements.txt
 RUN pip install --no-cache-dir -r agent-requirements.txt -r tracker-requirements.txt
-
-# Install Playwright + Chromium
-RUN pip install --no-cache-dir playwright && playwright install chromium
 
 # Copy the full agent source
 COPY linkedin_agent/ ./linkedin_agent/
@@ -60,7 +35,6 @@ RUN mkdir -p /app/data /app/logs /app/screenshots
 # Set environment
 ENV DATABASE_URL=sqlite:///./data/tracker.db
 ENV PYTHONPATH=/app
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 EXPOSE 8000
 
