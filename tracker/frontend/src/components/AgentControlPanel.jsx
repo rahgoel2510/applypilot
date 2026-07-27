@@ -6,6 +6,7 @@ import {
   ChevronRight, Sparkles, CircleDot,
 } from 'lucide-react';
 import { triggerAgent, stopAgent, getAgentStatus, getAgentOutput } from '../api';
+import AgentPipelineView from './AgentPipelineView';
 
 export default function AgentControlPanel() {
   const [status, setStatus] = useState({ state: 'idle', pid: null, started_at: null, uptime_seconds: 0, config: {}, last_error: null });
@@ -336,6 +337,9 @@ export default function AgentControlPanel() {
           </div>
         </div>
       </div>
+
+      {/* Agent Pipeline Visualization */}
+      <AgentPipelineView />
 
       {/* Agent Live Updates — conversational style */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
