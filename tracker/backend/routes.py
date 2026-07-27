@@ -419,6 +419,40 @@ def get_agent_status():
     return controller.status.to_dict()
 
 
+@router.get("/agent/session")
+def check_linkedin_session():
+    """Quick check if LinkedIn session exists (checks file presence, not validity)."""
+    import os
+    from pathlib import Path
+
+    # Check common session paths
+    paths_to_check = [
+        Path.home() / ".local" / "share" / "linkedin_agent" / "browser_data" / "Default",
+        Path("/root/.local/share/linkedin_agent/browser_data/Default"),  # Docker
+        Path.home() / "Library" / "Application Support" / "linkedin_agent" / "browser_data" / "Default",  # macOS
+    ]
+
+    for p in paths_to_check:
+        if p.exists():
+            # Check if there are cookie files
+            cookies = p / "Cookies"
+            local_storage = p / "Local Storage"
+            has_cookies = cookies.exists() or local_storage.exists()
+            return {
+                "session_exists": True,
+                "has_cookies": has_cookies,
+                "path": str(p.parent),
+                "message": "Session files found. Agent should connect without login." if has_cookies else "Session directory exists but no cookies found.",
+            }
+
+    return {
+        "session_exists": False,
+        "has_cookies": False,
+        "path": None,
+        "message": "No LinkedIn session found. Copy your browser session or run test_browser_dry_run.py first.",
+    }
+
+
 @router.get("/agent/output")
 def get_agent_output(tail: int = 50):
     """Get recent agent stdout output (last N lines)."""

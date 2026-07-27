@@ -292,10 +292,24 @@ class JobAgent:
             locations = self.config.job_search.locations
             posted_within = self.config.job_search.posted_within
             all_jobs: list[dict] = []
+            seen_job_ids: set[str] = set()
 
-            self.log.info(f"LinkedIn scanning started — keywords: {keywords}")
+            self.log.info(f"LinkedIn scanning started")
 
-            # Search each keyword + location combo
+            # Source 1: Recommended jobs (LinkedIn's own matching)
+            self.log.info("Checking Recommended jobs...")
+            await self.browser.navigate_to_jobs(collection=collection)
+            remaining = max_postings
+            rec_jobs = await self.browser.get_job_listings(max_count=min(remaining, 15))
+            for j in rec_jobs:
+                jid = j.get("job_id", "")
+                if jid and jid not in seen_job_ids:
+                    all_jobs.append(j)
+                    seen_job_ids.add(jid)
+            self.log.info(f"  Recommended → {len(rec_jobs)} jobs")
+
+            # Source 2: Keyword search (broader discovery)
+            self.log.info(f"Searching by keywords: {keywords}")
             for keyword in keywords:
                 if self._shutdown_event.is_set():
                     break
@@ -303,20 +317,24 @@ class JobAgent:
                     break
 
                 location = locations[0] if locations else ""
-
                 await self.browser.search_jobs(
                     keyword=keyword,
                     location=location,
                     posted_within=posted_within,
                 )
 
-                # Get job listings from search results
                 remaining = max_postings - len(all_jobs)
-                page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 25))
-                all_jobs.extend(page_jobs)
-                self.log.info(f"  '{keyword}' → {len(page_jobs)} jobs found")
+                page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 20))
+                new_count = 0
+                for j in page_jobs:
+                    jid = j.get("job_id", "")
+                    if jid and jid not in seen_job_ids:
+                        all_jobs.append(j)
+                        seen_job_ids.add(jid)
+                        new_count += 1
+                self.log.info(f"  '{keyword}' → {new_count} new jobs")
 
-            self.log.info(f"Found {len(all_jobs)} total jobs to evaluate")
+            self.log.info(f"Found {len(all_jobs)} unique jobs to evaluate")
 
             # d. Process each job: open → score → decide → apply/skip
             total_jobs = len(all_jobs)
