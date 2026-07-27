@@ -337,68 +337,70 @@ export default function AgentControlPanel() {
         </div>
       </div>
 
-      {/* Terminal console */}
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#0d1117] shadow-2xl shadow-black/20">
-        <div className="flex items-center justify-between border-b border-slate-800 bg-[#161b22] px-5 py-3">
+      {/* Agent Live Updates — conversational style */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
           <div className="flex items-center gap-3">
-            {/* macOS-style dots */}
-            <div className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
-              <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
-              <span className="h-3 w-3 rounded-full bg-[#28c840]" />
+            <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-emerald-600">
+              <Bot className="h-4 w-4 text-white" />
+              {isRunning && (
+                <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <Terminal className="h-4 w-4 text-slate-400" />
-              <span className="text-sm font-medium text-slate-300">applypilot — agent output</span>
+            <div>
+              <span className="text-sm font-semibold text-slate-800">Pilot Updates</span>
+              <p className="text-[11px] text-slate-400">
+                {isRunning ? 'Working on your applications...' : 'Waiting for instructions'}
+              </p>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
             {isRunning && (
-              <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                STREAMING
+              <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-600 ring-1 ring-inset ring-emerald-200">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                Live
               </span>
             )}
+            <button
+              onClick={() => setShowOutput(!showOutput)}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            >
+              {showOutput ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
           </div>
-          <button
-            onClick={() => setShowOutput(!showOutput)}
-            className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-700 hover:text-slate-300"
-          >
-            {showOutput ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
         </div>
 
         {showOutput && (
           <div
             ref={outputRef}
-            className="max-h-96 overflow-y-auto p-5 font-mono text-[13px] leading-6"
+            className="max-h-[420px] overflow-y-auto p-4 space-y-3"
           >
             {output.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800/50">
-                  <Terminal className="h-7 w-7 text-slate-600" />
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50">
+                  <Bot className="h-6 w-6 text-slate-300" />
                 </div>
-                <p className="text-sm font-medium text-slate-400">
-                  {isRunning ? 'Waiting for output...' : 'Agent is idle'}
+                <p className="text-sm font-medium text-slate-500">
+                  {isRunning ? "I'm getting ready..." : "Hi! I'm your ApplyPilot."}
                 </p>
-                <p className="mt-1 text-xs text-slate-600">
-                  {isRunning ? 'Output will appear here in real-time' : 'Launch the agent to see live scanning logs'}
+                <p className="mt-1 max-w-[280px] text-xs text-slate-400">
+                  {isRunning
+                    ? "Setting up the browser and connecting to LinkedIn. Updates will appear shortly."
+                    : "Hit 'Launch Agent' and I'll start scanning LinkedIn for matching jobs. I'll keep you updated on every step."}
                 </p>
               </div>
             ) : (
               output
                 .filter(line => line.trim().length > 0 && !line.match(/^\s{10,}/))
                 .map((line, i) => {
-                  // Clean up Rich logger formatting
                   const cleaned = line
                     .replace(/\[\d{2}\/\d{2}\/\d{2}\s\d{2}:\d{2}:\d{2}\]\s*/, '')
                     .replace(/\s{2,}\S+\.py:\d+\s*$/, '')
                     .trim();
                   if (!cleaned) return null;
-                  return (
-                    <div key={i} className={`${getLineColor(cleaned)} whitespace-pre-wrap break-all`}>
-                      <span className="mr-3 select-none text-slate-700">{String(i + 1).padStart(3)}</span>
-                      {cleaned}
-                    </div>
-                  );
+                  const msg = humanizeLogLine(cleaned);
+                  if (!msg) return null;
+                  return <AgentMessage key={i} message={msg} />;
                 })
             )}
           </div>
@@ -408,7 +410,123 @@ export default function AgentControlPanel() {
   );
 }
 
-// --- Sub-components ---
+// --- Conversational message bubble ---
+
+function AgentMessage({ message }) {
+  const { text, type, icon: IconEmoji } = message;
+
+  const bubbleStyles = {
+    info: 'bg-slate-50 border-slate-200',
+    success: 'bg-emerald-50 border-emerald-200',
+    warning: 'bg-amber-50 border-amber-200',
+    error: 'bg-red-50 border-red-200',
+    action: 'bg-blue-50 border-blue-200',
+  };
+
+  const textStyles = {
+    info: 'text-slate-700',
+    success: 'text-emerald-800',
+    warning: 'text-amber-800',
+    error: 'text-red-800',
+    action: 'text-blue-800',
+  };
+
+  return (
+    <div className="flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2">
+      <span className="mt-0.5 text-base flex-shrink-0">{IconEmoji}</span>
+      <div className={`flex-1 rounded-xl border px-3.5 py-2.5 ${bubbleStyles[type] || bubbleStyles.info}`}>
+        <p className={`text-sm leading-relaxed ${textStyles[type] || textStyles.info}`}>
+          {text}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// --- Transform raw log lines into human-friendly messages ---
+
+function humanizeLogLine(line) {
+  const lower = line.toLowerCase();
+
+  // Skip noise
+  if (lower.includes('data_dir=') || lower.includes('application support')) return null;
+  if (lower.includes('headless=')) return null;
+
+  // Agent lifecycle
+  if (lower.includes('running single scan cycle'))
+    return { text: "Starting a new scan cycle. Let me check LinkedIn for matching jobs...", type: 'action', icon: '🚀' };
+  if (lower.includes('starting daemon'))
+    return { text: "Going into continuous mode. I'll keep scanning on schedule until you stop me.", type: 'action', icon: '🔄' };
+  if (lower.includes('scan cycle started'))
+    return { text: "Scan cycle initiated. Opening LinkedIn and looking for opportunities...", type: 'info', icon: '🔍' };
+  if (lower.includes('shutting down'))
+    return { text: "Okay, shutting down gracefully. See you next time!", type: 'info', icon: '👋' };
+  if (lower.includes('shutdown complete'))
+    return { text: "All done. Closed browser and saved progress.", type: 'success', icon: '✅' };
+
+  // Browser
+  if (lower.includes('browser launched'))
+    return { text: "Browser is up. Navigating to LinkedIn...", type: 'info', icon: '🌐' };
+  if (lower.includes('already logged in'))
+    return { text: "Great — I'm already logged into your LinkedIn account.", type: 'success', icon: '🔓' };
+  if (lower.includes('not logged in'))
+    return { text: "Need to log in first. Entering your credentials...", type: 'warning', icon: '🔐' };
+  if (lower.includes('login successful'))
+    return { text: "Logged in successfully! Ready to scan jobs.", type: 'success', icon: '✅' };
+  if (lower.includes('login') && lower.includes('challenge'))
+    return { text: "⚠️ LinkedIn is asking for verification (CAPTCHA or email). I'll need you to handle this manually.", type: 'warning', icon: '🛑' };
+  if (lower.includes('browser closed'))
+    return { text: "Browser closed. Saving session for next time.", type: 'info', icon: '🔒' };
+
+  // Job navigation
+  if (lower.includes('navigated to jobs'))
+    return { text: "I'm on the jobs page now. Scanning listings...", type: 'info', icon: '📋' };
+  if (lower.match(/found \d+ job/))
+    return { text: line.replace(/^.*?(Found)/i, 'Found'), type: 'success', icon: '📊' };
+
+  // Job processing
+  if (lower.includes('processing:'))
+    return { text: `Looking at: ${line.replace(/.*Processing:\s*/i, '')}`, type: 'action', icon: '👀' };
+  if (lower.includes('would apply'))
+    return { text: `✓ This one's a match! ${line.replace(/.*\]\s*/, '')}`, type: 'success', icon: '🎯' };
+  if (lower.includes('would skip') || lower.includes('skipping'))
+    return { text: `Skipping — ${line.replace(/.*?(skip|skipping)\w*[:\s]*/i, '')}`, type: 'info', icon: '⏭️' };
+  if (lower.includes('submitted') || lower.includes('application was sent'))
+    return { text: `Application submitted! ${line.replace(/.*?(submitted|sent)\s*/i, '')}`, type: 'success', icon: '🎉' };
+  if (lower.includes('paused') || lower.includes('needs human'))
+    return { text: `Pausing on this one — need your input on some fields. Check Telegram.`, type: 'warning', icon: '⏸️' };
+  if (lower.includes('duplicate'))
+    return { text: "Already applied to this one. Moving on.", type: 'info', icon: '🔁' };
+
+  // InMail
+  if (lower.includes('inmail') || lower.includes('drafted'))
+    return { text: `Drafted a message to the recruiter. Check Telegram for review.`, type: 'success', icon: '✉️' };
+
+  // Telegram
+  if (lower.includes('notification sent') || lower.includes('telegram'))
+    return { text: "Sent you an update on Telegram.", type: 'info', icon: '📱' };
+
+  // Tally / cycle end
+  if (lower.includes('cycle complete') || lower.includes('scan cycle complete'))
+    return { text: "All done with this cycle! Check the Board tab for results.", type: 'success', icon: '🏁' };
+
+  // Errors
+  if (lower.includes('error') || lower.includes('traceback') || lower.includes('failed'))
+    return { text: `Something went wrong: ${line.replace(/.*?(error|failed)[:\s]*/i, '').slice(0, 100)}`, type: 'error', icon: '❌' };
+  if (lower.includes('timeout'))
+    return { text: "Hmm, that took too long. LinkedIn might be slow or the page structure changed.", type: 'warning', icon: '⏳' };
+
+  // Outside active hours
+  if (lower.includes('outside active hours'))
+    return { text: "Outside working hours. I'll sleep and check again later.", type: 'info', icon: '😴' };
+
+  // Generic INFO lines
+  if (lower.startsWith('info'))
+    return { text: line.replace(/^info\s*/i, ''), type: 'info', icon: '💬' };
+
+  // Anything else — show as-is
+  return { text: line, type: 'info', icon: '💬' };
+}
 
 function StatusBadge({ state }) {
   const styles = {
@@ -455,10 +573,5 @@ function ConfigField({ label, icon: Icon, description, children }) {
 }
 
 function getLineColor(line) {
-  if (line.includes('ERROR') || line.includes('❌') || line.includes('Traceback') || line.includes('Error')) return 'text-red-400';
-  if (line.includes('WARNING') || line.includes('⚠️') || line.includes('DRY RUN')) return 'text-amber-400';
-  if (line.includes('✅') || line.includes('submitted') || line.includes('SUCCESS')) return 'text-emerald-400';
-  if (line.includes('INFO') || line.includes('🚀') || line.includes('📊') || line.includes('Starting')) return 'text-sky-400';
-  if (line.includes('→') || line.includes('Processing')) return 'text-purple-400';
   return 'text-slate-300';
 }
