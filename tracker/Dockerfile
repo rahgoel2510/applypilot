@@ -9,7 +9,7 @@ RUN npm run build
 
 
 # ─── Stage 2: Full ApplyPilot (Agent + Tracker + Chromium) ────────────
-FROM mcr.microsoft.com/playwright/python:v1.52.0-noble
+FROM mcr.microsoft.com/playwright/python:v1.61.0-noble
 
 USER root
 ENV HOME=/root
