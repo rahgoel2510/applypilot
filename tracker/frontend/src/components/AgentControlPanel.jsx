@@ -58,7 +58,7 @@ export default function AgentControlPanel() {
     // Check for missing required settings before launching
     try {
       const settingsData = await getSettings();
-      const missing = settingsData.settings.filter(s => !s.is_set);
+      const missing = settingsData.settings.filter(s => !s.is_set && s.required);
       if (missing.length > 0) {
         setMissingFields(missing);
         setShowMissingModal(true);

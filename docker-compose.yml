@@ -9,6 +9,8 @@ services:
     container_name: applypilot
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     volumes:
       - applypilot-data:/app/data
       - applypilot-browser:/root/.local/share/linkedin_agent

@@ -28,12 +28,12 @@ ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
 
 # Settings schema
 SETTINGS_KEYS = [
-    {"key": "TELEGRAM_BOT_TOKEN", "label": "Telegram Bot Token", "group": "Telegram", "placeholder": "e.g. 123456:ABC-DEF..."},
-    {"key": "TELEGRAM_CHAT_ID", "label": "Telegram Chat ID", "group": "Telegram", "placeholder": "e.g. 7669562648"},
-    {"key": "OPENAI_API_KEY", "label": "OpenRouter API Key", "group": "AI (OpenRouter)", "placeholder": "e.g. sk-or-v1-..."},
-    {"key": "AI_MODEL", "label": "AI Model", "group": "AI (OpenRouter)", "placeholder": "e.g. openrouter/free"},
-    {"key": "LINKEDIN_EMAIL", "label": "LinkedIn Email", "group": "LinkedIn", "placeholder": "your-email@example.com"},
-    {"key": "LINKEDIN_PASSWORD", "label": "LinkedIn Password", "group": "LinkedIn", "placeholder": "Enter your password", "sensitive": True},
+    {"key": "TELEGRAM_BOT_TOKEN", "label": "Telegram Bot Token", "group": "Telegram", "placeholder": "e.g. 123456:ABC-DEF...", "required": True},
+    {"key": "TELEGRAM_CHAT_ID", "label": "Telegram Chat ID", "group": "Telegram", "placeholder": "e.g. 7669562648", "required": True},
+    {"key": "OPENAI_API_KEY", "label": "OpenRouter API Key", "group": "AI (OpenRouter)", "placeholder": "e.g. sk-or-v1-...", "required": False},
+    {"key": "AI_MODEL", "label": "AI Model", "group": "AI (OpenRouter)", "placeholder": "e.g. openrouter/free", "required": False},
+    {"key": "LINKEDIN_EMAIL", "label": "LinkedIn Email", "group": "LinkedIn", "placeholder": "your-email@example.com", "required": False},
+    {"key": "LINKEDIN_PASSWORD", "label": "LinkedIn Password", "group": "LinkedIn", "placeholder": "Not needed if browser session is active", "sensitive": True, "required": False},
 ]
 
 PLACEHOLDER_VALUES = {"placeholder", "placeholder@example.com", "your_bot_token_here", "sk-placeholder-not-needed-for-testing"}
@@ -60,22 +60,34 @@ def _mask_value(key: str, value: str) -> str:
 
 
 def _seed_from_env(db: Session) -> None:
-    """One-time seed: copy .env values into DB if table is empty."""
+    """One-time seed: load values into DB from .env file OR environment variables."""
     existing = db.query(AppSetting).count()
     if existing > 0:
         return  # Already seeded
 
-    if not ENV_FILE.exists():
-        return
-
-    env_values = dotenv_values(ENV_FILE)
     valid_keys = {item["key"] for item in SETTINGS_KEYS}
+    seeded = False
 
-    for key, value in env_values.items():
-        if key in valid_keys and value and _is_real_value(value):
-            db.add(AppSetting(key=key, value=value))
+    # Try .env file first
+    if ENV_FILE.exists():
+        env_values = dotenv_values(ENV_FILE)
+        for key, value in env_values.items():
+            if key in valid_keys and value and _is_real_value(value):
+                db.add(AppSetting(key=key, value=value))
+                seeded = True
 
-    db.commit()
+    # Also check os.environ (for Docker env_file / environment vars)
+    for key in valid_keys:
+        value = os.environ.get(key, "")
+        if value and _is_real_value(value):
+            # Don't duplicate if already added from .env file
+            exists = db.query(AppSetting).filter(AppSetting.key == key).first()
+            if not exists:
+                db.add(AppSetting(key=key, value=value))
+                seeded = True
+
+    if seeded:
+        db.commit()
 
 
 def _get_setting(db: Session, key: str) -> str:
@@ -132,6 +144,7 @@ def get_settings(db: Session = Depends(get_db)):
             "group": item["group"],
             "placeholder": item.get("placeholder", ""),
             "sensitive": item.get("sensitive", False),
+            "required": item.get("required", True),
             "masked_value": _mask_value(key, raw_value),
             "is_set": is_set,
         })
