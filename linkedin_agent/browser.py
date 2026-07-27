@@ -60,8 +60,8 @@ RETRY_DELAY = 2.0
 
 SELECTORS = {
     # Login page
-    "login_email": "#username",
-    "login_password": "#password",
+    "login_email": 'input[autocomplete="username"]',
+    "login_password": 'input[type="password"]',
     "login_submit": 'button[type="submit"]',
 
     # Feed detection (logged-in indicator)
