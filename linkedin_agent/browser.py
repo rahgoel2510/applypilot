@@ -387,7 +387,15 @@ class LinkedInBrowser:
             params["location"] = location
 
         # Time posted filter
-        time_map = {"day": "r86400", "week": "r604800", "month": "r2592000"}
+        # LinkedIn uses f_TPR for time and supports these values:
+        #   r86400 = past 24 hours
+        #   r604800 = past week
+        #   r2592000 = past month
+        time_map = {
+            "24h": "r86400", "day": "r86400",
+            "week": "r604800", "7d": "r604800",
+            "month": "r2592000", "30d": "r2592000",
+        }
         if posted_within in time_map:
             params["f_TPR"] = time_map[posted_within]
 

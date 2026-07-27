@@ -26,7 +26,7 @@ job_search:
   max_postings_per_run: 50
   collection: "Recommended"
   skip_external_apply: true
-  posted_within: "week"  # day, week, month
+  posted_within: "24h"  # 24h, week, month, any
 
 scheduler:
   interval_minutes: 60
