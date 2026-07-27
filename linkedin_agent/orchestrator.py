@@ -381,7 +381,8 @@ class JobAgent:
 
                     # Apply (or dry-run log)
                     if self.dry_run:
-                        self.log.info(f"  ✓ [DRY RUN] Would APPLY (score: {score:.0%})")
+                        score_str = f"{score:.0%}" if score is not None else "no score"
+                        self.log.info(f"  ✓ [DRY RUN] Would APPLY (score: {score_str})")
                         self.tally.record(JobStatus.SUBMITTED)
                     else:
                         # Actually apply — will update discovered→applied in tracker
