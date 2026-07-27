@@ -136,3 +136,118 @@ def update_settings(req: SettingsUpdateRequest):
             updated=[],
             message="No changes made.",
         )
+
+
+# ===========================================================================
+# Test Connection Endpoints
+# ===========================================================================
+
+import asyncio
+import httpx as httpx_client
+
+
+class TestResult(BaseModel):
+    success: bool
+    message: str
+
+
+@router.post("/test/telegram", response_model=TestResult)
+def test_telegram():
+    """Test Telegram bot connection by sending a test message."""
+    env_values = _load_env()
+    token = env_values.get("TELEGRAM_BOT_TOKEN", "")
+    chat_id = env_values.get("TELEGRAM_CHAT_ID", "")
+
+    if not token or token.startswith("placeholder") or token == "your_bot_token_here":
+        return TestResult(success=False, message="Bot token not configured. Please set it first.")
+    if not chat_id or chat_id.startswith("placeholder"):
+        return TestResult(success=False, message="Chat ID not configured. Please set it first.")
+
+    try:
+        # Call Telegram getMe API
+        url = f"https://api.telegram.org/bot{token}/getMe"
+        response = httpx_client.get(url, timeout=10)
+        data = response.json()
+
+        if not data.get("ok"):
+            return TestResult(success=False, message=f"Invalid token: {data.get('description', 'Unknown error')}")
+
+        bot_name = data["result"].get("username", "unknown")
+
+        # Send a test message
+        send_url = f"https://api.telegram.org/bot{token}/sendMessage"
+        msg_response = httpx_client.post(send_url, json={
+            "chat_id": chat_id,
+            "text": "✅ *ApplyPilot — Connection Test*\n\nTelegram is configured correctly!",
+            "parse_mode": "Markdown",
+        }, timeout=10)
+        msg_data = msg_response.json()
+
+        if msg_data.get("ok"):
+            return TestResult(success=True, message=f"Connected! Bot: @{bot_name}. Test message sent to your chat.")
+        else:
+            return TestResult(success=False, message=f"Bot works but can't message chat {chat_id}: {msg_data.get('description')}")
+
+    except httpx_client.ConnectError:
+        return TestResult(success=False, message="Network error — can't reach Telegram API.")
+    except httpx_client.TimeoutException:
+        return TestResult(success=False, message="Timeout — Telegram API not responding.")
+    except Exception as e:
+        return TestResult(success=False, message=f"Error: {str(e)[:100]}")
+
+
+@router.post("/test/openai", response_model=TestResult)
+def test_openai():
+    """Test OpenAI API key by making a minimal API call."""
+    env_values = _load_env()
+    api_key = env_values.get("OPENAI_API_KEY", "")
+
+    if not api_key or api_key.startswith("placeholder") or api_key.startswith("sk-placeholder"):
+        return TestResult(success=False, message="API key not configured. Please set it first.")
+
+    try:
+        # Call OpenAI models endpoint (cheapest way to verify key)
+        response = httpx_client.get(
+            "https://api.openai.com/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=10,
+        )
+
+        if response.status_code == 200:
+            return TestResult(success=True, message="API key is valid! Connected to OpenAI.")
+        elif response.status_code == 401:
+            return TestResult(success=False, message="Invalid API key. Please check and re-enter.")
+        elif response.status_code == 429:
+            return TestResult(success=True, message="Key is valid but rate-limited. Try again later.")
+        else:
+            return TestResult(success=False, message=f"Unexpected response: {response.status_code}")
+
+    except httpx_client.ConnectError:
+        return TestResult(success=False, message="Network error — can't reach OpenAI API.")
+    except httpx_client.TimeoutException:
+        return TestResult(success=False, message="Timeout — OpenAI API not responding.")
+    except Exception as e:
+        return TestResult(success=False, message=f"Error: {str(e)[:100]}")
+
+
+@router.post("/test/linkedin", response_model=TestResult)
+def test_linkedin():
+    """Validate LinkedIn credentials are set (can't actually test login without browser)."""
+    env_values = _load_env()
+    email = env_values.get("LINKEDIN_EMAIL", "")
+    password = env_values.get("LINKEDIN_PASSWORD", "")
+
+    if not email or email.startswith("placeholder"):
+        return TestResult(success=False, message="LinkedIn email not configured.")
+    if not password or password == "placeholder":
+        return TestResult(success=False, message="LinkedIn password not configured.")
+
+    # We can't actually test LinkedIn login without launching a browser,
+    # so just validate the format and confirm they're set.
+    if "@" not in email:
+        return TestResult(success=False, message="Email doesn't look valid (missing @).")
+
+    return TestResult(
+        success=True,
+        message=f"Credentials set for {email}. Login will be tested when agent launches.",
+    )

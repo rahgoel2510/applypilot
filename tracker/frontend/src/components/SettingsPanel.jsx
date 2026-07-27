@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
   Settings, Shield, Eye, EyeOff, Save, Check, AlertCircle,
-  Key, Bot, Brain, Globe, Lock, RefreshCw,
+  Key, Bot, Brain, Globe, Lock, RefreshCw, Plug, Loader2, X,
 } from 'lucide-react';
-import { getSettings, updateSettings } from '../api';
+import { getSettings, updateSettings, testConnection } from '../api';
 
 const GROUP_ICONS = {
   Telegram: Bot,
@@ -26,6 +26,8 @@ export default function SettingsPanel() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [testResults, setTestResults] = useState({});
+  const [testing, setTesting] = useState({});
 
   const loadSettings = async () => {
     try {
@@ -72,6 +74,23 @@ export default function SettingsPanel() {
   };
 
   const hasChanges = Object.values(editValues).some(v => v.trim().length > 0);
+
+  const handleTestConnection = async (group) => {
+    const serviceMap = { Telegram: 'telegram', AI: 'openai', LinkedIn: 'linkedin' };
+    const service = serviceMap[group];
+    if (!service) return;
+
+    setTesting(prev => ({ ...prev, [group]: true }));
+    setTestResults(prev => ({ ...prev, [group]: null }));
+    try {
+      const result = await testConnection(service);
+      setTestResults(prev => ({ ...prev, [group]: result }));
+    } catch (e) {
+      setTestResults(prev => ({ ...prev, [group]: { success: false, message: 'Request failed' } }));
+    } finally {
+      setTesting(prev => ({ ...prev, [group]: false }));
+    }
+  };
 
   // Group settings
   const groups = {};
@@ -153,13 +172,38 @@ export default function SettingsPanel() {
 
         return (
           <div key={groupName} className={`rounded-2xl border ${colors.border} ${colors.bg} p-5`}>
-            <div className="mb-4 flex items-center gap-2">
-              <GroupIcon className={`h-5 w-5 ${colors.icon}`} />
-              <h3 className="text-base font-semibold text-[#0f172a]">{groupName}</h3>
-              <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${colors.badge}`}>
-                {fields.filter(f => f.is_set).length}/{fields.length}
-              </span>
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <GroupIcon className={`h-5 w-5 ${colors.icon}`} />
+                <h3 className="text-base font-semibold text-[#0f172a]">{groupName}</h3>
+                <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${colors.badge}`}>
+                  {fields.filter(f => f.is_set).length}/{fields.length}
+                </span>
+              </div>
+              <button
+                onClick={() => handleTestConnection(groupName)}
+                disabled={testing[groupName] || !fields.some(f => f.is_set)}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {testing[groupName] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />}
+                Test Connection
+              </button>
             </div>
+
+            {/* Test result */}
+            {testResults[groupName] && (
+              <div className={`mb-4 flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm ${
+                testResults[groupName].success
+                  ? 'bg-emerald-100 border border-emerald-200 text-emerald-800'
+                  : 'bg-red-100 border border-red-200 text-red-800'
+              }`}>
+                {testResults[groupName].success ? <Check className="h-4 w-4 flex-shrink-0" /> : <AlertCircle className="h-4 w-4 flex-shrink-0" />}
+                <span className="flex-1">{testResults[groupName].message}</span>
+                <button onClick={() => setTestResults(prev => ({ ...prev, [groupName]: null }))} className="p-0.5 hover:opacity-70">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
 
             <div className="space-y-4">
               {fields.map(field => (

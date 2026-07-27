@@ -117,3 +117,9 @@ export async function updateSettings(values) {
   if (!res.ok) throw new Error('Failed to update settings');
   return res.json();
 }
+
+export async function testConnection(service) {
+  const res = await fetch(`${BASE_URL}/settings/test/${service}`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to test connection');
+  return res.json();
+}

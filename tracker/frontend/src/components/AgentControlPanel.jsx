@@ -5,8 +5,9 @@ import {
   Gauge, Target, Radar, Shield, Send, Power,
   ChevronRight, Sparkles, CircleDot,
 } from 'lucide-react';
-import { triggerAgent, stopAgent, getAgentStatus, getAgentOutput } from '../api';
+import { triggerAgent, stopAgent, getAgentStatus, getAgentOutput, getSettings } from '../api';
 import AgentPipelineView from './AgentPipelineView';
+import MissingSettingsModal from './MissingSettingsModal';
 
 export default function AgentControlPanel() {
   const [status, setStatus] = useState({ state: 'idle', pid: null, started_at: null, uptime_seconds: 0, config: {}, last_error: null });
@@ -14,6 +15,8 @@ export default function AgentControlPanel() {
   const [showOutput, setShowOutput] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [missingFields, setMissingFields] = useState([]);
+  const [showMissingModal, setShowMissingModal] = useState(false);
   const outputRef = useRef(null);
 
   const [config, setConfig] = useState({
@@ -50,6 +53,25 @@ export default function AgentControlPanel() {
   }, [output]);
 
   const handleTrigger = async () => {
+    setError(null);
+
+    // Check for missing required settings before launching
+    try {
+      const settingsData = await getSettings();
+      const missing = settingsData.settings.filter(s => !s.is_set);
+      if (missing.length > 0) {
+        setMissingFields(missing);
+        setShowMissingModal(true);
+        return;
+      }
+    } catch (e) {
+      // If we can't check, proceed anyway
+    }
+
+    await doTrigger();
+  };
+
+  const doTrigger = async () => {
     setError(null);
     setLoading(true);
     try {
@@ -358,6 +380,18 @@ export default function AgentControlPanel() {
               </p>
             </div>
           </div>
+
+      {/* Missing Settings Modal */}
+      <MissingSettingsModal
+        isOpen={showMissingModal}
+        onClose={() => setShowMissingModal(false)}
+        missingFields={missingFields}
+        onSaved={() => {
+          setShowMissingModal(false);
+          // Retry trigger after settings are saved
+          setTimeout(doTrigger, 500);
+        }}
+      />
           <div className="flex items-center gap-2">
             {isRunning && (
               <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-600 ring-1 ring-inset ring-emerald-200">
