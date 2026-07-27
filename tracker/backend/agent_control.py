@@ -121,8 +121,18 @@ class AgentController:
         if limit is not None:
             cmd.extend(["--limit", str(limit)])
 
-        # Environment (inherit current + pass overrides)
+        # Environment (inherit current + load fresh .env values)
         env = os.environ.copy()
+
+        # Load .env file and inject into subprocess environment
+        env_file = self._project_root / ".env"
+        if env_file.exists():
+            from dotenv import dotenv_values
+            dot_env_values = dotenv_values(env_file)
+            for key, value in dot_env_values.items():
+                if value:  # Only set non-empty values
+                    env[key] = value
+
         if match_threshold is not None:
             env["MATCH_THRESHOLD"] = str(match_threshold)
 
