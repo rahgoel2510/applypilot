@@ -244,30 +244,46 @@ class LinkedInBrowser:
 
         # Check if already logged in by visiting feed
         await page.goto(LINKEDIN_FEED, wait_until="domcontentloaded")
-        await _human_delay()
 
-        # If we're on the feed page, we're already logged in
+        # Wait up to 10s for possible redirect to feed (session may need a moment)
+        try:
+            await page.wait_for_url("**/feed/**", timeout=10000)
+            logger.info("Already logged in (session persisted).")
+            return
+        except PlaywrightTimeout:
+            pass
+
+        # Double-check current URL after wait
         if "/feed" in page.url and "/login" not in page.url:
             logger.info("Already logged in (session persisted).")
             return
 
-        # Navigate to login page
-        logger.info("Not logged in. Proceeding with login...")
-        await page.goto(LINKEDIN_LOGIN, wait_until="domcontentloaded")
-        await _human_delay()
+        # Not logged in — but if credentials are empty, skip login attempt
+        if not email or not password:
+            logger.warning("No credentials provided and session expired. Agent cannot proceed.")
+            raise RuntimeError("LinkedIn session expired and no credentials configured. Copy a valid session or set credentials in Settings.")
 
-        # Fill credentials
+        # Navigate to login page
+        logger.info("Session expired. Logging in with credentials...")
+        await page.goto(LINKEDIN_LOGIN, wait_until="domcontentloaded")
+        await _human_delay(2, 3)
+
+        # Wait for the email input to be visible before filling
         try:
-            await page.fill(SELECTORS["login_email"], email)
+            email_locator = page.locator(SELECTORS["login_email"]).first
+            await email_locator.wait_for(state="visible", timeout=10000)
+            await email_locator.fill(email)
             await _human_delay(0.5, 1.0)
-            await page.fill(SELECTORS["login_password"], password)
+
+            pass_locator = page.locator(SELECTORS["login_password"]).first
+            await pass_locator.wait_for(state="visible", timeout=10000)
+            await pass_locator.fill(password)
             await _human_delay(0.5, 1.5)
 
             # Submit
             await page.click(SELECTORS["login_submit"])
         except PlaywrightTimeout:
             # Form fill timed out — check if we ended up on feed anyway
-            # (LinkedIn sometimes auto-redirects through challenge → feed)
             if "/feed" in page.url:
                 logger.info("Login successful (redirected through challenge).")
                 return

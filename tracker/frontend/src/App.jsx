@@ -7,7 +7,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { Plus, LayoutDashboard, Columns3, Activity, Bot, Settings } from 'lucide-react';
+import { Plus, LayoutDashboard, Columns3, Activity, Bot, Settings, Terminal } from 'lucide-react';
 import { COLUMNS } from './columns';
 import KanbanColumn from './components/KanbanColumn';
 import JobCard from './components/JobCard';
@@ -17,6 +17,7 @@ import Dashboard from './components/Dashboard';
 import ActivityFeed from './components/ActivityFeed';
 import AgentControlPanel from './components/AgentControlPanel';
 import SettingsPanel from './components/SettingsPanel';
+import TechLogs from './components/TechLogs';
 import { fetchJobs, createJob, updateJobStage, deleteJob } from './api';
 
 const TABS = [
@@ -24,6 +25,7 @@ const TABS = [
   { id: 'agent', label: 'Agent', icon: Bot },
   { id: 'board', label: 'Board', icon: Columns3 },
   { id: 'activity', label: 'Activity Log', icon: Activity },
+  { id: 'logs', label: 'Tech Logs', icon: Terminal },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -252,6 +254,8 @@ export default function App() {
         )}
 
         {activeTab === 'activity' && <ActivityFeed compact={false} limit={100} />}
+
+        {activeTab === 'logs' && <TechLogs />}
 
         {activeTab === 'settings' && <SettingsPanel />}
       </main>
