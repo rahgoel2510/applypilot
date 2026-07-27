@@ -100,3 +100,20 @@ export async function getAgentOutput(tail = 100) {
   if (!res.ok) throw new Error('Failed to get agent output');
   return res.json();
 }
+
+// Settings API
+export async function getSettings() {
+  const res = await fetch(`${BASE_URL}/settings`);
+  if (!res.ok) throw new Error('Failed to get settings');
+  return res.json();
+}
+
+export async function updateSettings(values) {
+  const res = await fetch(`${BASE_URL}/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values }),
+  });
+  if (!res.ok) throw new Error('Failed to update settings');
+  return res.json();
+}
