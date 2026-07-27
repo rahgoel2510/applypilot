@@ -76,6 +76,7 @@ export default function SettingsPanel() {
   };
 
   const hasChanges = Object.values(editValues).some(v => v.trim().length > 0);
+  const currentAiModel = settings.find(s => s.key === 'AI_MODEL')?.masked_value || '';
 
   const handleTestConnection = async (group) => {
     const serviceMap = { Telegram: 'telegram', 'AI (OpenRouter)': 'openai', LinkedIn: 'linkedin' };
@@ -220,25 +221,28 @@ export default function SettingsPanel() {
             {/* Model selector — shown after successful AI test */}
             {groupName === 'AI (OpenRouter)' && testResults[groupName]?.success && freeModels.length > 0 && (
               <div className="mb-4 rounded-xl border border-purple-200 bg-purple-50/50 p-4">
-                <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-purple-800">
+                <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-purple-800">
                   <Brain className="h-4 w-4" />
                   Choose a Model ({freeModels.length} free models available)
                 </label>
-                <select
-                  value={editValues['AI_MODEL'] || ''}
-                  onChange={(e) => setEditValues(prev => ({ ...prev, AI_MODEL: e.target.value }))}
-                  className="w-full rounded-lg border-2 border-purple-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20"
-                >
-                  <option value="">— Select a free model —</option>
-                  <option value="openrouter/free">🎲 Auto (Free Router — picks randomly)</option>
+                <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                  {/* Auto option */}
+                  <ModelOption
+                    model={{ id: 'openrouter/free', name: 'Auto (Free Router)', tier: 'standard', context_length: 0, capabilities: ['auto-select'], description: 'Automatically picks the best available free model for each request.' }}
+                    selected={(!editValues['AI_MODEL'] && !currentAiModel) || editValues['AI_MODEL'] === 'openrouter/free'}
+                    onSelect={() => setEditValues(prev => ({ ...prev, AI_MODEL: 'openrouter/free' }))}
+                  />
                   {freeModels.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.context_length ? `${Math.round(m.context_length/1000)}k ctx` : ''})
-                    </option>
+                    <ModelOption
+                      key={m.id}
+                      model={m}
+                      selected={editValues['AI_MODEL'] === m.id}
+                      onSelect={() => setEditValues(prev => ({ ...prev, AI_MODEL: m.id }))}
+                    />
                   ))}
-                </select>
-                <p className="mt-1.5 text-[11px] text-purple-600">
-                  Pick a model for InMail drafting. "Auto" works great — it picks from all free models.
+                </div>
+                <p className="mt-3 text-[11px] text-purple-600">
+                  Selected model is used for InMail drafting. Higher-tier models write better messages.
                 </p>
                 {modelsLoading && <p className="mt-1 text-xs text-purple-500 animate-pulse">Loading models...</p>}
               </div>
@@ -316,5 +320,62 @@ function SettingField({ field, editValue, onEditChange, visible, onToggleVisibil
         </p>
       )}
     </div>
+  );
+}
+
+function ModelOption({ model, selected, onSelect }) {
+  const tierColors = {
+    high: 'border-amber-300 bg-amber-50',
+    medium: 'border-purple-200 bg-purple-50/50',
+    standard: 'border-slate-200 bg-white',
+  };
+  const tierLabels = {
+    high: { text: '⚡ Best', className: 'bg-amber-100 text-amber-800' },
+    medium: { text: '✦ Good', className: 'bg-purple-100 text-purple-800' },
+    standard: { text: '○ Basic', className: 'bg-slate-100 text-slate-600' },
+  };
+  const capabilityIcons = {
+    'long-context': '📚',
+    'code': '💻',
+    'text': '📝',
+    'tools': '🔧',
+    'auto-select': '🎲',
+  };
+
+  const tier = tierLabels[model.tier] || tierLabels.standard;
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`w-full rounded-xl border-2 p-3 text-left transition-all ${
+        selected
+          ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-500/20'
+          : `${tierColors[model.tier] || tierColors.standard} hover:border-purple-300 hover:shadow-sm`
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {selected && <span className="flex h-4 w-4 items-center justify-center rounded-full bg-purple-600 text-[9px] text-white">✓</span>}
+          <span className="text-sm font-semibold text-slate-800">{model.name}</span>
+        </div>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${tier.className}`}>
+          {tier.text}
+        </span>
+      </div>
+      {model.description && (
+        <p className="mt-1 text-[11px] text-slate-500 line-clamp-1">{model.description}</p>
+      )}
+      <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+        {model.context_length > 0 && (
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+            {Math.round(model.context_length / 1000)}k context
+          </span>
+        )}
+        {(model.capabilities || []).map(cap => (
+          <span key={cap} className="text-[10px]">{capabilityIcons[cap] || '•'} {cap}</span>
+        ))}
+      </div>
+    </button>
   );
 }

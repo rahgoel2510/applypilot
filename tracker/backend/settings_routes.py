@@ -239,7 +239,7 @@ def test_openai():
 
 @router.get("/models")
 def list_free_models():
-    """List available free models from OpenRouter."""
+    """List available free models from OpenRouter with capabilities."""
     env_values = _load_env()
     api_key = env_values.get("OPENAI_API_KEY", "")
 
@@ -259,7 +259,7 @@ def list_free_models():
         data = response.json()
         all_models = data.get("data", [])
 
-        # Filter free models and format them
+        # Filter free models and format with capabilities
         free_models = []
         for m in all_models:
             model_id = m.get("id", "")
@@ -268,14 +268,42 @@ def list_free_models():
             completion_price = float(pricing.get("completion", "1") or "1")
 
             if prompt_price == 0 and completion_price == 0:
+                ctx = m.get("context_length", 0)
+                arch = m.get("architecture", {})
+                top_provider = m.get("top_provider", {})
+
+                # Determine capabilities
+                capabilities = []
+                if ctx >= 100000:
+                    capabilities.append("long-context")
+                if "code" in model_id.lower() or "code" in m.get("name", "").lower():
+                    capabilities.append("code")
+                if arch.get("modality", "") == "text->text":
+                    capabilities.append("text")
+                if "tool" in str(m.get("supported_parameters", [])):
+                    capabilities.append("tools")
+
+                # Determine quality tier
+                if any(x in model_id for x in ["70b", "72b", "gemma-4-31b", "qwen-3-72b"]):
+                    tier = "high"
+                elif any(x in model_id for x in ["26b", "27b", "24b", "32b"]):
+                    tier = "medium"
+                else:
+                    tier = "standard"
+
                 free_models.append({
                     "id": model_id,
                     "name": m.get("name", model_id),
-                    "context_length": m.get("context_length", 0),
+                    "context_length": ctx,
+                    "description": m.get("description", "")[:120],
+                    "capabilities": capabilities,
+                    "tier": tier,
+                    "max_output": top_provider.get("max_completion_tokens", 4096),
                 })
 
-        # Sort by name
-        free_models.sort(key=lambda x: x["name"])
+        # Sort: high tier first, then by context length
+        tier_order = {"high": 0, "medium": 1, "standard": 2}
+        free_models.sort(key=lambda x: (tier_order.get(x["tier"], 2), -x["context_length"]))
 
         return {"models": free_models, "total": len(free_models)}
 
