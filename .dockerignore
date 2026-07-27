@@ -1,0 +1,15 @@
+__pycache__
+*.pyc
+*.pyo
+.git
+.env
+*.egg-info
+node_modules
+tracker/frontend/node_modules
+tracker/frontend/dist
+tracker/backend/__pycache__
+tracker/backend/tracker.db
+.pytest_cache
+tests/
+logs/
+screenshots/

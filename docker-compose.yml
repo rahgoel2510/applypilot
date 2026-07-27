@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  applypilot:
+    build:
+      context: .
+      dockerfile: tracker/Dockerfile
+    image: rahgoel2510/applypilot:latest
+    container_name: applypilot
+    ports:
+      - "8000:8000"
+    volumes:
+      - applypilot-data:/app/data
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=sqlite:///./data/tracker.db
+      - TZ=Asia/Kolkata
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/stats')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  applypilot-data:
+    driver: local

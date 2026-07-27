@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+tracker/frontend/dist/
+
+# Data
+*.db
+tracker/backend/tracker.db
+logs/
+screenshots/
+
+# Test
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Docker
+tracker-data/

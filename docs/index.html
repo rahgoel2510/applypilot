@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ApplyPilot — Autonomous LinkedIn Job Application Agent</title>
+  <meta name="description" content="Put your job search on autopilot. ApplyPilot scans LinkedIn, scores jobs, and applies for you." />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; }
+    a { text-decoration: none; color: inherit; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+    /* Hero */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      background: linear-gradient(135deg, #0f172a 0%, #134e4a 100%);
+      padding: 80px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 30% 50%, rgba(24,184,188,0.08) 0%, transparent 50%);
+      pointer-events: none;
+    }
+    .hero-content { position: relative; z-index: 1; max-width: 700px; }
+    .hero-logo {
+      font-size: 4rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #18B8BC, #60d9dc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 16px;
+    }
+    .hero-tagline { font-size: 1.5rem; font-weight: 500; color: #cbd5e1; margin-bottom: 8px; }
+    .hero-subtitle { font-size: 0.95rem; color: #64748b; margin-bottom: 40px; font-weight: 400; }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(24,184,188,0.3); }
+    .btn-primary { background: #18B8BC; color: #0f172a; }
+    .btn-secondary { background: transparent; border: 2px solid #18B8BC; color: #18B8BC; }
+
+    /* Features */
+    .features { padding: 100px 24px; background: #0f172a; }
+    .section-title {
+      text-align: center;
+      font-size: 2.2rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: #f1f5f9;
+    }
+    .section-subtitle {
+      text-align: center;
+      color: #64748b;
+      font-size: 1.1rem;
+      margin-bottom: 60px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .feature-card {
+      background: linear-gradient(135deg, #1e293b, #1a2332);
+      border: 1px solid #294A73;
+      border-radius: 16px;
+      padding: 32px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .feature-card:hover { transform: translateY(-4px); border-color: #18B8BC; }
+    .feature-icon { font-size: 2rem; margin-bottom: 16px; }
+    .feature-card h3 { font-size: 1.15rem; font-weight: 600; margin-bottom: 8px; color: #f1f5f9; }
+    .feature-card p { color: #94a3b8; font-size: 0.95rem; }
+
+    /* How It Works */
+    .how-it-works { padding: 100px 24px; background: linear-gradient(180deg, #0f172a 0%, #132030 100%); }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 32px;
+      max-width: 1000px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .step { position: relative; }
+    .step-number {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, #18B8BC, #0d9094);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0 auto 16px;
+    }
+    .step h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; color: #f1f5f9; }
+    .step p { color: #94a3b8; font-size: 0.9rem; }
+
+    /* Tech Stack */
+    .tech-stack { padding: 80px 24px; background: #0f172a; }
+    .tech-grid {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 32px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .tech-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      transition: color 0.2s;
+    }
+    .tech-item:hover { color: #18B8BC; }
+    .tech-icon {
+      width: 48px;
+      height: 48px;
+      background: #1e293b;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      border: 1px solid #334155;
+      transition: border-color 0.2s;
+    }
+    .tech-item:hover .tech-icon { border-color: #18B8BC; }
+
+    /* Quick Start */
+    .quickstart { padding: 80px 24px; background: linear-gradient(180deg, #132030 0%, #0f172a 100%); }
+    .code-block {
+      max-width: 700px;
+      margin: 0 auto;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 24px 28px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.95rem;
+      color: #18B8BC;
+      overflow-x: auto;
+      position: relative;
+    }
+    .code-block::before {
+      content: '$ ';
+      color: #64748b;
+    }
+
+    /* Footer */
+    footer {
+      padding: 40px 24px;
+      text-align: center;
+      border-top: 1px solid #1e293b;
+      background: #0f172a;
+    }
+    footer p { color: #64748b; font-size: 0.9rem; margin-bottom: 12px; }
+    .footer-links { display: flex; gap: 24px; justify-content: center; }
+    .footer-links a { color: #94a3b8; font-size: 0.9rem; transition: color 0.2s; }
+    .footer-links a:hover { color: #18B8BC; }
+
+    @media (max-width: 640px) {
+      .hero-logo { font-size: 2.8rem; }
+      .hero-tagline { font-size: 1.2rem; }
+      .section-title { font-size: 1.8rem; }
+      .features-grid { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1 class="hero-logo">&#x2708;&#xFE0F; ApplyPilot</h1>
+      <p class="hero-tagline">Put your job search on autopilot</p>
+      <p class="hero-subtitle">Powered by Rahul</p>
+      <div class="hero-buttons">
+        <a href="https://github.com/rahgoel2510/applypilot" class="btn btn-primary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+          Get Started
+        </a>
+        <a href="#features" class="btn btn-secondary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          View Demo
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <div class="container">
+      <h2 class="section-title">Everything you need to land your next role</h2>
+      <p class="section-subtitle">ApplyPilot handles the busywork so you can focus on interviews and decisions.</p>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F50D;</div>
+          <h3>Auto-Scan &amp; Match</h3>
+          <p>Continuously monitors LinkedIn for new postings and scores them by relevance to your profile.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x26A1;</div>
+          <h3>Smart Apply</h3>
+          <p>Fills and submits Easy Apply forms end-to-end, handling multi-step flows automatically.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F4E8;</div>
+          <h3>Telegram Alerts</h3>
+          <p>Real-time notifications for new matches, successful applications, and fields needing your input.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x2709;&#xFE0F;</div>
+          <h3>InMail Drafting</h3>
+          <p>Generates personalized cold outreach messages to hiring managers and recruiters.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F4CB;</div>
+          <h3>Kanban Tracker</h3>
+          <p>Built-in web dashboard with drag-and-drop board to track every application in your pipeline.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F6E1;&#xFE0F;</div>
+          <h3>Dry-Run Safety</h3>
+          <p>Preview everything the agent would do without submitting. Go live only when you're confident.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="container">
+      <h2 class="section-title">How It Works</h2>
+      <p class="section-subtitle">Four simple steps from setup to offer tracking.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <h3>Configure</h3>
+          <p>Add your LinkedIn credentials, resume, and job preferences to config.yaml.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <h3>Scan</h3>
+          <p>The agent monitors LinkedIn 24/7 and scores new postings against your profile.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <h3>Apply</h3>
+          <p>High-scoring jobs get applied to automatically via Easy Apply, with human-in-the-loop for sensitive fields.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <h3>Track</h3>
+          <p>Every application appears on your Kanban board. Drag cards as you progress through stages.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech Stack -->
+  <section class="tech-stack" id="tech-stack">
+    <div class="container">
+      <h2 class="section-title">Tech Stack</h2>
+      <p class="section-subtitle">Built with proven, modern technologies.</p>
+      <div class="tech-grid">
+        <div class="tech-item">
+          <div class="tech-icon">&#x1F40D;</div>
+          <span>Python</span>
+        </div>
+        <div class="tech-item">
+          <div class="tech-icon">&#x269B;&#xFE0F;</div>
+          <span>React</span>
+        </div>
+        <div class="tech-item">
+          <div class="tech-icon">&#x26A1;</div>
+          <span>FastAPI</span>
+        </div>
+        <div class="tech-item">
+          <div class="tech-icon">&#x1F433;</div>
+          <span>Docker</span>
+        </div>
+        <div class="tech-item">
+          <div class="tech-icon">&#x1F3AD;</div>
+          <span>Playwright</span>
+        </div>
+        <div class="tech-item">
+          <div class="tech-icon">&#x2708;&#xFE0F;</div>
+          <span>Telegram</span>
+        </div>
+        <div class="tech-item">
+          <div class="tech-icon">&#x1F9E0;</div>
+          <span>OpenAI</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Start -->
+  <section class="quickstart" id="quickstart">
+    <div class="container">
+      <h2 class="section-title">Quick Start</h2>
+      <p class="section-subtitle">One command to get up and running.</p>
+      <div class="code-block">curl -fsSL https://raw.githubusercontent.com/rahgoel2510/applypilot/main/install.sh | bash</div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <p>Built with &#x2764;&#xFE0F; by Rahul</p>
+    <div class="footer-links">
+      <a href="https://github.com/rahgoel2510/applypilot">GitHub</a>
+      <a href="https://ko-fi.com/goelrah">Ko-fi</a>
+      <a href="https://www.linkedin.com/in/goelrah">LinkedIn</a>
+    </div>
+  </footer>
+
+</body>
+</html>

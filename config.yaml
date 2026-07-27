@@ -1,0 +1,35 @@
+candidate:
+  name: "Rahul Goel"
+  email: ""
+  phone: ""
+  resume_filename: "RAHUL_GOEL_Resume_Final.pdf"
+  notice_period: "30 days"
+  willing_to_relocate: true
+  work_authorization: "Authorized to work"
+  preferred_cities:
+    - "Bangalore"
+    - "Hyderabad"
+    - "Mumbai"
+    - "Delhi NCR"
+
+job_search:
+  match_threshold: 0.80
+  max_postings_per_run: 50
+  collection: "Recommended"
+  skip_external_apply: true
+
+scheduler:
+  interval_minutes: 60
+  active_hours_start: 9
+  active_hours_end: 22
+
+telegram:
+  notify_on_submit: true
+  notify_on_pause: true
+  notify_on_skip: false
+  tally_interval_minutes: 30
+
+inmail:
+  enabled: true
+  tone: "professional"
+  max_length: 300

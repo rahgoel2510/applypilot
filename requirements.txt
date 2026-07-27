@@ -1,0 +1,9 @@
+playwright
+python-telegram-bot>=20.0
+pyyaml
+python-dotenv
+openai
+apscheduler
+platformdirs
+rich
+httpx

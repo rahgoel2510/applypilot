@@ -1,0 +1,258 @@
+"""Configuration module for LinkedIn Job Agent.
+
+Loads settings from config.yaml and environment variables (.env),
+validates required secrets, and provides a typed singleton accessor.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import yaml
+from dotenv import load_dotenv
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CONFIG_FILE = PROJECT_ROOT / "config.yaml"
+ENV_FILE = PROJECT_ROOT / ".env"
+
+# ---------------------------------------------------------------------------
+# Required environment variables (must be set for the agent to operate)
+# ---------------------------------------------------------------------------
+
+REQUIRED_ENV_VARS: list[str] = [
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID",
+    "OPENAI_API_KEY",
+    "LINKEDIN_EMAIL",
+    "LINKEDIN_PASSWORD",
+]
+
+# ---------------------------------------------------------------------------
+# Sub-config dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CandidateConfig:
+    """Candidate profile settings."""
+
+    name: str = ""
+    email: str = ""
+    phone: str = ""
+    resume_filename: str = "resume.pdf"
+    notice_period: str = "Immediate"
+    willing_to_relocate: bool = True
+    work_authorization: str = "Authorized to work"
+    preferred_cities: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class JobSearchConfig:
+    """Job search behaviour settings."""
+
+    match_threshold: float = 0.80
+    max_postings_per_run: int = 50
+    collection: str = "Recommended"
+    skip_external_apply: bool = True
+
+
+@dataclass(frozen=True)
+class SchedulerConfig:
+    """Scheduler timing settings."""
+
+    interval_minutes: int = 60
+    active_hours_start: int = 9
+    active_hours_end: int = 22
+
+
+@dataclass(frozen=True)
+class TelegramConfig:
+    """Telegram notification settings."""
+
+    bot_token: str = ""
+    chat_id: str = ""
+    notify_on_submit: bool = True
+    notify_on_pause: bool = True
+    notify_on_skip: bool = False
+    tally_interval_minutes: int = 30
+
+
+@dataclass(frozen=True)
+class InmailConfig:
+    """InMail outreach settings."""
+
+    enabled: bool = True
+    tone: str = "professional"
+    max_length: int = 300
+
+
+# ---------------------------------------------------------------------------
+# Top-level Settings
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Settings:
+    """Aggregated application settings (singleton via get_config)."""
+
+    candidate: CandidateConfig = field(default_factory=CandidateConfig)
+    job_search: JobSearchConfig = field(default_factory=JobSearchConfig)
+    scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
+    telegram: TelegramConfig = field(default_factory=TelegramConfig)
+    inmail: InmailConfig = field(default_factory=InmailConfig)
+
+    # Secrets (loaded from env)
+    openai_api_key: str = ""
+    linkedin_email: str = ""
+    linkedin_password: str = ""
+
+    # Meta
+    project_root: Path = PROJECT_ROOT
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+class ConfigError(Exception):
+    """Raised when configuration is invalid or incomplete."""
+
+
+def _load_yaml(path: Path) -> dict[str, Any]:
+    """Load and parse a YAML file. Returns empty dict if file is missing."""
+    if not path.exists():
+        return {}
+    with open(path, "r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+    return data if isinstance(data, dict) else {}
+
+
+def _env(key: str, default: str = "") -> str:
+    """Get an environment variable, supporting override over .env values."""
+    return os.environ.get(key, default)
+
+
+def _validate_env() -> None:
+    """Ensure all required environment variables are set.
+
+    Raises ConfigError with a descriptive message listing missing vars.
+    """
+    missing = [var for var in REQUIRED_ENV_VARS if not os.environ.get(var)]
+    if missing:
+        raise ConfigError(
+            f"Missing required environment variables: {', '.join(missing)}. "
+            f"Please set them in {ENV_FILE} or export them in your shell."
+        )
+
+
+def _build_settings(yaml_data: dict[str, Any]) -> Settings:
+    """Construct a Settings instance from parsed YAML + environment."""
+
+    # --- Candidate ---
+    c = yaml_data.get("candidate", {})
+    candidate = CandidateConfig(
+        name=_env("CANDIDATE_NAME", c.get("name", "")),
+        email=_env("CANDIDATE_EMAIL", c.get("email", "")),
+        phone=_env("CANDIDATE_PHONE", c.get("phone", "")),
+        resume_filename=c.get("resume_filename", "resume.pdf"),
+        notice_period=c.get("notice_period", "Immediate"),
+        willing_to_relocate=c.get("willing_to_relocate", True),
+        work_authorization=c.get("work_authorization", "Authorized to work"),
+        preferred_cities=c.get("preferred_cities", []),
+    )
+
+    # --- Job search ---
+    js = yaml_data.get("job_search", {})
+    job_search = JobSearchConfig(
+        match_threshold=float(_env("MATCH_THRESHOLD", str(js.get("match_threshold", 0.80)))),
+        max_postings_per_run=int(_env("MAX_POSTINGS_PER_RUN", str(js.get("max_postings_per_run", 50)))),
+        collection=js.get("collection", "Recommended"),
+        skip_external_apply=js.get("skip_external_apply", True),
+    )
+
+    # --- Scheduler ---
+    sc = yaml_data.get("scheduler", {})
+    scheduler = SchedulerConfig(
+        interval_minutes=int(_env("SCHEDULER_INTERVAL", str(sc.get("interval_minutes", 60)))),
+        active_hours_start=int(sc.get("active_hours_start", 9)),
+        active_hours_end=int(sc.get("active_hours_end", 22)),
+    )
+
+    # --- Telegram ---
+    tg = yaml_data.get("telegram", {})
+    telegram = TelegramConfig(
+        bot_token=_env("TELEGRAM_BOT_TOKEN"),
+        chat_id=_env("TELEGRAM_CHAT_ID"),
+        notify_on_submit=tg.get("notify_on_submit", True),
+        notify_on_pause=tg.get("notify_on_pause", True),
+        notify_on_skip=tg.get("notify_on_skip", False),
+        tally_interval_minutes=int(tg.get("tally_interval_minutes", 30)),
+    )
+
+    # --- InMail ---
+    im = yaml_data.get("inmail", {})
+    inmail = InmailConfig(
+        enabled=im.get("enabled", True),
+        tone=im.get("tone", "professional"),
+        max_length=int(im.get("max_length", 300)),
+    )
+
+    return Settings(
+        candidate=candidate,
+        job_search=job_search,
+        scheduler=scheduler,
+        telegram=telegram,
+        inmail=inmail,
+        openai_api_key=_env("OPENAI_API_KEY"),
+        linkedin_email=_env("LINKEDIN_EMAIL"),
+        linkedin_password=_env("LINKEDIN_PASSWORD"),
+        project_root=PROJECT_ROOT,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Singleton accessor
+# ---------------------------------------------------------------------------
+
+_settings_instance: Settings | None = None
+
+
+def get_config(*, validate: bool = True, reload: bool = False) -> Settings:
+    """Return the application Settings singleton.
+
+    Args:
+        validate: If True (default), raises ConfigError when required
+                  environment variables are missing.
+        reload:   If True, forces a fresh load from disk/env (useful in tests).
+
+    Returns:
+        The Settings instance.
+    """
+    global _settings_instance  # noqa: PLW0603
+
+    if _settings_instance is not None and not reload:
+        return _settings_instance
+
+    # Load .env into os.environ (existing env vars take precedence)
+    load_dotenv(ENV_FILE, override=False)
+
+    if validate:
+        _validate_env()
+
+    yaml_data = _load_yaml(CONFIG_FILE)
+    _settings_instance = _build_settings(yaml_data)
+    return _settings_instance
+
+
+def reset_config() -> None:
+    """Reset the singleton (primarily for testing)."""
+    global _settings_instance  # noqa: PLW0603
+    _settings_instance = None
