@@ -11,22 +11,12 @@ services:
       - "8000:8000"
     volumes:
       - applypilot-data:/app/data
-      - applypilot-browser:/home/pwuser/.local/share/linkedin_agent
-      # ── Mount your local LinkedIn session into the container ──
-      # Uncomment ONE of these based on your OS:
-      #
-      # macOS:
-      # - ~/Library/Application Support/linkedin_agent/browser_data:/home/pwuser/.local/share/linkedin_agent/browser_data
-      #
-      # Windows:
-      # - ${LOCALAPPDATA}/linkedin_agent/browser_data:/home/pwuser/.local/share/linkedin_agent/browser_data
-      #
-      # Linux:
-      # - ~/.local/share/linkedin_agent/browser_data:/home/pwuser/.local/share/linkedin_agent/browser_data
+      - applypilot-browser:/root/.local/share/linkedin_agent
     restart: unless-stopped
     environment:
       - DATABASE_URL=sqlite:///./data/tracker.db
       - TZ=Asia/Kolkata
+      - HOME=/root
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/stats')"]
       interval: 30s

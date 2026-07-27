@@ -11,12 +11,15 @@ RUN npm run build
 # ─── Stage 2: Full ApplyPilot (Agent + Tracker + Chromium) ────────────
 FROM mcr.microsoft.com/playwright/python:v1.52.0-noble
 
+USER root
+ENV HOME=/root
 WORKDIR /app
 
 # Install Python dependencies (agent + tracker backend)
 COPY requirements.txt ./agent-requirements.txt
 COPY tracker/backend/requirements.txt ./tracker-requirements.txt
-RUN pip install --no-cache-dir -r agent-requirements.txt -r tracker-requirements.txt
+RUN pip install --no-cache-dir --break-system-packages \
+    -r agent-requirements.txt -r tracker-requirements.txt
 
 # Copy the full agent source
 COPY linkedin_agent/ ./linkedin_agent/
@@ -30,7 +33,8 @@ COPY tracker/backend/ ./tracker/backend/
 COPY --from=frontend-build /app/frontend/dist ./tracker/backend/static
 
 # Create data directories
-RUN mkdir -p /app/data /app/logs /app/screenshots
+RUN mkdir -p /app/data /app/logs /app/screenshots \
+    /root/.local/share/linkedin_agent/browser_data
 
 # Set environment
 ENV DATABASE_URL=sqlite:///./data/tracker.db
