@@ -15,19 +15,21 @@ import { getAgentStatus, getAgentOutput } from '../api';
 
 const PIPELINE_STEPS = [
   { id: 'init', label: 'Initialize', emoji: '⚡', description: 'Load config & connect services', x: 0, y: 80 },
-  { id: 'browser', label: 'Open Browser', emoji: '🌐', description: 'Launch Chromium + verify session', x: 250, y: 80 },
-  { id: 'navigate', label: 'Job Collection', emoji: '📋', description: 'Navigate to LinkedIn jobs', x: 500, y: 80 },
-  { id: 'scan', label: 'Scan Listings', emoji: '🔍', description: 'Extract job cards from page', x: 750, y: 80 },
-  { id: 'match', label: 'Score & Match', emoji: '🎯', description: 'Evaluate fit against profile', x: 1000, y: 80 },
-  { id: 'apply', label: 'Easy Apply', emoji: '📝', description: 'Fill & submit application', x: 750, y: 260 },
-  { id: 'notify', label: 'Telegram Alert', emoji: '📱', description: 'Notify + log to tracker', x: 500, y: 260 },
-  { id: 'inmail', label: 'Draft InMail', emoji: '✉️', description: 'AI message to recruiter', x: 500, y: 400 },
-  { id: 'complete', label: 'Report & Close', emoji: '🏁', description: 'Tally results + close browser', x: 250, y: 260 },
+  { id: 'browser', label: 'Open Browser', emoji: '🌐', description: 'Launch Chromium instance', x: 220, y: 80 },
+  { id: 'session', label: 'Session Check', emoji: '🔐', description: 'Verify LinkedIn cookies', x: 440, y: 80 },
+  { id: 'navigate', label: 'Job Collection', emoji: '📋', description: 'Navigate to LinkedIn jobs', x: 660, y: 80 },
+  { id: 'scan', label: 'Scan Listings', emoji: '🔍', description: 'Extract job cards from page', x: 880, y: 80 },
+  { id: 'match', label: 'Score & Match', emoji: '🎯', description: 'Evaluate fit against profile', x: 880, y: 260 },
+  { id: 'apply', label: 'Easy Apply', emoji: '📝', description: 'Fill & submit application', x: 660, y: 260 },
+  { id: 'notify', label: 'Telegram Alert', emoji: '📱', description: 'Notify + log to tracker', x: 440, y: 260 },
+  { id: 'inmail', label: 'Draft InMail', emoji: '✉️', description: 'AI message to recruiter', x: 440, y: 400 },
+  { id: 'complete', label: 'Report & Close', emoji: '🏁', description: 'Tally results + close browser', x: 220, y: 260 },
 ];
 
 const PIPELINE_EDGES = [
   { source: 'init', target: 'browser' },
-  { source: 'browser', target: 'navigate' },
+  { source: 'browser', target: 'session' },
+  { source: 'session', target: 'navigate' },
   { source: 'navigate', target: 'scan' },
   { source: 'scan', target: 'match' },
   { source: 'match', target: 'apply', label: 'match ≥ 80%' },
@@ -135,6 +137,8 @@ export default function AgentPipelineView() {
   const [status, setStatus] = useState({ state: 'idle' });
   const [stats, setStats] = useState({ processed: 0, applied: 0, skipped: 0, errors: 0 });
   const [copied, setCopied] = useState(false);
+  const [copiedLogs, setCopiedLogs] = useState(false);
+  const [rawOutput, setRawOutput] = useState([]);
 
   const nodes = useMemo(() =>
     PIPELINE_STEPS.map(step => ({
@@ -180,6 +184,7 @@ export default function AgentPipelineView() {
         setStatus(s);
         if (s.state === 'running' || s.state === 'error') {
           const outputData = await getAgentOutput(200);
+          setRawOutput(outputData.lines);
           parseOutputToSteps(outputData.lines);
         }
       } catch (e) { /* ignore */ }
@@ -218,13 +223,25 @@ export default function AgentPipelineView() {
     // Session check (replaces login step)
     if (text.includes('already logged in')) {
       newStatuses.browser = 'done';
-      newMessages.browser = 'Session active ✓';
-      newSummaries.browser = 'Persistent session verified.\nNo login required — cookies are valid.';
+      newStatuses.session = 'done';
+      newMessages.session = 'Session valid ✓';
+      newSummaries.session = 'LinkedIn session is active.\nCookies verified — no login needed.';
     }
-    if (text.includes('session expired') || (text.includes('login') && text.includes('timeout'))) {
-      newStatuses.browser = 'error';
-      newMessages.browser = 'Session expired';
-      newSummaries.browser = 'Browser session is expired or invalid.\nCopy a valid session into the container.';
+    if (text.includes('session expired') || (text.includes('not logged in') && !text.includes('login successful'))) {
+      newStatuses.session = 'active';
+      newMessages.session = 'Verifying...';
+      newSummaries.session = 'Checking saved session cookies against LinkedIn...';
+    }
+    if (text.includes('login successful') || text.includes('redirected through challenge')) {
+      newStatuses.session = 'done';
+      newMessages.session = 'Re-authenticated ✓';
+      newSummaries.session = 'Session was expired. Successfully re-authenticated with saved credentials.';
+    }
+    if ((text.includes('session expired') && text.includes('no credentials')) || 
+        (text.includes('login') && text.includes('timeout') && !text.includes('successful'))) {
+      newStatuses.session = 'error';
+      newMessages.session = 'Session invalid';
+      newSummaries.session = 'Session expired and could not re-authenticate.\nFix: Copy a valid browser session into Docker.\nRun: ./copy-session-to-docker.sh';
     }
 
     // Navigate
@@ -344,6 +361,19 @@ export default function AgentPipelineView() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCopyFullLogs = () => {
+    const fullReport = [
+      summaryText,
+      '',
+      '═══ Full Agent Output ═══',
+      '',
+      ...rawOutput,
+    ].join('\n');
+    navigator.clipboard.writeText(fullReport);
+    setCopiedLogs(true);
+    setTimeout(() => setCopiedLogs(false), 2000);
+  };
+
   const isRunning = status.state === 'running';
   const hasData = Object.keys(stepStatuses).length > 0;
 
@@ -367,13 +397,22 @@ export default function AgentPipelineView() {
           )}
         </div>
         {hasData && (
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
-          >
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied ? 'Copied!' : 'Copy Summary'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? 'Copied!' : 'Copy Summary'}
+            </button>
+            <button
+              onClick={handleCopyFullLogs}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm hover:bg-slate-50 transition-colors"
+            >
+              {copiedLogs ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+              {copiedLogs ? 'Copied!' : 'Copy Full Logs'}
+            </button>
+          </div>
         )}
       </div>
 
