@@ -84,7 +84,7 @@ class JobAgent:
         self.log = setup_logging(level="INFO")
 
         # Initialize modules
-        self.browser = BrowserManager(self.config)
+        self.browser = BrowserManager()
         self.matcher = JobMatcher(threshold=self.config.job_search.match_threshold)
         self.notifier = TelegramNotifier(
             bot_token=self.config.telegram.bot_token,
@@ -248,6 +248,12 @@ class JobAgent:
             # b. Launch browser
             await self.browser.launch()
 
+            # Login if needed (uses persistent session — only enters creds first time)
+            await self.browser.login(
+                email=self.config.linkedin_email,
+                password=self.config.linkedin_password,
+            )
+
             # Initialize the application executor for this cycle
             self._applicant = ApplicationExecutor(
                 browser=self.browser,
@@ -279,7 +285,7 @@ class JobAgent:
             await self.browser.navigate_to_jobs(collection=collection)
 
             # d. Get job listings
-            jobs = await self.browser.get_job_listings(limit=max_postings)
+            jobs = await self.browser.get_job_listings(max_count=max_postings)
             self.log.info(f"Found {len(jobs)} job(s) to process")
 
             # e. Process each job
