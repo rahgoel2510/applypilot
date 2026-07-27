@@ -1,14 +1,13 @@
-"""Agent process control — spawns/stops the LinkedIn agent from the tracker backend."""
+"""Agent process control — spawns/stops the LinkedIn agent, persists run history."""
 
 from __future__ import annotations
 
-import json
 import os
 import signal
 import subprocess
 import sys
 import threading
-import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -30,10 +29,10 @@ class AgentStatus:
     started_at: Optional[datetime] = None
     last_error: Optional[str] = None
     config: dict = field(default_factory=dict)
-    # Running config
-    mode: str = "idle"  # "single" or "daemon"
+    mode: str = "idle"
     dry_run: bool = False
     limit: Optional[int] = None
+    run_id: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -45,35 +44,35 @@ class AgentStatus:
             "mode": self.mode,
             "dry_run": self.dry_run,
             "limit": self.limit,
+            "run_id": self.run_id,
             "uptime_seconds": int((datetime.now() - self.started_at).total_seconds()) if self.started_at else 0,
         }
 
 
 class AgentController:
-    """Manages the LinkedIn agent as a subprocess."""
+    """Manages the LinkedIn agent as a subprocess and persists run history."""
 
     def __init__(self):
-        # Path to the project root (parent of tracker/)
         self._project_root = Path(__file__).resolve().parent.parent.parent
         self._process: Optional[subprocess.Popen] = None
         self._status = AgentStatus()
         self._output_lines: list[str] = []
-        self._max_output = 500  # Keep last 500 lines
+        self._max_output = 500
         self._lock = threading.Lock()
 
     @property
     def status(self) -> AgentStatus:
-        # Check if process is still alive
         if self._process is not None:
             retcode = self._process.poll()
             if retcode is not None:
-                # Process exited
                 with self._lock:
                     if retcode == 0:
                         self._status.state = AgentState.idle
+                        self._finalize_run("completed")
                     else:
                         self._status.state = AgentState.error
                         self._status.last_error = f"Process exited with code {retcode}"
+                        self._finalize_run("failed", error=self._status.last_error)
                     self._status.pid = None
                     self._process = None
         return self._status
@@ -91,50 +90,27 @@ class AgentController:
         match_threshold: Optional[float] = None,
         collection: str = "Recommended",
     ) -> dict:
-        """Start the agent.
-
-        Args:
-            mode: "single" for one scan cycle, "daemon" for continuous.
-            dry_run: If True, scan but don't apply.
-            limit: Max jobs to process (overrides config).
-            match_threshold: Override match threshold (0.0-1.0).
-            collection: Job collection to scan.
-
-        Returns:
-            Status dict.
-        """
         if self._status.state == AgentState.running:
             return {"error": "Agent is already running", "status": self._status.to_dict()}
 
-        # Build command
         python = sys.executable
         cmd = [python, "-m", "linkedin_agent"]
-
-        if mode == "daemon":
-            cmd.append("daemon")
-        else:
-            cmd.append("run")
-
+        cmd.append("daemon" if mode == "daemon" else "run")
         if dry_run:
             cmd.append("--dry-run")
-
         if limit is not None:
             cmd.extend(["--limit", str(limit)])
 
-        # Environment (inherit current + load settings from DB)
+        # Fetch settings from DB
         env = os.environ.copy()
-
-        # Fetch settings from the tracker DB (live values, no restart needed)
         try:
             import httpx as _httpx
             resp = _httpx.get("http://127.0.0.1:8000/api/settings/env", timeout=5)
             if resp.status_code == 200:
-                db_settings = resp.json()
-                for key, value in db_settings.items():
+                for key, value in resp.json().items():
                     if value:
                         env[key] = value
         except Exception:
-            # Fallback: load from .env file if API unavailable
             env_file = self._project_root / ".env"
             if env_file.exists():
                 from dotenv import dotenv_values
@@ -145,9 +121,10 @@ class AgentController:
         if match_threshold is not None:
             env["MATCH_THRESHOLD"] = str(match_threshold)
 
-        # Start the process
         try:
             self._output_lines.clear()
+            run_id = str(uuid.uuid4())
+
             self._process = subprocess.Popen(
                 cmd,
                 cwd=str(self._project_root),
@@ -165,6 +142,7 @@ class AgentController:
                 mode=mode,
                 dry_run=dry_run,
                 limit=limit,
+                run_id=run_id,
                 config={
                     "collection": collection,
                     "match_threshold": match_threshold,
@@ -174,7 +152,9 @@ class AgentController:
                 },
             )
 
-            # Start output reader thread
+            # Persist run start in DB
+            self._create_run_record(run_id, mode, dry_run, limit, match_threshold, collection)
+
             reader = threading.Thread(target=self._read_output, daemon=True)
             reader.start()
 
@@ -186,26 +166,22 @@ class AgentController:
             return {"error": str(exc), "status": self._status.to_dict()}
 
     def stop(self) -> dict:
-        """Stop the running agent."""
         if self._process is None or self._status.state != AgentState.running:
             return {"error": "Agent is not running", "status": self._status.to_dict()}
 
         self._status.state = AgentState.stopping
         try:
-            # Send SIGTERM for graceful shutdown
             self._process.send_signal(signal.SIGTERM)
-
-            # Wait up to 10 seconds
             try:
                 self._process.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                # Force kill
                 self._process.kill()
                 self._process.wait(timeout=5)
 
             self._status.state = AgentState.idle
             self._status.pid = None
             self._process = None
+            self._finalize_run("stopped")
             return {"message": "Agent stopped", "status": self._status.to_dict()}
 
         except Exception as exc:
@@ -214,7 +190,6 @@ class AgentController:
             return {"error": str(exc), "status": self._status.to_dict()}
 
     def _read_output(self) -> None:
-        """Background thread: reads process stdout line by line."""
         if self._process is None or self._process.stdout is None:
             return
         try:
@@ -224,10 +199,67 @@ class AgentController:
                     if len(self._output_lines) > self._max_output:
                         self._output_lines.pop(0)
         except (ValueError, OSError):
-            pass  # Process closed
+            pass
+
+    # ------------------------------------------------------------------
+    # Run persistence
+    # ------------------------------------------------------------------
+
+    def _create_run_record(self, run_id, mode, dry_run, limit, threshold, collection):
+        """Create an agent_runs record in DB."""
+        try:
+            from database import SessionLocal
+            from models import AgentRun
+            db = SessionLocal()
+            run = AgentRun(
+                id=run_id,
+                started_at=datetime.now(),
+                status="running",
+                mode=mode,
+                dry_run=str(dry_run),
+                limit=str(limit) if limit else None,
+                match_threshold=str(threshold) if threshold else None,
+                collection=collection,
+            )
+            db.add(run)
+            db.commit()
+            db.close()
+        except Exception:
+            pass  # Non-critical — don't crash if DB write fails
+
+    def _finalize_run(self, final_status: str, error: Optional[str] = None):
+        """Update the run record with final status and logs."""
+        run_id = self._status.run_id
+        if not run_id:
+            return
+        try:
+            from database import SessionLocal
+            from models import AgentRun
+            db = SessionLocal()
+            run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+            if run:
+                run.finished_at = datetime.now()
+                run.status = final_status
+                run.output_log = "\n".join(self._output_lines[-200:])  # Keep last 200 lines
+                run.error_message = error
+                if run.started_at:
+                    run.duration_seconds = str(int((datetime.now() - run.started_at).total_seconds()))
+                # Parse output for counts
+                full_output = "\n".join(self._output_lines).lower()
+                import re
+                submitted = len(re.findall(r'(submitted|would apply)', full_output))
+                skipped = len(re.findall(r'(skipping|would skip)', full_output))
+                run.jobs_applied = str(submitted)
+                run.jobs_skipped = str(skipped)
+                processed = len(re.findall(r'processing:', full_output))
+                run.jobs_processed = str(processed)
+                db.commit()
+            db.close()
+        except Exception:
+            pass
 
 
-# Module-level singleton
+# Singleton
 _controller: Optional[AgentController] = None
 
 

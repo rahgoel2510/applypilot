@@ -276,7 +276,7 @@ def test_openai(db: Session = Depends(get_db)):
 
 @router.post("/test/linkedin", response_model=TestResult)
 def test_linkedin(db: Session = Depends(get_db)):
-    """Validate LinkedIn credentials are set."""
+    """Test LinkedIn credentials by launching a headless browser and attempting login."""
     _seed_from_env(db)
     email = _get_setting(db, "LINKEDIN_EMAIL")
     password = _get_setting(db, "LINKEDIN_PASSWORD")
@@ -288,7 +288,58 @@ def test_linkedin(db: Session = Depends(get_db)):
     if "@" not in email:
         return TestResult(success=False, message="Email doesn't look valid (missing @).")
 
-    return TestResult(success=True, message=f"Credentials ready for {email}. Login will be verified when agent runs.")
+    # Attempt a real headless browser login
+    try:
+        import asyncio
+        from playwright.async_api import async_playwright
+
+        async def _try_login():
+            pw = await async_playwright().start()
+            browser = await pw.chromium.launch(headless=True)
+            page = await browser.new_page()
+
+            # Go to LinkedIn login
+            await page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded")
+            await asyncio.sleep(1)
+
+            # Fill credentials
+            await page.fill("#username", email)
+            await page.fill("#password", password)
+            await page.click('button[type="submit"]')
+
+            # Wait for redirect or error
+            try:
+                await page.wait_for_url("**/feed/**", timeout=15000)
+                await browser.close()
+                await pw.stop()
+                return TestResult(success=True, message=f"Login successful! Connected as {email}.")
+            except Exception:
+                # Check for error message on page
+                error_el = await page.query_selector("#error-for-password, .form__label--error, div[role='alert']")
+                if error_el:
+                    err_text = await error_el.inner_text()
+                    await browser.close()
+                    await pw.stop()
+                    return TestResult(success=False, message=f"Login failed: {err_text.strip()[:80]}")
+
+                # Could be a security challenge
+                current_url = page.url
+                await browser.close()
+                await pw.stop()
+                if "checkpoint" in current_url or "challenge" in current_url:
+                    return TestResult(success=False, message="Login requires verification (CAPTCHA/email). Try logging in manually first via the browser dry-run test.")
+                return TestResult(success=False, message=f"Login didn't redirect to feed. Current page: {current_url[:60]}")
+
+        result = asyncio.run(_try_login())
+        return result
+
+    except ImportError:
+        return TestResult(success=False, message="Playwright not installed. Run: playwright install chromium")
+    except Exception as e:
+        err_msg = str(e)[:100]
+        if "executable doesn't exist" in err_msg.lower() or "browser" in err_msg.lower():
+            return TestResult(success=False, message="Chromium not installed. Run: playwright install chromium")
+        return TestResult(success=False, message=f"Login test error: {err_msg}")
 
 
 # ===========================================================================

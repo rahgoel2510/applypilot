@@ -178,6 +178,31 @@ class AppSetting(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class AgentRun(Base):
+    """Persists every agent run with its config, outcome, and logs."""
+    __tablename__ = "agent_runs"
+
+    id = Column(CHAR(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    finished_at = Column(DateTime, nullable=True)
+    status = Column(String, default="running", nullable=False)  # running, completed, failed, stopped
+    mode = Column(String, nullable=False)  # single, daemon
+    dry_run = Column(String, default="true")
+    limit = Column(String, nullable=True)
+    match_threshold = Column(String, nullable=True)
+    collection = Column(String, nullable=True)
+    # Results
+    jobs_processed = Column(String, default="0")
+    jobs_applied = Column(String, default="0")
+    jobs_skipped = Column(String, default="0")
+    jobs_paused = Column(String, default="0")
+    jobs_errored = Column(String, default="0")
+    duration_seconds = Column(String, default="0")
+    # Logs
+    output_log = Column(Text, default="")  # Full stdout capture
+    error_message = Column(Text, nullable=True)
+
+
 # --- Pydantic Schemas ---
 
 class LogCreate(BaseModel):

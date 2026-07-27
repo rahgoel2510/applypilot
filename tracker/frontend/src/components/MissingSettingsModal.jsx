@@ -1,20 +1,34 @@
-import { useState } from 'react';
-import { AlertTriangle, Eye, EyeOff, Save, X, Shield } from 'lucide-react';
-import { updateSettings } from '../api';
+import { useState, useEffect } from 'react';
+import { AlertTriangle, Eye, EyeOff, Save, X, Shield, Loader2 } from 'lucide-react';
+import { updateSettings, fetchFreeModels } from '../api';
 
 export default function MissingSettingsModal({ isOpen, onClose, missingFields, onSaved }) {
   const [values, setValues] = useState({});
   const [visible, setVisible] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [models, setModels] = useState([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+
+  // Load models if AI_MODEL is in missing fields
+  useEffect(() => {
+    if (!isOpen || !missingFields) return;
+    const hasModelField = missingFields.some(f => f.key === 'AI_MODEL');
+    if (hasModelField) {
+      setModelsLoading(true);
+      fetchFreeModels()
+        .then(data => setModels(data.models || []))
+        .catch(() => {})
+        .finally(() => setModelsLoading(false));
+    }
+  }, [isOpen, missingFields]);
 
   if (!isOpen || !missingFields || missingFields.length === 0) return null;
 
   const handleSave = async () => {
-    // Check all fields have values
     const empty = missingFields.filter(f => !values[f.key]?.trim());
     if (empty.length > 0) {
-      setError(`Please fill in all fields: ${empty.map(f => f.label).join(', ')}`);
+      setError(`Please fill in: ${empty.map(f => f.label).join(', ')}`);
       return;
     }
 
@@ -29,6 +43,72 @@ export default function MissingSettingsModal({ isOpen, onClose, missingFields, o
     } finally {
       setSaving(false);
     }
+  };
+
+  const renderField = (field) => {
+    // AI_MODEL gets a dropdown
+    if (field.key === 'AI_MODEL') {
+      return (
+        <div key={field.key}>
+          <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+            <Shield className="h-3.5 w-3.5 text-purple-400" />
+            {field.label}
+            <span className="text-red-500">*</span>
+          </label>
+          {modelsLoading ? (
+            <div className="flex items-center gap-2 rounded-xl border-2 border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-400">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading available models...
+            </div>
+          ) : (
+            <select
+              value={values[field.key] || ''}
+              onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+              className="w-full rounded-xl border-2 border-slate-200 bg-slate-50 py-2.5 px-4 text-sm outline-none transition-all focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-400/10"
+            >
+              <option value="">— Select a model —</option>
+              <option value="openrouter/free">🎲 Auto (Free Router — best available)</option>
+              {models.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.tier === 'high' ? '⚡' : m.tier === 'medium' ? '✦' : '○'} {m.name}
+                  {m.context_length ? ` (${Math.round(m.context_length/1000)}k)` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          <p className="mt-1 text-[11px] text-slate-400">
+            Used for InMail drafting. "Auto" picks the best free model automatically.
+          </p>
+        </div>
+      );
+    }
+
+    // Default: password/text input
+    return (
+      <div key={field.key}>
+        <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+          <Shield className="h-3.5 w-3.5 text-slate-400" />
+          {field.label}
+          <span className="text-red-500">*</span>
+        </label>
+        <div className="relative">
+          <input
+            type={visible[field.key] ? 'text' : 'password'}
+            value={values[field.key] || ''}
+            onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+            placeholder={field.placeholder}
+            autoComplete="off"
+            className="w-full rounded-xl border-2 border-slate-200 bg-slate-50 py-2.5 pl-4 pr-10 text-sm font-mono outline-none transition-all focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-400/10"
+          />
+          <button
+            type="button"
+            onClick={() => setVisible(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+          >
+            {visible[field.key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -52,35 +132,7 @@ export default function MissingSettingsModal({ isOpen, onClose, missingFields, o
 
         {/* Fields */}
         <div className="space-y-4 mb-5">
-          {missingFields.map(field => (
-            <div key={field.key}>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700">
-                <Shield className="h-3.5 w-3.5 text-slate-400" />
-                {field.label}
-                <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type={visible[field.key] ? 'text' : 'password'}
-                  value={values[field.key] || ''}
-                  onChange={(e) => setValues(prev => ({ ...prev, [field.key]: e.target.value }))}
-                  placeholder={field.placeholder}
-                  autoComplete="off"
-                  className="w-full rounded-xl border-2 border-slate-200 bg-slate-50 py-2.5 pl-4 pr-10 text-sm font-mono outline-none transition-all focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-400/10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setVisible(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  {visible[field.key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              {field.group && (
-                <p className="mt-1 text-[11px] text-slate-400">Group: {field.group}</p>
-              )}
-            </div>
-          ))}
+          {missingFields.map(renderField)}
         </div>
 
         {/* Error */}
@@ -94,7 +146,7 @@ export default function MissingSettingsModal({ isOpen, onClose, missingFields, o
         {/* Actions */}
         <div className="flex items-center justify-between">
           <p className="text-[11px] text-slate-400">
-            Values are saved securely to your local .env file.
+            Saved securely. Changes apply instantly.
           </p>
           <div className="flex gap-2">
             <button

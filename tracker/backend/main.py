@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from database import Base, engine
 from routes import router
 from settings_routes import router as settings_router
-from models import Job, ActivityLog, AppSetting  # noqa: F401 — ensure models are registered before create_all
+from models import Job, ActivityLog, AppSetting, AgentRun  # noqa: F401 — ensure models are registered before create_all
 
 STATIC_DIR = Path(__file__).parent / "static"
 

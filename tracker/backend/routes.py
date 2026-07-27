@@ -393,3 +393,56 @@ def get_agent_output(tail: int = 50):
     controller = get_controller()
     lines = controller.output
     return {"lines": lines[-tail:], "total_lines": len(lines)}
+
+
+@router.get("/agent/runs")
+def list_agent_runs(limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)):
+    """List agent run history, most recent first."""
+    from models import AgentRun
+    runs = db.query(AgentRun).order_by(AgentRun.started_at.desc()).limit(limit).all()
+    return [
+        {
+            "id": r.id,
+            "started_at": r.started_at.isoformat() if r.started_at else None,
+            "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+            "status": r.status,
+            "mode": r.mode,
+            "dry_run": r.dry_run,
+            "limit": r.limit,
+            "collection": r.collection,
+            "jobs_processed": r.jobs_processed,
+            "jobs_applied": r.jobs_applied,
+            "jobs_skipped": r.jobs_skipped,
+            "duration_seconds": r.duration_seconds,
+            "error_message": r.error_message,
+        }
+        for r in runs
+    ]
+
+
+@router.get("/agent/runs/{run_id}")
+def get_agent_run(run_id: str, db: Session = Depends(get_db)):
+    """Get a specific run's details including full log output."""
+    from models import AgentRun
+    run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {
+        "id": run.id,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+        "status": run.status,
+        "mode": run.mode,
+        "dry_run": run.dry_run,
+        "limit": run.limit,
+        "match_threshold": run.match_threshold,
+        "collection": run.collection,
+        "jobs_processed": run.jobs_processed,
+        "jobs_applied": run.jobs_applied,
+        "jobs_skipped": run.jobs_skipped,
+        "jobs_paused": run.jobs_paused,
+        "jobs_errored": run.jobs_errored,
+        "duration_seconds": run.duration_seconds,
+        "error_message": run.error_message,
+        "output_log": run.output_log,
+    }
