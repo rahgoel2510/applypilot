@@ -168,6 +168,16 @@ class ActivityLog(Base):
     metadata_json = Column(Text, nullable=True) # Extra data as JSON string
 
 
+# --- Settings stored in DB ---
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(Text, nullable=False, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # --- Pydantic Schemas ---
 
 class LogCreate(BaseModel):

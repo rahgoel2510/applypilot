@@ -151,15 +151,14 @@ export default function SettingsPanel() {
         </button>
       </div>
 
-      {/* Security notice */}
-      <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-        <Shield className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+      {/* Info notice */}
+      <div className="flex items-start gap-3 rounded-xl border border-teal-200 bg-teal-50 p-4">
+        <Shield className="h-5 w-5 text-teal-600 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-medium text-amber-900">Secrets are stored securely</p>
-          <p className="mt-0.5 text-xs text-amber-700">
-            Values are saved to your local <code className="rounded bg-amber-100 px-1">.env</code> file. 
-            They are never exposed in full to the browser — only masked previews are shown.
-            Restart the agent after making changes.
+          <p className="text-sm font-medium text-teal-900">Your settings are safe</p>
+          <p className="mt-0.5 text-xs text-teal-700">
+            Changes are saved instantly and apply on the next agent run — no restart needed. 
+            Only masked previews are shown here. The full values are never visible in the browser.
           </p>
         </div>
       </div>

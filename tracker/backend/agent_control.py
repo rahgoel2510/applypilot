@@ -121,17 +121,26 @@ class AgentController:
         if limit is not None:
             cmd.extend(["--limit", str(limit)])
 
-        # Environment (inherit current + load fresh .env values)
+        # Environment (inherit current + load settings from DB)
         env = os.environ.copy()
 
-        # Load .env file and inject into subprocess environment
-        env_file = self._project_root / ".env"
-        if env_file.exists():
-            from dotenv import dotenv_values
-            dot_env_values = dotenv_values(env_file)
-            for key, value in dot_env_values.items():
-                if value:  # Only set non-empty values
-                    env[key] = value
+        # Fetch settings from the tracker DB (live values, no restart needed)
+        try:
+            import httpx as _httpx
+            resp = _httpx.get("http://127.0.0.1:8000/api/settings/env", timeout=5)
+            if resp.status_code == 200:
+                db_settings = resp.json()
+                for key, value in db_settings.items():
+                    if value:
+                        env[key] = value
+        except Exception:
+            # Fallback: load from .env file if API unavailable
+            env_file = self._project_root / ".env"
+            if env_file.exists():
+                from dotenv import dotenv_values
+                for key, value in dotenv_values(env_file).items():
+                    if value:
+                        env[key] = value
 
         if match_threshold is not None:
             env["MATCH_THRESHOLD"] = str(match_threshold)

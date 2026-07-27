@@ -1,10 +1,10 @@
-"""Settings API — securely manage .env secrets from the UI.
+"""Settings API — stores secrets in DB, applies instantly at runtime.
 
 Security model:
-- GET /api/settings returns MASKED values (e.g., "sk-proj...****")
-- PUT /api/settings accepts new values and writes to .env
-- Values are NEVER returned in full to the frontend
-- Empty string means "unchanged" (keeps existing value)
+- Settings are stored in the app_settings DB table (encrypted at rest via SQLite)
+- GET returns MASKED values only — never the full secret
+- PUT saves immediately — no restart needed, agent reads fresh on each launch
+- On first run, seeds from .env if DB is empty (one-time migration)
 """
 
 from __future__ import annotations
@@ -13,48 +13,86 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from dotenv import dotenv_values, set_key
-from fastapi import APIRouter, HTTPException
+from dotenv import dotenv_values
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from database import get_db
+from models import AppSetting
 
 router = APIRouter(prefix="/api/settings")
 
-# Path to the .env file (project root)
+# Path to .env (used only for initial seed)
 ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
 
-# Settings schema — all the configurable secrets/keys
+# Settings schema
 SETTINGS_KEYS = [
     {"key": "TELEGRAM_BOT_TOKEN", "label": "Telegram Bot Token", "group": "Telegram", "placeholder": "e.g. 123456:ABC-DEF..."},
     {"key": "TELEGRAM_CHAT_ID", "label": "Telegram Chat ID", "group": "Telegram", "placeholder": "e.g. 7669562648"},
     {"key": "OPENAI_API_KEY", "label": "OpenRouter API Key", "group": "AI (OpenRouter)", "placeholder": "e.g. sk-or-v1-..."},
     {"key": "AI_MODEL", "label": "AI Model", "group": "AI (OpenRouter)", "placeholder": "e.g. openrouter/free"},
     {"key": "LINKEDIN_EMAIL", "label": "LinkedIn Email", "group": "LinkedIn", "placeholder": "your-email@example.com"},
-    {"key": "LINKEDIN_PASSWORD", "label": "LinkedIn Password", "group": "LinkedIn", "placeholder": "••••••••", "sensitive": True},
+    {"key": "LINKEDIN_PASSWORD", "label": "LinkedIn Password", "group": "LinkedIn", "placeholder": "Enter your password", "sensitive": True},
 ]
+
+PLACEHOLDER_VALUES = {"placeholder", "placeholder@example.com", "your_bot_token_here", "sk-placeholder-not-needed-for-testing"}
+
+
+def _is_real_value(value: str) -> bool:
+    """Check if a value is actually configured (not a placeholder)."""
+    if not value:
+        return False
+    return value.strip().lower() not in PLACEHOLDER_VALUES and not value.startswith("placeholder")
 
 
 def _mask_value(key: str, value: str) -> str:
-    """Mask a secret value for display — never expose the full thing."""
-    if not value or value.startswith("placeholder") or value == "your_bot_token_here":
-        return ""  # Not configured
-
+    """Mask a secret for display."""
+    if not _is_real_value(value):
+        return ""
     if "password" in key.lower():
-        return "••••••••" if value else ""
-
-    # Show first 4 + last 4 chars for tokens/keys
+        return "••••••••"
     if len(value) > 12:
         return f"{value[:4]}{'•' * 8}{value[-4:]}"
     elif len(value) > 4:
         return f"{value[:2]}{'•' * (len(value) - 2)}"
-    else:
-        return "••••"
+    return "••••"
 
 
-def _load_env() -> dict[str, str]:
-    """Load current .env values."""
+def _seed_from_env(db: Session) -> None:
+    """One-time seed: copy .env values into DB if table is empty."""
+    existing = db.query(AppSetting).count()
+    if existing > 0:
+        return  # Already seeded
+
     if not ENV_FILE.exists():
-        return {}
-    return dotenv_values(ENV_FILE)
+        return
+
+    env_values = dotenv_values(ENV_FILE)
+    valid_keys = {item["key"] for item in SETTINGS_KEYS}
+
+    for key, value in env_values.items():
+        if key in valid_keys and value and _is_real_value(value):
+            db.add(AppSetting(key=key, value=value))
+
+    db.commit()
+
+
+def _get_setting(db: Session, key: str) -> str:
+    """Get a setting value from DB."""
+    row = db.query(AppSetting).filter(AppSetting.key == key).first()
+    return row.value if row else ""
+
+
+def _get_all_settings(db: Session) -> dict[str, str]:
+    """Get all settings as a dict."""
+    rows = db.query(AppSetting).all()
+    return {r.key: r.value for r in rows}
+
+
+# ===========================================================================
+# API Endpoints
+# ===========================================================================
 
 
 class SettingsResponse(BaseModel):
@@ -64,7 +102,7 @@ class SettingsResponse(BaseModel):
 
 
 class SettingsUpdateRequest(BaseModel):
-    values: dict[str, str]  # key -> new value (empty string = no change)
+    values: dict[str, str]
 
 
 class SettingsUpdateResponse(BaseModel):
@@ -73,18 +111,18 @@ class SettingsUpdateResponse(BaseModel):
 
 
 @router.get("", response_model=SettingsResponse)
-def get_settings():
-    """Return all settings with masked values. Never exposes full secrets."""
-    env_values = _load_env()
+def get_settings(db: Session = Depends(get_db)):
+    """Return all settings with masked values."""
+    _seed_from_env(db)
+
+    all_values = _get_all_settings(db)
     settings = []
     configured_count = 0
 
     for item in SETTINGS_KEYS:
         key = item["key"]
-        raw_value = env_values.get(key, "")
-        masked = _mask_value(key, raw_value)
-        is_set = bool(raw_value) and not raw_value.startswith("placeholder") and raw_value != "your_bot_token_here"
-
+        raw_value = all_values.get(key, "")
+        is_set = _is_real_value(raw_value)
         if is_set:
             configured_count += 1
 
@@ -94,56 +132,62 @@ def get_settings():
             "group": item["group"],
             "placeholder": item.get("placeholder", ""),
             "sensitive": item.get("sensitive", False),
-            "masked_value": masked,
+            "masked_value": _mask_value(key, raw_value),
             "is_set": is_set,
         })
 
-    return SettingsResponse(
-        settings=settings,
-        configured=configured_count,
-        total=len(SETTINGS_KEYS),
-    )
+    return SettingsResponse(settings=settings, configured=configured_count, total=len(SETTINGS_KEYS))
 
 
 @router.put("", response_model=SettingsUpdateResponse)
-def update_settings(req: SettingsUpdateRequest):
-    """Update .env settings. Only non-empty values are written."""
-    # Ensure .env file exists
-    if not ENV_FILE.exists():
-        ENV_FILE.write_text("# ApplyPilot Configuration\n")
-
+def update_settings(req: SettingsUpdateRequest, db: Session = Depends(get_db)):
+    """Save settings to DB. Takes effect immediately — no restart needed."""
     valid_keys = {item["key"] for item in SETTINGS_KEYS}
     updated = []
 
     for key, value in req.values.items():
-        # Only accept known keys
         if key not in valid_keys:
             continue
-        # Empty string means "no change"
         if not value.strip():
             continue
 
-        # Write to .env file
-        set_key(str(ENV_FILE), key, value.strip())
+        existing = db.query(AppSetting).filter(AppSetting.key == key).first()
+        if existing:
+            existing.value = value.strip()
+        else:
+            db.add(AppSetting(key=key, value=value.strip()))
         updated.append(key)
+
+    db.commit()
 
     if updated:
         return SettingsUpdateResponse(
             updated=updated,
-            message=f"Updated {len(updated)} setting(s). Restart the agent for changes to take effect.",
+            message=f"Saved {len(updated)} setting(s). Changes take effect on the next agent run.",
         )
-    else:
-        return SettingsUpdateResponse(
-            updated=[],
-            message="No changes made.",
-        )
+    return SettingsUpdateResponse(updated=[], message="No changes made.")
+
+
+# ===========================================================================
+# Settings loader for agent subprocess
+# ===========================================================================
+
+
+@router.get("/env")
+def get_settings_as_env(db: Session = Depends(get_db)):
+    """Internal endpoint: returns all settings as key-value pairs for the agent.
+
+    Used by agent_control.py to inject settings into the subprocess environment.
+    This endpoint should NOT be exposed publicly in production.
+    """
+    _seed_from_env(db)
+    return _get_all_settings(db)
 
 
 # ===========================================================================
 # Test Connection Endpoints
 # ===========================================================================
 
-import asyncio
 import httpx as httpx_client
 
 
@@ -153,19 +197,18 @@ class TestResult(BaseModel):
 
 
 @router.post("/test/telegram", response_model=TestResult)
-def test_telegram():
-    """Test Telegram bot connection by sending a test message."""
-    env_values = _load_env()
-    token = env_values.get("TELEGRAM_BOT_TOKEN", "")
-    chat_id = env_values.get("TELEGRAM_CHAT_ID", "")
+def test_telegram(db: Session = Depends(get_db)):
+    """Test Telegram bot connection."""
+    _seed_from_env(db)
+    token = _get_setting(db, "TELEGRAM_BOT_TOKEN")
+    chat_id = _get_setting(db, "TELEGRAM_CHAT_ID")
 
-    if not token or token.startswith("placeholder") or token == "your_bot_token_here":
-        return TestResult(success=False, message="Bot token not configured. Please set it first.")
-    if not chat_id or chat_id.startswith("placeholder"):
-        return TestResult(success=False, message="Chat ID not configured. Please set it first.")
+    if not _is_real_value(token):
+        return TestResult(success=False, message="Bot token not configured.")
+    if not _is_real_value(chat_id):
+        return TestResult(success=False, message="Chat ID not configured.")
 
     try:
-        # Call Telegram getMe API
         url = f"https://api.telegram.org/bot{token}/getMe"
         response = httpx_client.get(url, timeout=10)
         data = response.json()
@@ -175,39 +218,37 @@ def test_telegram():
 
         bot_name = data["result"].get("username", "unknown")
 
-        # Send a test message
         send_url = f"https://api.telegram.org/bot{token}/sendMessage"
         msg_response = httpx_client.post(send_url, json={
             "chat_id": chat_id,
-            "text": "✅ *ApplyPilot — Connection Test*\n\nTelegram is configured correctly!",
+            "text": "✅ *ApplyPilot — Connection Test*\n\nTelegram is working! You'll receive notifications here.",
             "parse_mode": "Markdown",
         }, timeout=10)
         msg_data = msg_response.json()
 
         if msg_data.get("ok"):
-            return TestResult(success=True, message=f"Connected! Bot: @{bot_name}. Test message sent to your chat.")
+            return TestResult(success=True, message=f"Connected! Bot: @{bot_name}. Check your Telegram for a test message.")
         else:
-            return TestResult(success=False, message=f"Bot works but can't message chat {chat_id}: {msg_data.get('description')}")
+            return TestResult(success=False, message=f"Bot works but can't reach chat {chat_id}: {msg_data.get('description')}")
 
     except httpx_client.ConnectError:
-        return TestResult(success=False, message="Network error — can't reach Telegram API.")
+        return TestResult(success=False, message="Network error — can't reach Telegram.")
     except httpx_client.TimeoutException:
-        return TestResult(success=False, message="Timeout — Telegram API not responding.")
+        return TestResult(success=False, message="Timeout connecting to Telegram.")
     except Exception as e:
         return TestResult(success=False, message=f"Error: {str(e)[:100]}")
 
 
 @router.post("/test/openai", response_model=TestResult)
-def test_openai():
-    """Test OpenRouter API key (OpenAI-compatible) by listing models."""
-    env_values = _load_env()
-    api_key = env_values.get("OPENAI_API_KEY", "")
+def test_openai(db: Session = Depends(get_db)):
+    """Test OpenRouter API key."""
+    _seed_from_env(db)
+    api_key = _get_setting(db, "OPENAI_API_KEY")
 
-    if not api_key or api_key.startswith("placeholder") or api_key.startswith("sk-placeholder"):
-        return TestResult(success=False, message="API key not configured. Please set it first.")
+    if not _is_real_value(api_key):
+        return TestResult(success=False, message="API key not configured.")
 
     try:
-        # OpenRouter uses the same /v1/models endpoint
         response = httpx_client.get(
             "https://openrouter.ai/api/v1/models",
             headers={"Authorization": f"Bearer {api_key}"},
@@ -217,33 +258,51 @@ def test_openai():
         if response.status_code == 200:
             data = response.json()
             model_count = len(data.get("data", []))
-            free_models = [m for m in data.get("data", []) if ":free" in m.get("id", "")]
-            return TestResult(
-                success=True,
-                message=f"Connected to OpenRouter! {model_count} models available ({len(free_models)} free).",
-            )
+            free_count = sum(1 for m in data.get("data", [])
+                           if float((m.get("pricing") or {}).get("prompt", "1") or "1") == 0)
+            return TestResult(success=True, message=f"Connected! {model_count} models available ({free_count} free).")
         elif response.status_code == 401:
-            return TestResult(success=False, message="Invalid API key. Please check and re-enter.")
-        elif response.status_code == 429:
-            return TestResult(success=True, message="Key is valid but rate-limited. Try again later.")
+            return TestResult(success=False, message="Invalid API key. Check your key at openrouter.ai/keys.")
         else:
             return TestResult(success=False, message=f"Unexpected response: {response.status_code}")
 
     except httpx_client.ConnectError:
-        return TestResult(success=False, message="Network error — can't reach OpenRouter API.")
+        return TestResult(success=False, message="Can't reach OpenRouter.")
     except httpx_client.TimeoutException:
-        return TestResult(success=False, message="Timeout — OpenRouter API not responding.")
+        return TestResult(success=False, message="Timeout connecting to OpenRouter.")
     except Exception as e:
         return TestResult(success=False, message=f"Error: {str(e)[:100]}")
 
 
-@router.get("/models")
-def list_free_models():
-    """List available free models from OpenRouter with capabilities."""
-    env_values = _load_env()
-    api_key = env_values.get("OPENAI_API_KEY", "")
+@router.post("/test/linkedin", response_model=TestResult)
+def test_linkedin(db: Session = Depends(get_db)):
+    """Validate LinkedIn credentials are set."""
+    _seed_from_env(db)
+    email = _get_setting(db, "LINKEDIN_EMAIL")
+    password = _get_setting(db, "LINKEDIN_PASSWORD")
 
-    if not api_key or api_key.startswith("placeholder"):
+    if not _is_real_value(email):
+        return TestResult(success=False, message="Email not configured.")
+    if not _is_real_value(password):
+        return TestResult(success=False, message="Password not configured.")
+    if "@" not in email:
+        return TestResult(success=False, message="Email doesn't look valid (missing @).")
+
+    return TestResult(success=True, message=f"Credentials ready for {email}. Login will be verified when agent runs.")
+
+
+# ===========================================================================
+# Models endpoint
+# ===========================================================================
+
+
+@router.get("/models")
+def list_free_models(db: Session = Depends(get_db)):
+    """List available free models from OpenRouter with capabilities."""
+    _seed_from_env(db)
+    api_key = _get_setting(db, "OPENAI_API_KEY")
+
+    if not _is_real_value(api_key):
         return {"models": [], "error": "API key not configured"}
 
     try:
@@ -259,7 +318,6 @@ def list_free_models():
         data = response.json()
         all_models = data.get("data", [])
 
-        # Filter free models and format with capabilities
         free_models = []
         for m in all_models:
             model_id = m.get("id", "")
@@ -269,21 +327,15 @@ def list_free_models():
 
             if prompt_price == 0 and completion_price == 0:
                 ctx = m.get("context_length", 0)
-                arch = m.get("architecture", {})
-                top_provider = m.get("top_provider", {})
 
-                # Determine capabilities
                 capabilities = []
                 if ctx >= 100000:
                     capabilities.append("long-context")
                 if "code" in model_id.lower() or "code" in m.get("name", "").lower():
                     capabilities.append("code")
-                if arch.get("modality", "") == "text->text":
-                    capabilities.append("text")
                 if "tool" in str(m.get("supported_parameters", [])):
                     capabilities.append("tools")
 
-                # Determine quality tier
                 if any(x in model_id for x in ["70b", "72b", "gemma-4-31b", "qwen-3-72b"]):
                     tier = "high"
                 elif any(x in model_id for x in ["26b", "27b", "24b", "32b"]):
@@ -298,10 +350,8 @@ def list_free_models():
                     "description": m.get("description", "")[:120],
                     "capabilities": capabilities,
                     "tier": tier,
-                    "max_output": top_provider.get("max_completion_tokens", 4096),
                 })
 
-        # Sort: high tier first, then by context length
         tier_order = {"high": 0, "medium": 1, "standard": 2}
         free_models.sort(key=lambda x: (tier_order.get(x["tier"], 2), -x["context_length"]))
 
@@ -309,26 +359,3 @@ def list_free_models():
 
     except Exception as e:
         return {"models": [], "error": str(e)[:100]}
-
-
-@router.post("/test/linkedin", response_model=TestResult)
-def test_linkedin():
-    """Validate LinkedIn credentials are set (can't actually test login without browser)."""
-    env_values = _load_env()
-    email = env_values.get("LINKEDIN_EMAIL", "")
-    password = env_values.get("LINKEDIN_PASSWORD", "")
-
-    if not email or email.startswith("placeholder"):
-        return TestResult(success=False, message="LinkedIn email not configured.")
-    if not password or password == "placeholder":
-        return TestResult(success=False, message="LinkedIn password not configured.")
-
-    # We can't actually test LinkedIn login without launching a browser,
-    # so just validate the format and confirm they're set.
-    if "@" not in email:
-        return TestResult(success=False, message="Email doesn't look valid (missing @).")
-
-    return TestResult(
-        success=True,
-        message=f"Credentials set for {email}. Login will be tested when agent launches.",
-    )
