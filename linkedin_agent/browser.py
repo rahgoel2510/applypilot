@@ -245,49 +245,83 @@ class LinkedInBrowser:
         # Check if already logged in by visiting feed
         await page.goto(LINKEDIN_FEED, wait_until="domcontentloaded")
 
-        # Wait up to 10s for possible redirect to feed (session may need a moment)
+        # Wait up to 15s for possible redirect to feed (session may need a moment)
         try:
-            await page.wait_for_url("**/feed/**", timeout=10000)
+            await page.wait_for_url("**/feed/**", timeout=15000)
             logger.info("Already logged in (session persisted).")
             return
         except PlaywrightTimeout:
             pass
 
         # Double-check current URL after wait
-        if "/feed" in page.url and "/login" not in page.url:
+        current = page.url
+        if "/feed" in current and "/login" not in current:
             logger.info("Already logged in (session persisted).")
             return
 
         # Not logged in — but if credentials are empty, skip login attempt
         if not email or not password:
             logger.warning("No credentials provided and session expired. Agent cannot proceed.")
-            raise RuntimeError("LinkedIn session expired and no credentials configured. Copy a valid session or set credentials in Settings.")
+            raise RuntimeError(
+                "LinkedIn session expired and no credentials configured. "
+                "Copy a valid session into Docker: ./copy-session-to-docker.sh"
+            )
 
         # Navigate to login page
         logger.info("Session expired. Logging in with credentials...")
         await page.goto(LINKEDIN_LOGIN, wait_until="domcontentloaded")
-        await _human_delay(2, 3)
+        await _human_delay(2, 4)
 
-        # Wait for the email input to be visible before filling
+        # LinkedIn's login page sometimes hides the email field initially
+        # or uses a multi-step flow. Try multiple approaches:
         try:
+            # Approach 1: Wait for visible email input
             email_locator = page.locator(SELECTORS["login_email"]).first
-            await email_locator.wait_for(state="visible", timeout=10000)
-            await email_locator.fill(email)
-            await _human_delay(0.5, 1.0)
+            visible = await email_locator.is_visible()
 
-            pass_locator = page.locator(SELECTORS["login_password"]).first
-            await pass_locator.wait_for(state="visible", timeout=10000)
-            await pass_locator.fill(password)
-            await _human_delay(0.5, 1.5)
+            if not visible:
+                # The input exists but is hidden — LinkedIn may show it after interaction
+                # Try clicking the page to trigger the form
+                await page.click("body")
+                await _human_delay(1, 2)
+                visible = await email_locator.is_visible()
 
-            # Submit
-            await page.click(SELECTORS["login_submit"])
+            if visible:
+                await email_locator.fill(email)
+                await _human_delay(0.5, 1.0)
+
+                pass_locator = page.locator(SELECTORS["login_password"]).first
+                await pass_locator.wait_for(state="visible", timeout=5000)
+                await pass_locator.fill(password)
+                await _human_delay(0.5, 1.5)
+
+                # Submit
+                await page.click(SELECTORS["login_submit"])
+            else:
+                # Approach 2: Try JavaScript fill as fallback
+                logger.info("Email input hidden. Attempting JS-based login...")
+                await page.evaluate(f'''() => {{
+                    const emailEl = document.querySelector('input[autocomplete="username"]');
+                    const passEl = document.querySelector('input[type="password"]');
+                    if (emailEl) {{ emailEl.value = "{email}"; emailEl.dispatchEvent(new Event("input", {{bubbles: true}})); }}
+                    if (passEl) {{ passEl.value = "{password}"; passEl.dispatchEvent(new Event("input", {{bubbles: true}})); }}
+                }}''')
+                await _human_delay(1, 2)
+                submit = page.locator(SELECTORS["login_submit"]).first
+                if await submit.is_visible():
+                    await submit.click()
+                else:
+                    await page.keyboard.press("Enter")
+
         except PlaywrightTimeout:
-            # Form fill timed out — check if we ended up on feed anyway
+            # Check if we ended up on feed anyway
             if "/feed" in page.url:
                 logger.info("Login successful (redirected through challenge).")
                 return
-            raise
+            raise RuntimeError(
+                f"LinkedIn login form not accessible. The page may require manual interaction. "
+                f"Current URL: {page.url[:80]}"
+            )
 
         # Wait for navigation to feed (or security challenge)
         try:

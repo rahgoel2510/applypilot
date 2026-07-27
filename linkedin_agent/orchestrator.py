@@ -368,12 +368,14 @@ class JobAgent:
 
         except Exception as cycle_exc:
             self.log.error(f"Scan cycle error: {cycle_exc}", exc_info=True)
+            # Sanitize error message for Telegram (strip HTML-like content)
+            safe_error = str(cycle_exc)[:200].replace('<', '').replace('>', '').replace('&', '')
             await self.tracker.log(
-                "error", "error", f"Scan cycle failed: {cycle_exc}",
-                metadata={"traceback": str(cycle_exc)},
+                "error", "error", f"Scan cycle failed: {safe_error}",
+                metadata={"traceback": str(cycle_exc)[:500]},
             )
             await self.notifier.send_notification(
-                f"🚨 Scan cycle failed: {cycle_exc}"
+                f"🚨 Scan cycle failed: {safe_error}"
             )
 
         finally:
