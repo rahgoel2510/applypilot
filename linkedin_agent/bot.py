@@ -41,7 +41,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 logger = logging.getLogger(__name__)
 
 # Config
-TRACKER_URL = os.environ.get("TRACKER_URL", "http://pilot.local")
+TRACKER_URL = os.environ.get("TRACKER_URL", "http://127.0.0.1:8000")
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 ALLOWED_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 

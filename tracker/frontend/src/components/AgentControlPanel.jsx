@@ -39,16 +39,15 @@ export default function AgentControlPanel() {
     return () => clearInterval(interval);
   }, []);
 
-  // Poll output when running
+  // Poll output — load existing on mount + keep live
   useEffect(() => {
-    if (status.state !== 'running') return;
     const poll = async () => {
-      try { const d = await getAgentOutput(100); setOutput(d.lines); } catch (e) { /* */ }
+      try { const d = await getAgentOutput(500); setOutput(d.lines); } catch (e) { /* */ }
     };
-    poll();
+    poll(); // Load existing output immediately on mount
     const interval = setInterval(poll, 1500);
     return () => clearInterval(interval);
-  }, [status.state]);
+  }, []);
 
   useEffect(() => {
     if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
