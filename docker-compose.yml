@@ -26,6 +26,7 @@ services:
       - .env
     volumes:
       - applypilot-data:/app/data
+      - applypilot-browser:/root/.local/share/linkedin_agent
     restart: unless-stopped
     environment:
       - DATABASE_URL=sqlite:///./data/tracker.db
@@ -39,4 +40,6 @@ services:
 
 volumes:
   applypilot-data:
+    driver: local
+  applypilot-browser:
     driver: local
