@@ -74,6 +74,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Start-Sleep -Seconds 5
 Write-Host "        Container running." -ForegroundColor Green
+$containerName = (docker ps --format "{{.Names}}" 2>$null | Select-String "applypilot").Matches.Value
 
 # ─── Step 6: LinkedIn Login (local) ──────────────────────
 
@@ -130,41 +131,80 @@ if (-not $sessionDir) {
     exit 1
 }
 
-# ─── Step 7: Copy session to Docker ──────────────────────
+# ─── Step 7: Transfer cookies to Docker ──────────────────
 
-Write-Host "  [7/9] Copying session to Docker..." -ForegroundColor Yellow
-$containerName = (docker ps --format "{{.Names}}" 2>$null | Select-String "applypilot").Matches.Value
-$targetPath = "/root/.local/share/linkedin_agent/browser_data"
-docker exec $containerName mkdir -p $targetPath 2>$null
-docker cp "${sessionDir}\." "${containerName}:${targetPath}/" 2>$null
-Write-Host "        Copied." -ForegroundColor Green
+Write-Host "  [7/9] Transferring session cookies to Docker..." -ForegroundColor Yellow
+
+$exportPy = 'import asyncio, json' + "`n"
+$exportPy += 'from playwright.async_api import async_playwright' + "`n"
+$exportPy += 'from platformdirs import user_data_dir' + "`n"
+$exportPy += 'from pathlib import Path' + "`n"
+$exportPy += 'async def export():' + "`n"
+$exportPy += '    data_dir = Path(user_data_dir("linkedin_agent", "linkedin_agent")) / "browser_data"' + "`n"
+$exportPy += '    pw = await async_playwright().start()' + "`n"
+$exportPy += '    ctx = await pw.chromium.launch_persistent_context(str(data_dir), headless=True)' + "`n"
+$exportPy += '    cookies = await ctx.cookies()' + "`n"
+$exportPy += '    linkedin_cookies = [c for c in cookies if "linkedin" in c.get("domain", "")]' + "`n"
+$exportPy += '    with open("linkedin_cookies.json", "w") as f:' + "`n"
+$exportPy += '        json.dump(linkedin_cookies, f)' + "`n"
+$exportPy += '    print(f"EXPORTED {len(linkedin_cookies)}")' + "`n"
+$exportPy += '    await ctx.close()' + "`n"
+$exportPy += '    await pw.stop()' + "`n"
+$exportPy += 'asyncio.run(export())' + "`n"
+
+$tmp = Join-Path $env:TEMP "ap_export.py"
+Set-Content -Path $tmp -Value $exportPy -NoNewline
+$exportResult = python $tmp 2>$null
+Remove-Item $tmp -ErrorAction SilentlyContinue
+
+if ($exportResult -match "EXPORTED (\d+)") {
+    Write-Host "        Exported $($Matches[1]) cookies." -ForegroundColor Green
+} else {
+    Write-Host "        Cookie export failed. Session may be invalid." -ForegroundColor Red
+    Write-Host "        Run setup again after logging in." -ForegroundColor Yellow
+    exit 1
+}
+
+# Copy to Docker and import
+docker cp "linkedin_cookies.json" "${containerName}:/tmp/linkedin_cookies.json" 2>$null
+
+$importPy = 'import asyncio, json' + "`n"
+$importPy += 'from linkedin_agent.browser import LinkedInBrowser' + "`n"
+$importPy += 'async def imp():' + "`n"
+$importPy += '    with open("/tmp/linkedin_cookies.json") as f:' + "`n"
+$importPy += '        cookies = json.load(f)' + "`n"
+$importPy += '    b = LinkedInBrowser()' + "`n"
+$importPy += '    await b.launch(headless=True)' + "`n"
+$importPy += '    ctx = b._context' + "`n"
+$importPy += '    await ctx.add_cookies(cookies)' + "`n"
+$importPy += '    page = b.page' + "`n"
+$importPy += '    await page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded")' + "`n"
+$importPy += '    await asyncio.sleep(5)' + "`n"
+$importPy += '    if "/feed" in page.url and "/login" not in page.url:' + "`n"
+$importPy += '        await page.goto("https://www.linkedin.com/jobs/", wait_until="domcontentloaded")' + "`n"
+$importPy += '        await asyncio.sleep(2)' + "`n"
+$importPy += '        print("VALID")' + "`n"
+$importPy += '    else:' + "`n"
+$importPy += '        print("INVALID")' + "`n"
+$importPy += '    await b.close()' + "`n"
+$importPy += 'asyncio.run(imp())' + "`n"
+
+$tmp = Join-Path $env:TEMP "ap_import.py"
+Set-Content -Path $tmp -Value $importPy -NoNewline
+docker cp $tmp "${containerName}:/tmp/ap_import.py" 2>$null
+$importResult = docker exec $containerName python /tmp/ap_import.py 2>&1
+Remove-Item $tmp -ErrorAction SilentlyContinue
+Remove-Item "linkedin_cookies.json" -ErrorAction SilentlyContinue
 
 # ─── Step 8: Verify inside Docker ────────────────────────
 
 Write-Host "  [8/9] Verifying session inside Docker..." -ForegroundColor Yellow
 
-$testPy = 'import asyncio' + "`n"
-$testPy += 'from linkedin_agent.browser import LinkedInBrowser' + "`n"
-$testPy += 'async def t():' + "`n"
-$testPy += '    b = LinkedInBrowser()' + "`n"
-$testPy += '    await b.launch(headless=True)' + "`n"
-$testPy += '    await b.page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded")' + "`n"
-$testPy += '    await asyncio.sleep(4)' + "`n"
-$testPy += '    print("VALID" if "/feed" in b.page.url and "/login" not in b.page.url else "EXPIRED")' + "`n"
-$testPy += '    await b.close()' + "`n"
-$testPy += 'asyncio.run(t())' + "`n"
-
-$tmp = Join-Path $env:TEMP "ap_docker_check.py"
-Set-Content -Path $tmp -Value $testPy -NoNewline
-docker cp $tmp "${containerName}:/tmp/ap_check.py" 2>$null
-$dockerCheck = docker exec $containerName python /tmp/ap_check.py 2>&1
-Remove-Item $tmp -ErrorAction SilentlyContinue
-
-if ($dockerCheck -match "VALID") {
+if ($importResult -match "VALID") {
     Write-Host "        Session works inside Docker!" -ForegroundColor Green
 } else {
-    Write-Host "        Session version mismatch (expected with different Chromium)." -ForegroundColor Yellow
-    Write-Host "        The local agent will push results to the tracker directly." -ForegroundColor Yellow
+    Write-Host "        Cookie transfer failed." -ForegroundColor Red
+    Write-Host "        The agent will run natively instead." -ForegroundColor Yellow
     Write-Host "        Use: python -m linkedin_agent run --dry-run --limit 10" -ForegroundColor Gray
 }
 
