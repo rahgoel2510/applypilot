@@ -503,6 +503,19 @@ class LinkedInBrowser:
                     )
                     if location_el:
                         location = (await location_el.inner_text()).strip()
+
+                # If selectors failed, try getting text from card area
+                if not company and card_element:
+                    try:
+                        card_text = await card_element.inner_text()
+                        lines = [l.strip() for l in card_text.split("\n") if l.strip()]
+                        # Usually: title, company, location, metadata
+                        if len(lines) >= 2:
+                            company = lines[1] if not company else company
+                        if len(lines) >= 3 and not location:
+                            location = lines[2]
+                    except Exception:
+                        pass
             else:
                 # Fallback: just get title from link text
                 title = (await link.inner_text()).strip()
@@ -653,6 +666,22 @@ class LinkedInBrowser:
                     break  # Content loaded but no score found
 
             logger.warning("LinkedIn AI did not return a parseable match score within 30s.")
+
+            # Fallback: use LLM to extract from page text
+            try:
+                from linkedin_agent.smart_parser import get_parser
+                parser = get_parser()
+                if parser.rate_limit_info["can_request"]:
+                    page_text = await page.inner_text("body")
+                    data = await parser.extract_job_data(page_text)
+                    matched = data.get("match_score_matched")
+                    total = data.get("match_score_total")
+                    if matched is not None and total is not None and total > 0:
+                        logger.info("Match score (LLM fallback): %d/%d", matched, total)
+                        return (int(matched), int(total))
+            except Exception as llm_exc:
+                logger.debug("LLM fallback failed: %s", llm_exc)
+
             return (0, 0)
 
         except Exception as exc:
