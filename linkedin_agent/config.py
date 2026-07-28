@@ -58,6 +58,7 @@ class JobSearchConfig:
     """Job search behaviour settings."""
 
     keywords: list[str] = field(default_factory=lambda: ["Software Engineer"])
+    custom_urls: list[str] = field(default_factory=list)
     locations: list[str] = field(default_factory=lambda: ["India"])
     match_threshold: float = 0.80
     max_postings_per_run: int = 50
@@ -176,6 +177,7 @@ def _build_settings(yaml_data: dict[str, Any]) -> Settings:
     js = yaml_data.get("job_search", {})
     job_search = JobSearchConfig(
         keywords=js.get("keywords", ["Software Engineer"]),
+        custom_urls=js.get("custom_urls", []),
         locations=js.get("locations", ["India"]),
         match_threshold=float(_env("MATCH_THRESHOLD", str(js.get("match_threshold", 0.80)))),
         max_postings_per_run=int(_env("MAX_POSTINGS_PER_RUN", str(js.get("max_postings_per_run", 50)))),

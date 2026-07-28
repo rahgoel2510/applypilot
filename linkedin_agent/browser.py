@@ -415,6 +415,17 @@ class LinkedInBrowser:
             keyword, location, posted_within,
         )
 
+    async def navigate_to_url(self, url: str) -> None:
+        """Navigate directly to a custom LinkedIn search URL.
+
+        Args:
+            url: Full LinkedIn job search URL (supports boolean queries, alerts, etc.)
+        """
+        page = self.page
+        await page.goto(url, wait_until="domcontentloaded")
+        await _human_delay(2, 4)
+        logger.info("Navigated to custom URL: %s", url[:80])
+
     # ------------------------------------------------------------------
     # Job Listings
     # ------------------------------------------------------------------

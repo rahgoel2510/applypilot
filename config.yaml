@@ -18,6 +18,8 @@ job_search:
     - "Technical Program Manager"
     - "Senior Engineering Manager"
     - "Director of Engineering"
+  custom_urls:
+    - "https://www.linkedin.com/jobs/search-results/?keywords=%22Senior%20Technical%20Program%20Manager%22%20OR%20%22Staff%20Technical%20Program%20Manager%22%20OR%20%22Principal%20Technical%20Program%20Manager%22&geoId=102713980"
   locations:
     - "India"
     - "Bangalore"
