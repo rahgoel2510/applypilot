@@ -309,21 +309,43 @@ class JobAgent:
                     seen_job_ids.add(jid)
             self.log.info(f"  Recommended → {len(rec_jobs)} jobs")
 
-            # Source 2: Keyword search (your configured search terms)
+            # Source 2: Keyword search (combined OR + individual)
             if len(all_jobs) < max_postings:
                 self.log.info(f"Searching by keywords: {keywords}")
-            for keyword in keywords:
-                if self._shutdown_event.is_set():
-                    break
-                if len(all_jobs) >= max_postings:
-                    break
 
-                location = locations[0] if locations else ""
-                await self.browser.search_jobs(
-                    keyword=keyword,
-                    location=location,
-                    posted_within=posted_within,
-                )
+                # First: combined OR search (finds all titles at once — most efficient)
+                if len(keywords) > 1:
+                    combined_query = " OR ".join(f'"{k}"' for k in keywords)
+                    location = locations[0] if locations else ""
+                    await self.browser.search_jobs(
+                        keyword=combined_query,
+                        location=location,
+                        posted_within=posted_within,
+                    )
+                    remaining = max_postings - len(all_jobs)
+                    page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 25))
+                    new_count = 0
+                    for j in page_jobs:
+                        jid = j.get("job_id", "")
+                        if jid and jid not in seen_job_ids:
+                            all_jobs.append(j)
+                            seen_job_ids.add(jid)
+                            new_count += 1
+                    self.log.info(f"  Combined search → {new_count} jobs")
+
+                # Then: individual keyword searches (catch anything the OR missed)
+                for keyword in keywords:
+                    if self._shutdown_event.is_set():
+                        break
+                    if len(all_jobs) >= max_postings:
+                        break
+
+                    location = locations[0] if locations else ""
+                    await self.browser.search_jobs(
+                        keyword=keyword,
+                        location=location,
+                        posted_within=posted_within,
+                    )
 
                 remaining = max_postings - len(all_jobs)
                 page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 20))

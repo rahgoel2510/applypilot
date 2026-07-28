@@ -14,31 +14,30 @@ import { getAgentStatus, getAgentOutput } from '../api';
 // --- Pipeline Steps (realistic workflow — no login step) ---
 
 const PIPELINE_STEPS = [
-  { id: 'init', label: 'Initialize', emoji: '⚡', description: 'Load config & connect', x: 50, y: 120 },
-  { id: 'browser', label: 'Open Browser', emoji: '🌐', description: 'Launch Chromium', x: 280, y: 120 },
-  { id: 'session', label: 'Session Check', emoji: '🔐', description: 'Verify LinkedIn', x: 510, y: 120 },
-  { id: 'navigate', label: 'Job Search', emoji: '📋', description: 'Search by keywords', x: 740, y: 120 },
-  { id: 'scan', label: 'Scan Listings', emoji: '🔍', description: 'Extract job cards', x: 970, y: 120 },
-  { id: 'match', label: 'Score & Match', emoji: '🎯', description: 'Check fit ≥ 80%', x: 970, y: 320 },
-  { id: 'apply', label: 'Easy Apply', emoji: '📝', description: 'Submit application', x: 740, y: 320 },
-  { id: 'notify', label: 'Notify', emoji: '📱', description: 'Telegram + Tracker', x: 510, y: 320 },
-  { id: 'inmail', label: 'Draft InMail', emoji: '✉️', description: 'AI outreach', x: 510, y: 480 },
-  { id: 'complete', label: 'Report', emoji: '🏁', description: 'Tally & close', x: 280, y: 320 },
+  { id: 'init', label: 'Initialize', emoji: '⚡', description: 'Load config', x: 50, y: 40 },
+  { id: 'browser', label: 'Browser', emoji: '🌐', description: 'Launch Chromium', x: 230, y: 40 },
+  { id: 'session', label: 'Session', emoji: '🔐', description: 'Verify login', x: 410, y: 40 },
+  { id: 'recommended', label: 'Recommended', emoji: '⭐', description: 'LinkedIn picks', x: 620, y: 40 },
+  { id: 'keywords', label: 'Keyword Search', emoji: '🔍', description: 'Your search terms', x: 850, y: 40 },
+  { id: 'custom', label: 'Custom URLs', emoji: '🔗', description: 'Additional sources', x: 1080, y: 40 },
+  { id: 'evaluate', label: 'Evaluate', emoji: '🎯', description: 'Open + score each job', x: 850, y: 220 },
+  { id: 'apply', label: 'Apply', emoji: '📝', description: 'Easy Apply ≥80%', x: 620, y: 220 },
+  { id: 'notify', label: 'Notify', emoji: '📱', description: 'Telegram + Tracker', x: 410, y: 220 },
+  { id: 'complete', label: 'Summary', emoji: '🏁', description: 'Report results', x: 230, y: 220 },
 ];
 
 const PIPELINE_EDGES = [
   { source: 'init', target: 'browser' },
   { source: 'browser', target: 'session' },
-  { source: 'session', target: 'navigate' },
-  { source: 'navigate', target: 'scan' },
-  { source: 'scan', target: 'match' },
-  { source: 'match', target: 'apply', label: 'match ≥ 80%' },
-  { source: 'match', target: 'complete', label: 'all processed' },
+  { source: 'session', target: 'recommended' },
+  { source: 'recommended', target: 'keywords' },
+  { source: 'keywords', target: 'custom' },
+  { source: 'custom', target: 'evaluate' },
+  { source: 'evaluate', target: 'apply', label: '≥ 80%' },
+  { source: 'evaluate', target: 'complete', label: 'skip/done' },
   { source: 'apply', target: 'notify' },
-  { source: 'notify', target: 'inmail', label: 'if enabled' },
-  { source: 'notify', target: 'match', label: 'next job' },
-  { source: 'inmail', target: 'match', label: 'next job' },
-  { source: 'complete', target: 'init', label: 'daemon loop', style: 'dashed' },
+  { source: 'notify', target: 'evaluate', label: 'next job' },
+  { source: 'notify', target: 'complete', label: 'all done' },
 ];
 
 const STEP_STYLES = {
@@ -204,121 +203,124 @@ export default function AgentPipelineView() {
     const rawText = lines.join('\n');
 
     // Init
-    if (text.includes('running single scan') || text.includes('starting daemon') || text.includes('scan cycle started')) {
+    if (text.includes('pipeline started') || text.includes('running single scan') || text.includes('scan cycle started')) {
       newStatuses.init = 'done';
       newMessages.init = 'Config loaded';
-      newSummaries.init = 'Modules initialized. Config validated. Tracker connected.';
+      newSummaries.init = 'Modules initialized.';
     }
 
     // Browser
-    if (text.includes('browser launched')) {
+    if (text.includes('browser ready') || text.includes('browser launched')) {
+      newStatuses.init = 'done';
       newStatuses.browser = 'done';
-      newMessages.browser = 'Chromium ready';
-      newSummaries.browser = 'Persistent Chromium context launched.\nSession cookies loaded from saved profile.';
-    } else if (text.includes('running single scan') && !text.includes('browser launched')) {
-      newStatuses.browser = 'active';
-      newMessages.browser = 'Starting...';
+      newMessages.browser = 'Ready';
+      newSummaries.browser = 'Chromium launched.';
     }
 
-    // Session check (replaces login step)
-    if (text.includes('already logged in')) {
+    // Session
+    if (text.includes('already logged in') || text.includes('linkedin connected')) {
       newStatuses.browser = 'done';
       newStatuses.session = 'done';
-      newMessages.session = 'Session valid ✓';
-      newSummaries.session = 'LinkedIn session is active.\nCookies verified — no login needed.';
-    }
-    if (text.includes('session expired') || (text.includes('not logged in') && !text.includes('login successful'))) {
-      newStatuses.session = 'active';
-      newMessages.session = 'Verifying...';
-      newSummaries.session = 'Checking saved session cookies against LinkedIn...';
-    }
-    if (text.includes('login successful') || text.includes('redirected through challenge')) {
-      newStatuses.session = 'done';
-      newMessages.session = 'Re-authenticated ✓';
-      newSummaries.session = 'Session was expired. Successfully re-authenticated with saved credentials.';
-    }
-    if ((text.includes('session expired') && text.includes('no credentials')) || 
-        (text.includes('login') && text.includes('timeout') && !text.includes('successful'))) {
+      newMessages.session = 'Connected ✓';
+      newSummaries.session = 'Session valid.';
+    } else if (text.includes('session expired') || text.includes('not logged in')) {
       newStatuses.session = 'error';
-      newMessages.session = 'Session invalid';
-      newSummaries.session = 'Session expired and could not re-authenticate.\nFix: Copy a valid browser session into Docker.\nRun: ./copy-session-to-docker.sh';
+      newMessages.session = 'Expired';
+      newSummaries.session = 'Session invalid. Need fresh login.';
+    } else if (text.includes('checking linkedin')) {
+      newStatuses.session = 'active';
+      newMessages.session = 'Checking...';
     }
 
-    // Navigate
-    if (text.includes('navigated to jobs')) {
-      newStatuses.navigate = 'done';
-      newMessages.navigate = 'On jobs page';
-      newSummaries.navigate = 'Successfully navigated to LinkedIn job collection.';
+    // Recommended
+    if (text.includes('recommended →') || text.includes('recommended jobs')) {
+      newStatuses.session = 'done';
+      newStatuses.recommended = 'done';
+      const match = rawText.match(/Recommended → (\d+)/i);
+      newMessages.recommended = match ? `${match[1]} jobs` : 'Done';
+      newSummaries.recommended = match ? `Found ${match[1]} recommended jobs.` : '';
+    } else if (text.includes('checking recommended')) {
+      newStatuses.recommended = 'active';
+      newMessages.recommended = 'Scanning...';
     }
 
-    // Scan
-    const foundMatch = text.match(/found (\d+) job/);
-    if (foundMatch) {
-      newStatuses.scan = 'done';
-      newMessages.scan = `${foundMatch[1]} jobs found`;
-      newSummaries.scan = `Extracted ${foundMatch[1]} job card(s) from the page.\nReady to evaluate against your profile.`;
+    // Keywords
+    const keywordMatches = rawText.match(/'[^']+' → \d+ new jobs/g);
+    if (keywordMatches) {
+      newStatuses.recommended = 'done';
+      newStatuses.keywords = 'done';
+      newMessages.keywords = `${keywordMatches.length} searches`;
+      newSummaries.keywords = keywordMatches.join('\n');
+    } else if (text.includes('searching by keywords')) {
+      newStatuses.keywords = 'active';
+      newMessages.keywords = 'Searching...';
     }
 
-    // Match / Process
-    const processMatches = text.match(/processing:/gi);
-    if (processMatches) {
-      newStats.processed = processMatches.length;
-      newStatuses.match = 'active';
-      newMessages.match = `${newStats.processed} evaluated`;
+    // Custom URLs
+    if (text.includes('custom url →') || text.includes('custom url(s)')) {
+      newStatuses.keywords = 'done';
+      newStatuses.custom = 'done';
+      const match = rawText.match(/Custom URL → (\d+)/i);
+      newMessages.custom = match ? `${match[1]} extra jobs` : 'Done';
+    } else if (text.includes('scanning') && text.includes('custom')) {
+      newStatuses.custom = 'active';
+      newMessages.custom = 'Scanning...';
+    } else if (newStatuses.keywords === 'done' && !text.includes('custom')) {
+      newStatuses.custom = 'skipped';
+      newMessages.custom = 'None configured';
     }
-    const submitMatches = text.match(/(submitted|would apply)/gi);
-    if (submitMatches) newStats.applied = submitMatches.length;
-    const skipMatches = text.match(/(skipping|would skip|below threshold)/gi);
-    if (skipMatches) newStats.skipped = skipMatches.length;
 
-    if (newStats.processed > 0) {
-      newSummaries.match = `Processed: ${newStats.processed}\nMatched: ${newStats.applied}\nSkipped: ${newStats.skipped}`;
+    // Evaluate
+    const scanMatches = text.match(/scanning \d+\/\d+/g);
+    if (scanMatches) {
+      newStatuses.custom = newStatuses.custom || 'done';
+      newStatuses.evaluate = 'active';
+      newMessages.evaluate = scanMatches[scanMatches.length - 1].replace('scanning ', '');
+      newStats.processed = scanMatches.length;
+    }
+    if (text.includes('unique jobs to evaluate')) {
+      const match = rawText.match(/Found (\d+) unique/i);
+      if (match) newSummaries.evaluate = `${match[1]} jobs to check.`;
     }
 
     // Apply
-    if (newStats.applied > 0) {
+    const applyMatches = text.match(/(worth applying|applied successfully)/g);
+    if (applyMatches) {
       newStatuses.apply = 'done';
+      newStats.applied = applyMatches.length;
       newMessages.apply = `${newStats.applied} applied`;
-      newSummaries.apply = `${newStats.applied} application(s) submitted via Easy Apply.`;
     }
 
     // Notify
-    if (text.includes('notification sent') || text.includes('telegram') || text.includes('tally')) {
+    if (text.includes('notification sent') || text.includes('tally report')) {
       newStatuses.notify = 'done';
-      newMessages.notify = 'Notified';
-      newSummaries.notify = 'Telegram notifications sent.\nTracker board updated.';
-    }
-
-    // InMail
-    if (text.includes('inmail') || text.includes('drafted')) {
-      newStatuses.inmail = 'done';
-      newMessages.inmail = 'Drafted';
-      newSummaries.inmail = 'AI-generated InMail sent to Telegram for review.';
+      newMessages.notify = 'Sent';
     }
 
     // Complete
-    if (text.includes('scan cycle complete') || text.includes('cycle complete') || text.includes('shutdown complete')) {
-      newStatuses.match = 'done';
+    if (text.includes('summary:') || text.includes('scan cycle complete')) {
+      newStatuses.evaluate = 'done';
+      newStatuses.apply = newStatuses.apply || 'done';
+      newStatuses.notify = 'done';
       newStatuses.complete = 'done';
-      newMessages.complete = 'Cycle done';
-      newSummaries.complete = `Cycle complete.\nApplied: ${newStats.applied} | Skipped: ${newStats.skipped}\nBrowser closed. Tally reported.`;
+      newMessages.complete = 'Done';
+      newSummaries.complete = 'Cycle complete.';
     }
 
-    // Error detection
-    if (text.includes('scan cycle failed') || text.includes('traceback')) {
+    // Errors
+    if (text.includes('scan cycle error') || text.includes('scan cycle failed')) {
+      const errLine = lines.find(l => l.toLowerCase().includes('error') || l.toLowerCase().includes('failed')) || '';
       // Find which step failed
-      const errorLine = lines.find(l => l.toLowerCase().includes('error') || l.toLowerCase().includes('failed')) || '';
-      if (!newStatuses.browser || newStatuses.browser === 'active') {
-        newStatuses.browser = 'error';
-        newMessages.browser = 'Failed';
-        newSummaries.browser = `Error: ${errorLine.slice(0, 100)}`;
-      } else if (!newStatuses.navigate) {
-        newStatuses.navigate = 'error';
-        newSummaries.navigate = `Error: ${errorLine.slice(0, 100)}`;
+      if (!newStatuses.session || newStatuses.session === 'active') {
+        newStatuses.session = 'error';
+        newSummaries.session = errLine.slice(0, 80);
+      } else if (!newStatuses.recommended || newStatuses.recommended === 'active') {
+        newStatuses.recommended = 'error';
+      } else if (!newStatuses.keywords || newStatuses.keywords === 'active') {
+        newStatuses.keywords = 'error';
       } else {
-        newStatuses.match = 'error';
-        newMessages.match = 'Error';
-        newSummaries.match = `Error: ${errorLine.slice(0, 100)}`;
+        newStatuses.evaluate = 'error';
+        newSummaries.evaluate = errLine.slice(0, 80);
       }
     }
 
