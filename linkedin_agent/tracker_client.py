@@ -15,7 +15,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TRACKER_URL = "http://localhost:8000/api"
+DEFAULT_TRACKER_URL = "http://pilot.local/api"
 
 
 class TrackerClient:
