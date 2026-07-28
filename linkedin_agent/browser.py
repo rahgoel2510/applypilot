@@ -245,11 +245,11 @@ class LinkedInBrowser:
         # Check if already logged in by visiting feed
         import time as _time
         t0 = _time.time()
-        await page.goto(LINKEDIN_FEED, wait_until="domcontentloaded", timeout=15000)
+        await page.goto(LINKEDIN_FEED, wait_until="domcontentloaded", timeout=30000)
 
-        # Wait up to 5s for possible redirect to feed (session cookies should work fast)
+        # Wait up to 15s for feed page (Docker network can be slow)
         try:
-            await page.wait_for_url("**/feed/**", timeout=5000)
+            await page.wait_for_url("**/feed/**", timeout=15000)
             logger.info("Already logged in (session persisted). (%.1fs)", _time.time()-t0)
             return
         except PlaywrightTimeout:
