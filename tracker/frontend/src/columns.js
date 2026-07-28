@@ -23,7 +23,7 @@ export const COLUMNS = [
     badgeText: 'text-[#5b21b6]',
     hoverBg: 'hover:bg-[#ede9fe]',
     emptyText: 'No outreach yet',
-    emptyHint: 'InMail drafted to recruiter/TA for these jobs.',
+    emptyHint: 'InMail sent to recruiter before applying.',
   },
   {
     id: 'saved',
