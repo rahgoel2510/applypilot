@@ -470,55 +470,60 @@ class LinkedInBrowser:
                 continue
             seen_ids.add(job_id)
 
-            # Get the card container (parent elements)
+            # Get title from link text (this always works)
+            title = (await link.inner_text()).strip()
+            title = title.split("\n")[0].strip()  # First line only
+
+            # Get card container and extract text for AI parsing
             card = await link.evaluate_handle(
-                "el => el.closest('.job-card-container, .jobs-search-results__list-item, li')"
+                "el => el.closest('.job-card-container, .jobs-search-results__list-item, li, article, div[data-job-id]') || el.parentElement.parentElement"
             )
 
-            title = ""
             company = ""
             location = ""
 
             if card:
-                # Try to extract title from the link text itself
-                title = (await link.inner_text()).strip()
-
-                # Extract company and location from the card
                 card_element = card.as_element()
                 if card_element:
-                    # Extract company name
-                    company_el = await card_element.query_selector(
-                        ".artdeco-entity-lockup__subtitle span, "
-                        ".job-card-container__primary-description, "
-                        ".job-card-container__company-name"
-                    )
-                    if company_el:
-                        company = (await company_el.inner_text()).strip()
-
-                    # Extract location
-                    location_el = await card_element.query_selector(
-                        ".artdeco-entity-lockup__caption span, "
-                        ".job-card-container__metadata-wrapper span, "
-                        ".job-card-container__metadata-item"
-                    )
-                    if location_el:
-                        location = (await location_el.inner_text()).strip()
-
-                # If selectors failed, try getting text from card area
-                if not company and card_element:
                     try:
                         card_text = await card_element.inner_text()
-                        lines = [l.strip() for l in card_text.split("\n") if l.strip()]
-                        # Usually: title, company, location, metadata
-                        if len(lines) >= 2:
-                            company = lines[1] if not company else company
-                        if len(lines) >= 3 and not location:
-                            location = lines[2]
+                        lines = [l.strip() for l in card_text.split("\n") if l.strip() and len(l.strip()) > 1]
+
+                        # Smart text parsing: title is first line, company/location follow
+                        # Remove the title line and parse remaining
+                        remaining = [l for l in lines if l != title and title not in l]
+
+                        if remaining:
+                            # Company is usually the first non-title line
+                            company = remaining[0] if remaining else ""
+                        if len(remaining) >= 2:
+                            # Location is usually second
+                            loc_candidate = remaining[1]
+                            # Validate it looks like a location (has city/country keywords)
+                            if any(w in loc_candidate.lower() for w in [
+                                'india', 'remote', 'hybrid', 'on-site', 'bangalore',
+                                'hyderabad', 'mumbai', 'delhi', 'pune', 'chennai',
+                                'usa', 'uk', 'singapore', 'dubai',
+                            ]) or '(' in loc_candidate:
+                                location = loc_candidate
+                            elif len(remaining) >= 3:
+                                location = remaining[2]
                     except Exception:
                         pass
-            else:
-                # Fallback: just get title from link text
-                title = (await link.inner_text()).strip()
+
+            # If still no company — use LLM as last resort
+            if not company:
+                try:
+                    from linkedin_agent.smart_parser import get_parser
+                    parser = get_parser()
+                    if parser.rate_limit_info["can_request"]:
+                        card_text_for_llm = f"Job link: {title}\nCard text: {card_text if 'card_text' in dir() else title}"
+                        data = await parser.extract_with_llm(card_text_for_llm)
+                        company = data.get("company", "") or ""
+                        if not location:
+                            location = data.get("location", "") or ""
+                except Exception:
+                    pass
 
             listings.append({
                 "job_id": job_id,
