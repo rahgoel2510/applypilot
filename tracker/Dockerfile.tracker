@@ -1,6 +1,8 @@
-# ─── Tracker Only (Web UI + API) ──────────────────────────────
-# Lightweight: just Node (build) + Python (serve). No Chromium.
-# The agent runs natively on your machine.
+# ─── ApplyPilot Tracker + Agent (no Chromium) ─────────────────
+# Includes the agent Python code so the UI can trigger scans.
+# Chromium/Playwright NOT included — agent will fail on browser
+# launch inside Docker. For Docker-only use, the agent pushes
+# results via API from your native machine.
 
 FROM node:20-alpine AS frontend-build
 WORKDIR /app/frontend
@@ -12,14 +14,25 @@ RUN npm run build
 FROM python:3.12-slim
 WORKDIR /app
 
-COPY tracker/backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Install all Python dependencies (tracker + agent)
+COPY requirements.txt ./agent-requirements.txt
+COPY tracker/backend/requirements.txt ./tracker-requirements.txt
+RUN pip install --no-cache-dir -r agent-requirements.txt -r tracker-requirements.txt
 
-COPY tracker/backend/ ./
-COPY --from=frontend-build /app/frontend/dist ./static
+# Copy agent source (for subprocess import)
+COPY linkedin_agent/ ./linkedin_agent/
+COPY config.yaml ./
 
-RUN mkdir -p /app/data
+# Copy tracker backend
+COPY tracker/backend/ ./tracker/backend/
+
+# Copy built frontend
+COPY --from=frontend-build /app/frontend/dist ./tracker/backend/static
+
+RUN mkdir -p /app/data /app/logs
 ENV DATABASE_URL=sqlite:///./data/tracker.db
+ENV PYTHONPATH=/app
 
 EXPOSE 8000
+WORKDIR /app/tracker/backend
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
