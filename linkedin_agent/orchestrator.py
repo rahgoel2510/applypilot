@@ -297,36 +297,19 @@ class JobAgent:
 
             self.log.info(f"LinkedIn scanning started")
 
-            # Source 1: Custom search URLs (boolean queries, job alerts)
-            if custom_urls:
-                self.log.info(f"Scanning {len(custom_urls)} custom search URL(s)...")
-                for url in custom_urls:
-                    if self._shutdown_event.is_set() or len(all_jobs) >= max_postings:
-                        break
-                    await self.browser.navigate_to_url(url)
-                    remaining = max_postings - len(all_jobs)
-                    url_jobs = await self.browser.get_job_listings(max_count=min(remaining, 25))
-                    for j in url_jobs:
-                        jid = j.get("job_id", "")
-                        if jid and jid not in seen_job_ids:
-                            all_jobs.append(j)
-                            seen_job_ids.add(jid)
-                    self.log.info(f"  Custom URL → {len(url_jobs)} jobs")
+            # Source 1: Recommended jobs (LinkedIn's best matches for your profile)
+            self.log.info("Checking Recommended jobs...")
+            await self.browser.navigate_to_jobs(collection=collection)
+            remaining = max_postings
+            rec_jobs = await self.browser.get_job_listings(max_count=min(remaining, 15))
+            for j in rec_jobs:
+                jid = j.get("job_id", "")
+                if jid and jid not in seen_job_ids:
+                    all_jobs.append(j)
+                    seen_job_ids.add(jid)
+            self.log.info(f"  Recommended → {len(rec_jobs)} jobs")
 
-            # Source 2: Recommended jobs (LinkedIn's own matching)
-            if len(all_jobs) < max_postings:
-                self.log.info("Checking Recommended jobs...")
-                await self.browser.navigate_to_jobs(collection=collection)
-                remaining = max_postings - len(all_jobs)
-                rec_jobs = await self.browser.get_job_listings(max_count=min(remaining, 15))
-                for j in rec_jobs:
-                    jid = j.get("job_id", "")
-                    if jid and jid not in seen_job_ids:
-                        all_jobs.append(j)
-                        seen_job_ids.add(jid)
-                self.log.info(f"  Recommended → {len(rec_jobs)} jobs")
-
-            # Source 3: Keyword search (broader discovery)
+            # Source 2: Keyword search (your configured search terms)
             if len(all_jobs) < max_postings:
                 self.log.info(f"Searching by keywords: {keywords}")
             for keyword in keywords:
@@ -352,6 +335,24 @@ class JobAgent:
                         seen_job_ids.add(jid)
                         new_count += 1
                 self.log.info(f"  '{keyword}' → {new_count} new jobs")
+
+            # Source 3: Custom search URLs (additional — boolean queries, job alerts)
+            if custom_urls and len(all_jobs) < max_postings:
+                self.log.info(f"Scanning {len(custom_urls)} custom URL(s) (additional)...")
+                for url in custom_urls:
+                    if self._shutdown_event.is_set() or len(all_jobs) >= max_postings:
+                        break
+                    await self.browser.navigate_to_url(url)
+                    remaining = max_postings - len(all_jobs)
+                    url_jobs = await self.browser.get_job_listings(max_count=min(remaining, 20))
+                    new_count = 0
+                    for j in url_jobs:
+                        jid = j.get("job_id", "")
+                        if jid and jid not in seen_job_ids:
+                            all_jobs.append(j)
+                            seen_job_ids.add(jid)
+                            new_count += 1
+                    self.log.info(f"  Custom URL → {new_count} new jobs")
 
             self.log.info(f"Found {len(all_jobs)} unique jobs to evaluate")
 
