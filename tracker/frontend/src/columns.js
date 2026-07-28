@@ -1,4 +1,4 @@
-import { Heart, FileText, Calendar, CircleCheckBig, X, Radar } from 'lucide-react';
+import { Heart, FileText, Calendar, CircleCheckBig, X, Radar, Send } from 'lucide-react';
 
 export const COLUMNS = [
   {
@@ -12,6 +12,18 @@ export const COLUMNS = [
     hoverBg: 'hover:bg-[#e0e7ff]',
     emptyText: 'No jobs discovered yet',
     emptyHint: 'Jobs matching your criteria will appear here.',
+  },
+  {
+    id: 'reached_out',
+    label: 'Reached Out',
+    icon: Send,
+    barColor: 'bg-[#8b5cf6]',
+    textColor: 'text-[#6d28d9]',
+    badgeBg: 'bg-[#ede9fe]',
+    badgeText: 'text-[#5b21b6]',
+    hoverBg: 'hover:bg-[#ede9fe]',
+    emptyText: 'No outreach yet',
+    emptyHint: 'InMail drafted to recruiter/TA for these jobs.',
   },
   {
     id: 'saved',

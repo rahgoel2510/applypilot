@@ -16,6 +16,7 @@ from database import Base
 
 class JobStage(str, enum.Enum):
     discovered = "discovered"
+    reached_out = "reached_out"
     saved = "saved"
     applied = "applied"
     interviewing = "interviewing"
@@ -30,6 +31,7 @@ class JobSource(str, enum.Enum):
 
 class AgentEvent(str, enum.Enum):
     discovered = "discovered"
+    reached_out = "reached_out"
     submitted = "submitted"
     paused = "paused"
     skipped = "skipped"
@@ -38,6 +40,7 @@ class AgentEvent(str, enum.Enum):
 # Event-to-stage mapping
 EVENT_STAGE_MAP = {
     AgentEvent.discovered: JobStage.discovered,
+    AgentEvent.reached_out: JobStage.reached_out,
     AgentEvent.submitted: JobStage.applied,
     AgentEvent.paused: JobStage.saved,
     AgentEvent.skipped: JobStage.saved,
@@ -112,6 +115,7 @@ class WebhookPayload(BaseModel):
 
 class StatsResponse(BaseModel):
     discovered: int = 0
+    reached_out: int = 0
     saved: int = 0
     applied: int = 0
     interviewing: int = 0

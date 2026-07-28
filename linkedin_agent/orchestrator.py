@@ -433,6 +433,17 @@ class JobAgent:
                     )
                     discovered_count += 1
 
+                    # Draft InMail to recruiter/TA for high-match jobs
+                    if score is not None and self.matcher.meets_threshold(score) and inmail_enabled:
+                        self.log.info(f"  ✉ Drafting InMail to recruiter...")
+                        await self.send_inmail_for_job(job)
+                        # Update tracker: discovered → reached_out
+                        await self.tracker.push_event(
+                            event="reached_out", title=job_title, company=company,
+                            location=job.get("location"), match_score=score,
+                            posting_url=job.get("url"),
+                        )
+
                     # Decision
                     if is_external:
                         self.log.info(f"  → Not Easy Apply. User must apply manually.")

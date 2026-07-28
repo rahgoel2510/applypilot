@@ -216,6 +216,7 @@ def webhook_agent(payload: WebhookPayload, db: Session = Depends(get_db)):
     # Map agent event to log event type and severity
     event_log_map = {
         "discovered": (LogEventType.info, LogSeverity.info),
+        "reached_out": (LogEventType.inmail_drafted, LogSeverity.success),
         "submitted": (LogEventType.job_submitted, LogSeverity.success),
         "paused": (LogEventType.job_paused, LogSeverity.warning),
         "skipped": (LogEventType.job_skipped, LogSeverity.info),
