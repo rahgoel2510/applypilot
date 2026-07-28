@@ -6,6 +6,7 @@ Provides the JobMatcher class responsible for:
 - Deduplication against an on-disk applied-jobs set
 - Classifying application form fields into auto-fillable vs needs-human-input
 - Detecting sensitive fields (CTC, equity, nationality, etc.)
+- Self-learning from user feedback to adjust scoring
 
 Thread-safe: all mutable state access is protected by a threading.Lock.
 """
@@ -13,16 +14,21 @@ Thread-safe: all mutable state access is protected by a threading.Lock.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 # ---------------------------------------------------------------------------
 # Persistence path for deduplication
 # ---------------------------------------------------------------------------
 
 APPLIED_FILE: Path = Path.home() / ".linkedin_agent" / "applied.json"
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Sensitive-field detection patterns
@@ -108,13 +114,20 @@ class JobMatcher:
     Args:
         threshold: Minimum match score (0.0–1.0) to consider a job worth applying.
                    Defaults to 0.80.
+        tracker_url: Base URL of the tracker API for fetching feedback.
+                     Defaults to http://localhost:8000.
     """
 
-    def __init__(self, threshold: float = 0.80) -> None:
+    def __init__(self, threshold: float = 0.80, tracker_url: str = "http://localhost:8000") -> None:
         self._threshold = threshold
+        self._tracker_url = tracker_url.rstrip("/")
         self._lock = threading.Lock()
         self._applied: set[str] = set()
         self._load_applied()
+        # Feedback cache (populated by load_feedback)
+        self._promoted_companies: list[str] = []
+        self._rejected_companies: list[str] = []
+        self._feedback_loaded: bool = False
 
     # ------------------------------------------------------------------
     # Score & threshold
@@ -248,3 +261,72 @@ class JobMatcher:
             if pattern.search(field_label):
                 return key
         return None
+
+    # ------------------------------------------------------------------
+    # Self-learning: feedback-adjusted scoring
+    # ------------------------------------------------------------------
+
+    def load_feedback(self) -> None:
+        """Fetch feedback summary from the tracker API and cache it.
+
+        Updates internal promoted/rejected company lists for use in
+        adjust_score(). Safe to call periodically (e.g. once per scan cycle).
+        Logs a warning if the tracker is unreachable and continues with
+        stale or empty feedback.
+        """
+        url = f"{self._tracker_url}/api/feedback/summary"
+        try:
+            resp = httpx.get(url, timeout=5.0)
+            resp.raise_for_status()
+            data = resp.json()
+
+            with self._lock:
+                self._promoted_companies = [
+                    c.strip().lower() for c in data.get("promoted_companies", [])
+                ]
+                self._rejected_companies = [
+                    c.strip().lower() for c in data.get("rejected_companies", [])
+                ]
+                self._feedback_loaded = True
+
+            # Check if scoring threshold might need adjustment
+            avg_scores = data.get("avg_score_by_action", {})
+            interview_avg = avg_scores.get("promoted_to_interview")
+            if interview_avg is not None:
+                diff = abs(interview_avg - self._threshold)
+                if diff > 0.15:
+                    logger.warning(
+                        "Scoring calibration notice: avg score of jobs promoted to interview "
+                        "is %.2f but threshold is %.2f (diff=%.2f). Consider adjusting "
+                        "match_threshold in config.",
+                        interview_avg,
+                        self._threshold,
+                        diff,
+                    )
+
+        except (httpx.HTTPError, httpx.TimeoutException, Exception) as exc:
+            logger.warning("Could not load feedback from tracker (%s): %s", url, exc)
+
+    def adjust_score(self, score: float, company: str) -> float:
+        """Adjust a raw match score based on learned feedback signals.
+
+        - Companies in the 'promoted' list get a +10% boost.
+        - Companies in the 'rejected' list get a -10% penalty.
+        - Score is clamped to [0.0, 1.0].
+
+        Args:
+            score: Raw match score (0.0–1.0).
+            company: Company name for the job being scored.
+
+        Returns:
+            Adjusted score clamped to [0.0, 1.0].
+        """
+        company_lower = company.strip().lower()
+
+        with self._lock:
+            if company_lower in self._promoted_companies:
+                score *= 1.10  # +10% boost
+            elif company_lower in self._rejected_companies:
+                score *= 0.90  # -10% penalty
+
+        return max(0.0, min(score, 1.0))

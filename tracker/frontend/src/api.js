@@ -153,3 +153,101 @@ export async function fetchFreeModels() {
   if (!res.ok) throw new Error('Failed to fetch models');
   return res.json();
 }
+
+// ===========================================================================
+// Scheduler API
+// ===========================================================================
+
+export async function getSchedule() {
+  const res = await fetch(`${BASE_URL}/scheduler`);
+  if (!res.ok) throw new Error('Failed to get schedule');
+  return res.json();
+}
+
+export async function updateSchedule(config) {
+  const res = await fetch(`${BASE_URL}/scheduler`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) throw new Error('Failed to update schedule');
+  return res.json();
+}
+
+export async function getNextRuns() {
+  const res = await fetch(`${BASE_URL}/scheduler/next-runs`);
+  if (!res.ok) throw new Error('Failed to get next runs');
+  return res.json();
+}
+
+// ===========================================================================
+// Service API
+// ===========================================================================
+
+export async function getServiceStatus() {
+  const res = await fetch(`${BASE_URL}/service/status`);
+  if (!res.ok) throw new Error('Failed to get service status');
+  return res.json();
+}
+
+export async function startService() {
+  const res = await fetch(`${BASE_URL}/service/start`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to start service');
+  return res.json();
+}
+
+export async function stopService() {
+  const res = await fetch(`${BASE_URL}/service/stop`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to stop service');
+  return res.json();
+}
+
+export async function setAutoStart(enabled) {
+  const res = await fetch(`${BASE_URL}/service/auto-start`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error('Failed to set auto-start');
+  return res.json();
+}
+
+// ===========================================================================
+// Agents API
+// ===========================================================================
+
+export async function getAgentTypes() {
+  const res = await fetch(`${BASE_URL}/agents`);
+  if (!res.ok) throw new Error('Failed to get agent types');
+  return res.json();
+}
+
+export async function updateAgentConfig(agentId, config) {
+  const res = await fetch(`${BASE_URL}/agents/${agentId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ config }),
+  });
+  if (!res.ok) throw new Error('Failed to update agent config');
+  return res.json();
+}
+
+export async function toggleAgent(agentId, enabled) {
+  const res = await fetch(`${BASE_URL}/agents/${agentId}/toggle`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error('Failed to toggle agent');
+  return res.json();
+}
+
+// ===========================================================================
+// Feedback / Learning API
+// ===========================================================================
+
+export async function getFeedbackSummary() {
+  const res = await fetch(`${BASE_URL}/feedback/summary`);
+  if (!res.ok) throw new Error('Failed to get feedback summary');
+  return res.json();
+}

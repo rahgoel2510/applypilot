@@ -184,6 +184,40 @@ class TrackerClient:
         )
 
     # ------------------------------------------------------------------
+    # InMail Draft persistence
+    # ------------------------------------------------------------------
+
+    async def push_inmail_draft(
+        self,
+        job_title: str,
+        company: str,
+        recruiter: str,
+        draft_text: str,
+        job_id: str | None = None,
+    ) -> bool:
+        """Push an InMail draft to the tracker database.
+
+        Args:
+            job_title: Title of the job this InMail is for.
+            company: Company name.
+            recruiter: Recruiter/hiring manager name.
+            draft_text: The generated InMail message text.
+            job_id: Optional job ID to link the draft to a tracked job.
+
+        Returns:
+            True if the draft was stored successfully.
+        """
+        payload = {
+            "job_title": job_title,
+            "company": company,
+            "recruiter_name": recruiter,
+            "draft_text": draft_text,
+            "job_id": job_id,
+            "status": "drafted",
+        }
+        return await self._post(f"{self._base_url}/inmail-drafts", payload)
+
+    # ------------------------------------------------------------------
     # Internal HTTP helper
     # ------------------------------------------------------------------
 

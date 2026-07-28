@@ -200,6 +200,15 @@ class JobAgent:
                 draft=draft,
             )
 
+            # Persist InMail draft to the tracker database
+            await self.tracker.push_inmail_draft(
+                job_title=job.get("title", "N/A"),
+                company=job.get("company", "N/A"),
+                recruiter=recruiter,
+                draft_text=draft,
+                job_id=job.get("job_id") or job.get("id"),
+            )
+
             await self.tracker.log_inmail_drafted(
                 title=job.get("title", "N/A"),
                 company=job.get("company", "N/A"),
@@ -208,15 +217,45 @@ class JobAgent:
         except Exception as exc:
             self.log.warning(f"Failed to draft InMail: {exc}")
 
-    async def report_tally(self) -> None:
-        """Send the current cycle tally to Telegram."""
-        tally_dict = {
-            "submitted": self.tally.submitted,
-            "paused": self.tally.paused,
-            "skipped_threshold": self.tally.skipped,
-            "skipped_external": 0,
-        }
-        await self.notifier.send_tally_report(tally_dict)
+    async def report_tally(self, full_metrics: dict = None) -> None:
+        """Send the current cycle tally to Telegram.
+
+        Args:
+            full_metrics: If provided, sends an enhanced tally with the full funnel
+                breakdown. If None, falls back to the legacy 4-bucket format for
+                backwards compatibility.
+        """
+        if full_metrics is not None:
+            # Enhanced format with full funnel visibility
+            total_found = full_metrics.get("total_found", 0)
+            dedup_skipped = full_metrics.get("dedup_skipped", 0)
+            new_discovered = full_metrics.get("new_discovered", 0)
+            applied = full_metrics.get("applied", 0)
+            external_manual = full_metrics.get("external_manual", 0)
+            skipped_low_score = full_metrics.get("skipped_low_score", 0)
+            paused = full_metrics.get("paused", 0)
+            errors = full_metrics.get("errors", 0)
+
+            enhanced_tally = {
+                "submitted": applied,
+                "paused": paused,
+                "skipped_threshold": skipped_low_score,
+                "skipped_external": external_manual,
+                "total_found": total_found,
+                "dedup_skipped": dedup_skipped,
+                "new_discovered": new_discovered,
+                "errors": errors,
+            }
+            await self.notifier.send_tally_report(enhanced_tally)
+        else:
+            # Legacy 4-bucket format (backwards compat)
+            tally_dict = {
+                "submitted": self.tally.submitted,
+                "paused": self.tally.paused,
+                "skipped_threshold": self.tally.skipped,
+                "skipped_external": 0,
+            }
+            await self.notifier.send_tally_report(tally_dict)
 
     # ─── Scan Cycle ─────────────────────────────────────────────────
 
@@ -238,6 +277,14 @@ class JobAgent:
         inmail_enabled = self.config.inmail.enabled
         notify_on_submit = self.config.telegram.notify_on_submit
         notify_on_pause = self.config.telegram.notify_on_pause
+
+        # Initialize counters for the finally block (may not reach assignment in try)
+        total_jobs = 0
+        dedup_skipped = 0
+        discovered_count = 0
+        applied_count = 0
+        external_count = 0
+        skipped_count = 0
 
         # a. Notify start (log only, no Telegram spam)
         await self.tracker.log_cycle_start(max_postings, collection)
@@ -394,11 +441,6 @@ class JobAgent:
 
             # d. Process each job: open → score → decide → apply/skip
             total_jobs = len(all_jobs)
-            discovered_count = 0
-            applied_count = 0
-            external_count = 0
-            skipped_count = 0
-            dedup_skipped = 0
 
             # Cloud dedup DB — skip jobs we've already processed
             from linkedin_agent.dedup_db import get_dedup_db
@@ -482,6 +524,11 @@ class JobAgent:
                     # Decision: Easy Apply vs External
                     if is_external:
                         self.log.info(f"  → Not Easy Apply. User applies manually from Discovered.")
+                        await self.tracker.push_event(
+                            event="skipped", title=job_title, company=company,
+                            location=job.get("location"), match_score=score,
+                            posting_url=job.get("url"),
+                        )
                         external_count += 1
                         self.tally.record(JobStatus.SKIPPED)
                         continue
@@ -493,6 +540,11 @@ class JobAgent:
 
                     if not self.matcher.meets_threshold(score):
                         self.log.info(f"  → Not worth applying ({score:.0%} < {self.config.job_search.match_threshold:.0%})")
+                        await self.tracker.push_event(
+                            event="skipped", title=job_title, company=company,
+                            location=job.get("location"), match_score=score,
+                            posting_url=job.get("url"),
+                        )
                         skipped_count += 1
                         self.tally.record(JobStatus.SKIPPED)
                         continue
@@ -519,6 +571,15 @@ class JobAgent:
                             applied_count += 1
                             self.log.info(f"  ✓ Applied successfully!")
                             dedup.mark_applied(job_id)
+                            # Send rich per-job Telegram notification
+                            await self.notifier.send_job_applied_notification(
+                                job_title=job_title,
+                                company=company,
+                                location=job.get("location", "Unknown"),
+                                match_score=score if score is not None else 0.0,
+                                posting_url=job.get("url", f"https://www.linkedin.com/jobs/view/{job_id}/"),
+                                action="Applied",
+                            )
                             if inmail_enabled:
                                 await self.send_inmail_for_job(job)
                         elif result.status == "paused":
@@ -556,17 +617,7 @@ class JobAgent:
             # Sync dedup DB to cloud
             dedup.sync()
 
-            # Send ONE meaningful Telegram summary (not per-job spam)
-            summary_msg = (
-                f"📊 Scan Complete\n\n"
-                f"Found: {total_jobs} jobs\n"
-                f"Already seen: {dedup_skipped}\n"
-                f"New discovered: {discovered_count}\n"
-                f"Applied: {applied_count}\n"
-                f"External: {external_count}\n"
-                f"Skipped: {skipped_count}"
-            )
-            await self.notifier.send_notification(summary_msg)
+            # Tally report is sent in the finally block via report_tally()
 
         except Exception as cycle_exc:
             self.log.error(f"Scan cycle error: {cycle_exc}", exc_info=True)
@@ -581,8 +632,17 @@ class JobAgent:
             )
 
         finally:
-            # f. Send tally report
-            await self.report_tally()
+            # f. Send tally report with full funnel metrics
+            await self.report_tally(full_metrics={
+                "total_found": total_jobs,
+                "dedup_skipped": dedup_skipped,
+                "new_discovered": discovered_count,
+                "applied": applied_count,
+                "external_manual": external_count,
+                "skipped_low_score": skipped_count,
+                "paused": self.tally.paused,
+                "errors": self.tally.errors,
+            })
 
             # Log cycle completion
             elapsed = (datetime.now() - self.tally.started_at).total_seconds()

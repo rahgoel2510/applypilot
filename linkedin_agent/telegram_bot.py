@@ -162,33 +162,123 @@ class TelegramNotifier:
     # ------------------------------------------------------------------
 
     async def send_tally_report(self, tally: dict[str, int]) -> None:
-        """Format and send the 4-bucket tally report.
+        """Format and send a funnel tally report.
+
+        Supports both the legacy 4-bucket format and the expanded funnel format.
 
         Args:
-            tally: Dictionary with keys:
-                - submitted: Number of applications submitted
-                - paused: Number of applications paused for review
-                - skipped_threshold: Number skipped due to low match score
-                - skipped_external: Number skipped due to external apply
+            tally: Dictionary with keys. Expanded funnel keys:
+                - total_found: Total jobs found in scan
+                - dedup_skipped: Jobs skipped (already seen)
+                - new_discovered: New jobs discovered this cycle
+                - applied: Applications submitted
+                - external_manual: External apply (user handles manually)
+                - skipped_low_score: Skipped due to low match score
+                - paused: Paused for human review
+                - errors: Errors during processing
+              Legacy keys (backwards compatible):
+                - submitted, paused, skipped_threshold, skipped_external
         """
-        submitted = tally.get("submitted", 0)
-        paused = tally.get("paused", 0)
-        skipped_threshold = tally.get("skipped_threshold", 0)
-        skipped_external = tally.get("skipped_external", 0)
-        total = submitted + paused + skipped_threshold + skipped_external
-
-        report = (
-            f"{EMOJI['report']} <b>Run Tally Report</b>\n"
-            f"{'─' * 28}\n"
-            f"{EMOJI['submitted']} Submitted: <b>{submitted}</b>\n"
-            f"{EMOJI['paused']} Paused (review needed): <b>{paused}</b>\n"
-            f"{EMOJI['skipped_threshold']} Skipped (low match): <b>{skipped_threshold}</b>\n"
-            f"{EMOJI['skipped_external']} Skipped (external apply): <b>{skipped_external}</b>\n"
-            f"{'─' * 28}\n"
-            f"{EMOJI['briefcase']} Total processed: <b>{total}</b>"
+        # Detect expanded format by checking for new keys
+        is_expanded = any(
+            k in tally for k in ("total_found", "new_discovered", "dedup_skipped")
         )
+
+        if is_expanded:
+            total_found = tally.get("total_found", 0)
+            dedup_skipped = tally.get("dedup_skipped", 0)
+            new_discovered = tally.get("new_discovered", 0)
+            applied = tally.get("applied", 0)
+            external_manual = tally.get("external_manual", 0)
+            skipped_low_score = tally.get("skipped_low_score", 0)
+            paused = tally.get("paused", 0)
+            errors = tally.get("errors", 0)
+
+            report = (
+                f"{EMOJI['report']} <b>Scan Cycle Funnel Report</b>\n"
+                f"{'─' * 28}\n"
+                f"🔍 Total found: <b>{total_found}</b>\n"
+                f"♻️ Already seen (dedup): <b>{dedup_skipped}</b>\n"
+                f"🆕 New discovered: <b>{new_discovered}</b>\n"
+                f"{'─' * 28}\n"
+                f"✅ Applied: <b>{applied}</b>\n"
+                f"🔗 External (manual): <b>{external_manual}</b>\n"
+                f"⚠️ Skipped (low score): <b>{skipped_low_score}</b>\n"
+                f"⏸️ Paused (review): <b>{paused}</b>\n"
+                f"❌ Errors: <b>{errors}</b>\n"
+                f"{'─' * 28}\n"
+                f"{EMOJI['rocket']} Cycle complete!"
+            )
+        else:
+            # Legacy 4-bucket format for backwards compatibility
+            submitted = tally.get("submitted", 0)
+            paused = tally.get("paused", 0)
+            skipped_threshold = tally.get("skipped_threshold", 0)
+            skipped_external = tally.get("skipped_external", 0)
+            total = submitted + paused + skipped_threshold + skipped_external
+
+            report = (
+                f"{EMOJI['report']} <b>Run Tally Report</b>\n"
+                f"{'─' * 28}\n"
+                f"{EMOJI['submitted']} Submitted: <b>{submitted}</b>\n"
+                f"{EMOJI['paused']} Paused (review needed): <b>{paused}</b>\n"
+                f"{EMOJI['skipped_threshold']} Skipped (low match): <b>{skipped_threshold}</b>\n"
+                f"{EMOJI['skipped_external']} Skipped (external apply): <b>{skipped_external}</b>\n"
+                f"{'─' * 28}\n"
+                f"{EMOJI['briefcase']} Total processed: <b>{total}</b>"
+            )
+
         await self._send_message(report)
         logger.info("Tally report sent: %s", tally)
+
+    # ------------------------------------------------------------------
+    # Public API: send_job_applied_notification
+    # ------------------------------------------------------------------
+
+    async def send_job_applied_notification(
+        self,
+        job_title: str,
+        company: str,
+        location: str,
+        match_score: float,
+        posting_url: str,
+        action: str,
+    ) -> None:
+        """Send a rich per-job notification with clickable job URL.
+
+        Args:
+            job_title: The job title.
+            company: The company name.
+            location: Job location.
+            match_score: Match score (0.0 to 1.0).
+            posting_url: URL to the job posting on LinkedIn.
+            action: The action taken (e.g., 'Applied', 'Paused', 'Skipped').
+        """
+        # Determine emoji based on action
+        action_lower = action.lower()
+        if action_lower in ("applied", "submitted"):
+            action_emoji = "✅"
+        elif action_lower == "paused":
+            action_emoji = "⏸️"
+        elif action_lower == "skipped":
+            action_emoji = "⚠️"
+        else:
+            action_emoji = "ℹ️"
+
+        score_pct = f"{match_score:.0%}" if match_score is not None else "N/A"
+
+        message = (
+            f"{action_emoji} <b>{action}</b>\n\n"
+            f"💼 <b>{job_title}</b>\n"
+            f"🏢 {company}\n"
+            f"📍 {location}\n"
+            f"📊 Match: <b>{score_pct}</b>\n\n"
+            f'🔗 <a href="{posting_url}">View Job</a>'
+        )
+        await self._send_message(message)
+        logger.info(
+            "Job applied notification sent: %s @ %s (%s)", job_title, company, action
+        )
 
     # ------------------------------------------------------------------
     # Public API: ask_human_input
@@ -466,6 +556,30 @@ async def ask_human_input(
     """
     notifier = _get_notifier()
     return await notifier.ask_human_input(job_title, company, fields, timeout)
+
+
+async def send_job_applied_notification(
+    job_title: str,
+    company: str,
+    location: str,
+    match_score: float,
+    posting_url: str,
+    action: str,
+) -> None:
+    """Send a rich per-job notification using the default notifier.
+
+    Args:
+        job_title: The job title.
+        company: The company name.
+        location: Job location.
+        match_score: Match score (0.0 to 1.0).
+        posting_url: URL to the job posting.
+        action: The action taken.
+    """
+    notifier = _get_notifier()
+    await notifier.send_job_applied_notification(
+        job_title, company, location, match_score, posting_url, action
+    )
 
 
 async def send_inmail_draft(

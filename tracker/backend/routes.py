@@ -13,6 +13,14 @@ from database import get_db
 from models import (
     EVENT_STAGE_MAP,
     ActivityLog,
+    FeedbackSignal,
+    FeedbackSignalResponse,
+    FeedbackSummaryResponse,
+    InMailDraft,
+    InMailDraftCreate,
+    InMailDraftResponse,
+    InMailDraftStatus,
+    InMailDraftStatusUpdate,
     Job,
     JobCreate,
     JobResponse,
@@ -65,6 +73,43 @@ def list_jobs(
         query = query.order_by(Job.date_added.desc())
 
     return query.all()
+
+
+@router.get("/jobs/audit")
+def audit_jobs(
+    db: Session = Depends(get_db),
+):
+    """Return all jobs with their scores for audit, sorted by score descending.
+
+    Useful for manual review of scoring accuracy. Returns id, title, company,
+    match_score, stage, posting_url, and date_added.
+    """
+    jobs = (
+        db.query(
+            Job.id,
+            Job.title,
+            Job.company,
+            Job.match_score,
+            Job.stage,
+            Job.posting_url,
+            Job.date_added,
+        )
+        .order_by(Job.match_score.desc().nulls_last())
+        .all()
+    )
+
+    return [
+        {
+            "id": j.id,
+            "title": j.title,
+            "company": j.company,
+            "match_score": j.match_score,
+            "stage": j.stage.value if hasattr(j.stage, "value") else j.stage,
+            "posting_url": j.posting_url,
+            "date_added": j.date_added.isoformat() if j.date_added else None,
+        }
+        for j in jobs
+    ]
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
@@ -127,6 +172,20 @@ def update_job_stage(job_id: str, stage_data: StageUpdate, db: Session = Depends
         stage=stage_data.stage.value,
         message=f"Moved from {old_stage.value if hasattr(old_stage, 'value') else old_stage} → {stage_data.stage.value}",
     )
+
+    # --- Self-learning: record feedback signal ---
+    user_action = _map_stage_transition_to_action(old_stage, stage_data.stage)
+    if user_action:
+        feedback = FeedbackSignal(
+            id=str(uuid.uuid4()),
+            job_id=job.id,
+            job_title=job.title,
+            company=job.company,
+            original_score=job.match_score,
+            user_action=user_action,
+        )
+        db.add(feedback)
+        db.commit()
 
     return job
 
@@ -325,8 +384,102 @@ def create_log(log_data: LogCreate, db: Session = Depends(get_db)):
 
 
 # ===========================================================================
+# InMail Drafts API
+# ===========================================================================
+
+
+@router.post("/inmail-drafts", response_model=InMailDraftResponse, status_code=201)
+def create_inmail_draft(draft_data: InMailDraftCreate, db: Session = Depends(get_db)):
+    """Create a new InMail draft (called by the agent after drafting)."""
+    draft = InMailDraft(
+        id=str(uuid.uuid4()),
+        job_id=draft_data.job_id,
+        job_title=draft_data.job_title,
+        company=draft_data.company,
+        recruiter_name=draft_data.recruiter_name,
+        draft_text=draft_data.draft_text,
+        status=draft_data.status,
+    )
+    db.add(draft)
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+@router.get("/inmail-drafts", response_model=list[InMailDraftResponse])
+def list_inmail_drafts(
+    job_id: Optional[str] = Query(None, description="Filter by job_id"),
+    status: Optional[InMailDraftStatus] = Query(None, description="Filter by status"),
+    db: Session = Depends(get_db),
+):
+    """List all InMail drafts, optionally filtered by job_id or status."""
+    query = db.query(InMailDraft)
+
+    if job_id:
+        query = query.filter(InMailDraft.job_id == job_id)
+
+    if status:
+        query = query.filter(InMailDraft.status == status)
+
+    return query.order_by(InMailDraft.created_at.desc()).all()
+
+
+@router.get("/jobs/{job_id}/inmail", response_model=list[InMailDraftResponse])
+def get_inmail_drafts_for_job(job_id: str, db: Session = Depends(get_db)):
+    """Get all InMail drafts associated with a specific job."""
+    drafts = (
+        db.query(InMailDraft)
+        .filter(InMailDraft.job_id == job_id)
+        .order_by(InMailDraft.created_at.desc())
+        .all()
+    )
+    return drafts
+
+
+@router.patch("/inmail-drafts/{draft_id}", response_model=InMailDraftResponse)
+def update_inmail_draft_status(
+    draft_id: str,
+    status_data: InMailDraftStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    """Update an InMail draft's status (e.g., mark as sent or skipped)."""
+    draft = db.query(InMailDraft).filter(InMailDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="InMail draft not found")
+
+    draft.status = status_data.status
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+# ===========================================================================
 # Helpers
 # ===========================================================================
+
+
+def _map_stage_transition_to_action(old_stage: JobStage, new_stage: JobStage) -> str | None:
+    """Map a stage transition to a feedback user_action string.
+
+    Returns None if the transition doesn't map to a meaningful signal.
+    """
+    old_val = old_stage.value if hasattr(old_stage, "value") else old_stage
+    new_val = new_stage.value if hasattr(new_stage, "value") else new_stage
+
+    # any → interviewing = strong positive
+    if new_val == "interviewing":
+        return "promoted_to_interview"
+    # any → offered = strongest positive
+    if new_val == "offered":
+        return "promoted_to_offer"
+    # any → rejected = negative
+    if new_val == "rejected":
+        return "rejected"
+    # discovered/saved → applied = manual apply (user liked it)
+    if old_val in ("discovered", "saved") and new_val == "applied":
+        return "manual_apply"
+
+    return None
 
 
 def _create_log(
@@ -352,6 +505,69 @@ def _create_log(
     )
     db.add(log_entry)
     db.commit()
+
+
+# ===========================================================================
+# Feedback / Self-Learning API
+# ===========================================================================
+
+
+@router.get("/feedback/summary", response_model=FeedbackSummaryResponse)
+def get_feedback_summary(db: Session = Depends(get_db)):
+    """Return aggregated feedback signals for self-learning.
+
+    Provides:
+    - Total signals by action type
+    - Average original_score per action (scoring calibration)
+    - Companies the user consistently promotes (positive signal)
+    - Companies the user consistently rejects (negative signal)
+    """
+    # Total signals by action type
+    action_counts = (
+        db.query(FeedbackSignal.user_action, func.count(FeedbackSignal.id))
+        .group_by(FeedbackSignal.user_action)
+        .all()
+    )
+    total_signals = {action: count for action, count in action_counts}
+
+    # Average original_score by action
+    score_avgs = (
+        db.query(FeedbackSignal.user_action, func.avg(FeedbackSignal.original_score))
+        .group_by(FeedbackSignal.user_action)
+        .all()
+    )
+    avg_score_by_action = {
+        action: round(avg, 4) if avg is not None else None
+        for action, avg in score_avgs
+    }
+
+    # Companies consistently promoted (interview + offer, appearing 2+ times)
+    positive_actions = ("promoted_to_interview", "promoted_to_offer", "manual_apply")
+    promoted_q = (
+        db.query(FeedbackSignal.company, func.count(FeedbackSignal.id).label("cnt"))
+        .filter(FeedbackSignal.user_action.in_(positive_actions))
+        .group_by(FeedbackSignal.company)
+        .having(func.count(FeedbackSignal.id) >= 2)
+        .all()
+    )
+    promoted_companies = [company for company, _ in promoted_q]
+
+    # Companies consistently rejected (appearing 2+ times)
+    rejected_q = (
+        db.query(FeedbackSignal.company, func.count(FeedbackSignal.id).label("cnt"))
+        .filter(FeedbackSignal.user_action == "rejected")
+        .group_by(FeedbackSignal.company)
+        .having(func.count(FeedbackSignal.id) >= 2)
+        .all()
+    )
+    rejected_companies = [company for company, _ in rejected_q]
+
+    return FeedbackSummaryResponse(
+        total_signals=total_signals,
+        avg_score_by_action=avg_score_by_action,
+        promoted_companies=promoted_companies,
+        rejected_companies=rejected_companies,
+    )
 
 
 # ===========================================================================

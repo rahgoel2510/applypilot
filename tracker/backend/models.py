@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
-from sqlalchemy import Column, DateTime, Enum, Float, String, Text
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, String, Text
 from sqlalchemy.dialects.sqlite import CHAR
 
 from database import Base
@@ -211,7 +211,98 @@ class AgentRun(Base):
     error_message = Column(Text, nullable=True)
 
 
+# ===========================================================================
+# InMail Drafts — persists AI-generated InMail messages linked to jobs
+# ===========================================================================
+
+
+class InMailDraftStatus(str, enum.Enum):
+    drafted = "drafted"
+    sent = "sent"
+    skipped = "skipped"
+
+
+class InMailDraft(Base):
+    __tablename__ = "inmail_drafts"
+
+    id = Column(CHAR(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    job_id = Column(CHAR(36), ForeignKey("jobs.id"), nullable=True)
+    job_title = Column(String, nullable=False)
+    company = Column(String, nullable=False)
+    recruiter_name = Column(String, nullable=False)
+    draft_text = Column(Text, nullable=False)
+    status = Column(Enum(InMailDraftStatus), default=InMailDraftStatus.drafted, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+# --- InMail Draft Pydantic Schemas ---
+
+
+class InMailDraftCreate(BaseModel):
+    job_id: Optional[str] = None
+    job_title: str
+    company: str
+    recruiter_name: str
+    draft_text: str
+    status: InMailDraftStatus = InMailDraftStatus.drafted
+
+
+class InMailDraftResponse(BaseModel):
+    id: str
+    job_id: Optional[str] = None
+    job_title: str
+    company: str
+    recruiter_name: str
+    draft_text: str
+    status: InMailDraftStatus
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class InMailDraftStatusUpdate(BaseModel):
+    status: InMailDraftStatus
+
+
 # --- Pydantic Schemas ---
+
+# ===========================================================================
+# Feedback Signal — captures user actions for self-learning scoring loop
+# ===========================================================================
+
+
+class FeedbackSignal(Base):
+    __tablename__ = "feedback_signals"
+
+    id = Column(CHAR(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    job_id = Column(CHAR(36), nullable=False, index=True)  # FK to jobs.id (logical)
+    job_title = Column(String, nullable=False)
+    company = Column(String, nullable=False)
+    original_score = Column(Float, nullable=True)
+    user_action = Column(String, nullable=False)  # e.g. 'promoted_to_interview', 'rejected', 'manual_apply'
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class FeedbackSignalResponse(BaseModel):
+    id: str
+    job_id: str
+    job_title: str
+    company: str
+    original_score: Optional[float] = None
+    user_action: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class FeedbackSummaryResponse(BaseModel):
+    total_signals: dict[str, int]  # action -> count
+    avg_score_by_action: dict[str, Optional[float]]  # action -> avg original_score
+    promoted_companies: list[str]  # companies consistently promoted
+    rejected_companies: list[str]  # companies consistently rejected
+
 
 class LogCreate(BaseModel):
     event_type: LogEventType
