@@ -1,33 +1,40 @@
 version: "3.8"
 
+# ═══════════════════════════════════════════════════════════════
+# ApplyPilot — Docker Compose
+# ═══════════════════════════════════════════════════════════════
+# This runs the TRACKER (web UI) only.
+# The AGENT runs natively on your machine (where LinkedIn session lives).
+#
+# Setup:
+#   1. docker-compose up -d          ← starts tracker at localhost:8000
+#   2. python -m linkedin_agent run  ← runs agent (uses your local session)
+#
+# The agent auto-pushes results to the tracker via HTTP.
+# ═══════════════════════════════════════════════════════════════
+
 services:
-  applypilot:
+  tracker:
     build:
       context: .
-      dockerfile: tracker/Dockerfile
-    image: rahgoel2510/applypilot:latest
+      dockerfile: tracker/Dockerfile.tracker
+    image: rahgoel2510/applypilot-tracker:latest
     container_name: applypilot
     ports:
       - "8000:8000"
-    env_file:
-      - .env
     volumes:
       - applypilot-data:/app/data
-      - applypilot-browser:/root/.local/share/linkedin_agent
     restart: unless-stopped
     environment:
       - DATABASE_URL=sqlite:///./data/tracker.db
       - TZ=Asia/Kolkata
-      - HOME=/root
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/stats')"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 10s
 
 volumes:
   applypilot-data:
-    driver: local
-  applypilot-browser:
     driver: local

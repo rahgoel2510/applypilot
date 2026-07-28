@@ -1,0 +1,25 @@
+# ─── Tracker Only (Web UI + API) ──────────────────────────────
+# Lightweight: just Node (build) + Python (serve). No Chromium.
+# The agent runs natively on your machine.
+
+FROM node:20-alpine AS frontend-build
+WORKDIR /app/frontend
+COPY tracker/frontend/package.json tracker/frontend/package-lock.json ./
+RUN npm ci
+COPY tracker/frontend/ ./
+RUN npm run build
+
+FROM python:3.12-slim
+WORKDIR /app
+
+COPY tracker/backend/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY tracker/backend/ ./
+COPY --from=frontend-build /app/frontend/dist ./static
+
+RUN mkdir -p /app/data
+ENV DATABASE_URL=sqlite:///./data/tracker.db
+
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
