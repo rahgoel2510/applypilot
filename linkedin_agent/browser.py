@@ -483,25 +483,29 @@ class LinkedInBrowser:
                 # Try to extract title from the link text itself
                 title = (await link.inner_text()).strip()
 
-                # Extract company name
-                # NOTE: Selector may need updating
-                company_el = await card.as_element().query_selector(
-                    ".artdeco-entity-lockup__subtitle span, "
-                    ".job-card-container__primary-description, "
-                    ".job-card-container__company-name"
-                )
-                if company_el:
-                    company = (await company_el.inner_text()).strip()
+                # Extract company and location from the card
+                card_element = card.as_element()
+                if card_element:
+                    # Extract company name
+                    company_el = await card_element.query_selector(
+                        ".artdeco-entity-lockup__subtitle span, "
+                        ".job-card-container__primary-description, "
+                        ".job-card-container__company-name"
+                    )
+                    if company_el:
+                        company = (await company_el.inner_text()).strip()
 
-                # Extract location
-                # NOTE: Selector may need updating
-                location_el = await card.as_element().query_selector(
-                    ".artdeco-entity-lockup__caption span, "
-                    ".job-card-container__metadata-wrapper span, "
-                    ".job-card-container__metadata-item"
-                )
-                if location_el:
-                    location = (await location_el.inner_text()).strip()
+                    # Extract location
+                    location_el = await card_element.query_selector(
+                        ".artdeco-entity-lockup__caption span, "
+                        ".job-card-container__metadata-wrapper span, "
+                        ".job-card-container__metadata-item"
+                    )
+                    if location_el:
+                        location = (await location_el.inner_text()).strip()
+            else:
+                # Fallback: just get title from link text
+                title = (await link.inner_text()).strip()
 
             listings.append({
                 "job_id": job_id,
