@@ -245,6 +245,15 @@ class JobAgent:
         self.log.info("Pipeline started")
 
         try:
+            # Pre-flight: validate AI model is configured and responsive
+            import os
+            ai_key = os.environ.get("OPENAI_API_KEY", "")
+            ai_model = os.environ.get("AI_MODEL", "openrouter/free")
+            if ai_key and not ai_key.startswith("placeholder"):
+                self.log.info(f"AI model: {ai_model} ✓")
+            else:
+                self.log.info("AI model: not configured (LLM features disabled)")
+
             # b. Launch browser + session check
             import time as _time
             t0 = _time.time()

@@ -146,6 +146,10 @@ class SmartPageParser:
 
         Only called when selectors fail. Rate-limit aware.
         """
+        # Refresh key/model from environment (picks up Settings changes)
+        self._api_key = os.environ.get("OPENAI_API_KEY", "") or self._api_key
+        self._model = os.environ.get("AI_MODEL", "openrouter/free") or self._model
+
         if not self._api_key:
             logger.debug("No API key — skipping LLM extraction.")
             return {}
