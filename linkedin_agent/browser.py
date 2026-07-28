@@ -430,110 +430,140 @@ class LinkedInBrowser:
     # Job Listings
     # ------------------------------------------------------------------
 
-    async def get_job_listings(self, max_count: int = 50) -> list[dict[str, Any]]:
-        """Scrape job cards from the current job collection page.
+    async def get_job_listings(self, max_count: int = 9999) -> list[dict[str, Any]]:
+        """Scrape ALL job cards with full pagination.
 
-        Scrolls to load more cards if needed.
+        Scrolls the job list to load all lazy-loaded cards on each page,
+        then clicks 'Next' to load more pages. Logs progress at every step.
 
         Args:
-            max_count: Maximum number of job listings to retrieve.
+            max_count: Maximum jobs to collect (default: no limit).
 
         Returns:
             List of dicts with keys: job_id, title, company, location, url.
         """
         page = self.page
         listings: list[dict[str, Any]] = []
-
-        # Scroll to load job cards (LinkedIn lazy-loads them)
-        for _ in range(max_count // 10 + 1):
-            await page.evaluate("window.scrollBy(0, 800)")
-            await _human_delay(0.5, 1.5)
-
-        # Find all job card links
-        # NOTE: Selector targets anchor elements linking to /jobs/view/<id>/
-        job_links = await page.query_selector_all("a[href*='/jobs/view/']")
-
         seen_ids: set[str] = set()
+        page_num = 1
 
-        for link in job_links:
+        while len(listings) < max_count:
+            # Scroll the list container to load all lazy cards
+            logger.info("  Page %d: scrolling to load cards...", page_num)
+            prev_count = 0
+            for scroll_attempt in range(20):
+                await page.evaluate('''() => {
+                    const list = document.querySelector('.scaffold-layout__list')
+                        || document.querySelector('[class*="scaffold-layout__list"]')
+                        || document.querySelector('.jobs-search-results-list');
+                    if (list) { list.scrollTop += 600; return; }
+                    const main = document.querySelector('main');
+                    if (main) { main.scrollTop += 600; return; }
+                    window.scrollBy(0, 600);
+                }''')
+                await asyncio.sleep(0.3)
+
+                # Check if new links loaded
+                current_links = await page.query_selector_all("a[href*='/jobs/view/']")
+                if len(current_links) > prev_count:
+                    prev_count = len(current_links)
+                elif scroll_attempt > 5:
+                    break  # No new cards loading, stop scrolling
+
+            await asyncio.sleep(0.5)
+
+            # Collect all job links on this page
+            job_links = await page.query_selector_all("a[href*='/jobs/view/']")
+
+            new_on_page = 0
+            for link in job_links:
+                if len(listings) >= max_count:
+                    break
+
+                href = await link.get_attribute("href") or ""
+                match = re.search(r"/jobs/view/(\d+)", href)
+                if not match:
+                    continue
+
+                job_id = match.group(1)
+                if job_id in seen_ids:
+                    continue
+                seen_ids.add(job_id)
+
+                # Get title from link text
+                title = (await link.inner_text()).strip()
+                title = title.split("\n")[0].strip()
+
+                # Get card container text for company/location
+                card = await link.evaluate_handle(
+                    "el => el.closest('li[class*=\"occludable\"], li[class*=\"ember-view\"], li[class*=\"job-card\"]') || el.closest('li') || el.parentElement.parentElement.parentElement"
+                )
+
+                company = ""
+                location = ""
+
+                if card:
+                    card_element = card.as_element()
+                    if card_element:
+                        try:
+                            card_text = await card_element.inner_text()
+                            lines = [l.strip() for l in card_text.split("\n") if l.strip() and len(l.strip()) > 1]
+                            remaining = [l for l in lines
+                                        if l != title
+                                        and title not in l
+                                        and "verification" not in l.lower()
+                                        and "with verification" not in l.lower()]
+                            if remaining:
+                                company = remaining[0]
+                            if len(remaining) >= 2:
+                                location = remaining[1]
+                        except Exception:
+                            pass
+
+                listings.append({
+                    "job_id": job_id,
+                    "title": title,
+                    "company": company,
+                    "location": location,
+                    "url": f"{LINKEDIN_BASE}/jobs/view/{job_id}/",
+                })
+                new_on_page += 1
+
+            logger.info("  Page %d: +%d jobs (running total: %d)", page_num, new_on_page, len(listings))
+
+            # Check if we've reached the limit
             if len(listings) >= max_count:
+                logger.info("  Reached max limit (%d). Stopping.", max_count)
                 break
 
-            href = await link.get_attribute("href") or ""
-            # Extract job ID from URL like /jobs/view/1234567890/
-            match = re.search(r"/jobs/view/(\d+)", href)
-            if not match:
-                continue
+            # No new jobs on this page means we're done
+            if new_on_page == 0:
+                logger.info("  No new jobs on page %d. All pages scanned.", page_num)
+                break
 
-            job_id = match.group(1)
-            if job_id in seen_ids:
-                continue
-            seen_ids.add(job_id)
+            # Click 'Next' button for next page
+            try:
+                next_btn = page.locator("button[aria-label='View next page'], button:has-text('Next')").first
+                if await next_btn.is_visible():
+                    await next_btn.click()
+                    logger.info("  → Next page...")
+                    await asyncio.sleep(3)
+                    # Scroll back to top of list for new page
+                    await page.evaluate('''() => {
+                        const list = document.querySelector('.scaffold-layout__list')
+                            || document.querySelector('[class*="scaffold-layout__list"]');
+                        if (list) list.scrollTop = 0;
+                    }''')
+                    await asyncio.sleep(1)
+                    page_num += 1
+                else:
+                    logger.info("  No 'Next' button — last page reached.")
+                    break
+            except Exception:
+                logger.info("  Pagination ended.")
+                break
 
-            # Get title from link text (this always works)
-            title = (await link.inner_text()).strip()
-            title = title.split("\n")[0].strip()  # First line only
-
-            # Get card container and extract text for AI parsing
-            card = await link.evaluate_handle(
-                "el => el.closest('.job-card-container, .jobs-search-results__list-item, li, article, div[data-job-id]') || el.parentElement.parentElement"
-            )
-
-            company = ""
-            location = ""
-
-            if card:
-                card_element = card.as_element()
-                if card_element:
-                    try:
-                        card_text = await card_element.inner_text()
-                        lines = [l.strip() for l in card_text.split("\n") if l.strip() and len(l.strip()) > 1]
-
-                        # Smart text parsing: title is first line, company/location follow
-                        # Remove the title line and parse remaining
-                        remaining = [l for l in lines if l != title and title not in l]
-
-                        if remaining:
-                            # Company is usually the first non-title line
-                            company = remaining[0] if remaining else ""
-                        if len(remaining) >= 2:
-                            # Location is usually second
-                            loc_candidate = remaining[1]
-                            # Validate it looks like a location (has city/country keywords)
-                            if any(w in loc_candidate.lower() for w in [
-                                'india', 'remote', 'hybrid', 'on-site', 'bangalore',
-                                'hyderabad', 'mumbai', 'delhi', 'pune', 'chennai',
-                                'usa', 'uk', 'singapore', 'dubai',
-                            ]) or '(' in loc_candidate:
-                                location = loc_candidate
-                            elif len(remaining) >= 3:
-                                location = remaining[2]
-                    except Exception:
-                        pass
-
-            # If still no company — use LLM as last resort
-            if not company:
-                try:
-                    from linkedin_agent.smart_parser import get_parser
-                    parser = get_parser()
-                    if parser.rate_limit_info["can_request"]:
-                        card_text_for_llm = f"Job link: {title}\nCard text: {card_text if 'card_text' in dir() else title}"
-                        data = await parser.extract_with_llm(card_text_for_llm)
-                        company = data.get("company", "") or ""
-                        if not location:
-                            location = data.get("location", "") or ""
-                except Exception:
-                    pass
-
-            listings.append({
-                "job_id": job_id,
-                "title": title,
-                "company": company,
-                "location": location,
-                "url": f"{LINKEDIN_BASE}/jobs/view/{job_id}/",
-            })
-
-        logger.info("Found %d job listings (max requested: %d).", len(listings), max_count)
+        logger.info("Scan complete: %d unique jobs across %d page(s).", len(listings), page_num)
         return listings
 
     async def open_job(self, job_id: str) -> None:

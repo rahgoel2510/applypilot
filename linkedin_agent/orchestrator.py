@@ -239,8 +239,7 @@ class JobAgent:
         notify_on_submit = self.config.telegram.notify_on_submit
         notify_on_pause = self.config.telegram.notify_on_pause
 
-        # a. Notify start
-        await self.notifier.send_notification("🚀 Starting scan cycle...")
+        # a. Notify start (log only, no Telegram spam)
         await self.tracker.log_cycle_start(max_postings, collection)
         self.log.info("Pipeline started")
 
@@ -399,6 +398,13 @@ class JobAgent:
             applied_count = 0
             external_count = 0
             skipped_count = 0
+            dedup_skipped = 0
+
+            # Cloud dedup DB — skip jobs we've already processed
+            from linkedin_agent.dedup_db import get_dedup_db
+            dedup = get_dedup_db()
+            if dedup.connected:
+                self.log.info(f"Dedup DB: {dedup.total_seen()} jobs previously seen")
 
             for idx, job in enumerate(all_jobs, 1):
                 if self._shutdown_event.is_set():
@@ -410,11 +416,17 @@ class JobAgent:
                     company = job.get("company", "Unknown")
                     job_id = job.get("job_id", "")
 
+                    # Dedup check — skip instantly if we've seen this job before
+                    if job_id and dedup.is_seen(job_id):
+                        dedup_skipped += 1
+                        continue
+
                     self.log.info(f"Scanning {idx}/{total_jobs}: {job_title} @ {company}")
 
-                    # Skip duplicates early
+                    # Skip duplicates (old local check)
                     if self.matcher.is_duplicate(company, job_title):
                         self.log.info(f"  → Already applied (duplicate)")
+                        dedup.mark_seen(job_id, title=job_title, company=company, status="applied", reason="duplicate")
                         skipped_count += 1
                         self.tally.record(JobStatus.SKIPPED)
                         continue
@@ -447,6 +459,14 @@ class JobAgent:
                         posting_url=job.get("url"),
                     )
                     discovered_count += 1
+
+                    # Record in dedup DB
+                    dedup.mark_seen(
+                        job_id, title=job_title, company=company,
+                        location=job.get("location", ""),
+                        status="discovered", match_score=score,
+                        is_easy_apply=not is_external,
+                    )
 
                     # For high-match jobs: Draft InMail BEFORE applying (Warm Inbound Strategy)
                     # Recruiter sees your message → then sees your application = intentional
@@ -498,6 +518,7 @@ class JobAgent:
                             )
                             applied_count += 1
                             self.log.info(f"  ✓ Applied successfully!")
+                            dedup.mark_applied(job_id)
                             if inmail_enabled:
                                 await self.send_inmail_for_job(job)
                         elif result.status == "paused":
@@ -525,11 +546,27 @@ class JobAgent:
             self.log.info("─" * 40)
             self.log.info(f"SUMMARY:")
             self.log.info(f"  Total jobs found:    {total_jobs}")
-            self.log.info(f"  Discovered (in tracker): {discovered_count}")
+            self.log.info(f"  Already seen (dedup): {dedup_skipped}")
+            self.log.info(f"  New discovered:      {discovered_count}")
             self.log.info(f"  Applied/would apply: {applied_count}")
             self.log.info(f"  External (manual):   {external_count}")
             self.log.info(f"  Skipped (low score): {skipped_count}")
             self.log.info("─" * 40)
+
+            # Sync dedup DB to cloud
+            dedup.sync()
+
+            # Send ONE meaningful Telegram summary (not per-job spam)
+            summary_msg = (
+                f"📊 Scan Complete\n\n"
+                f"Found: {total_jobs} jobs\n"
+                f"Already seen: {dedup_skipped}\n"
+                f"New discovered: {discovered_count}\n"
+                f"Applied: {applied_count}\n"
+                f"External: {external_count}\n"
+                f"Skipped: {skipped_count}"
+            )
+            await self.notifier.send_notification(summary_msg)
 
         except Exception as cycle_exc:
             self.log.error(f"Scan cycle error: {cycle_exc}", exc_info=True)
