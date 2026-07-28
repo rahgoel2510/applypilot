@@ -18,8 +18,8 @@
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
   <a href="https://rahgoel2510.github.io/applypilot">Website</a> •
+  <a href="docs/GUIDE.md">Full Guide</a> •
   <a href="#features">Features</a> •
-  <a href="#screenshots">Screenshots</a> •
   <a href="https://ko-fi.com/goelrah">Ko-fi</a>
 </p>
 
