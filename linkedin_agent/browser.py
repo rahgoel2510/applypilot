@@ -403,8 +403,8 @@ class LinkedInBrowser:
         if posted_within in time_map:
             params["f_TPR"] = time_map[posted_within]
 
-        # Easy Apply filter
-        params["f_AL"] = "true"  # Only show Easy Apply jobs
+        # Easy Apply filter (optional — agent checks per-job anyway)
+        # params["f_AL"] = "true"  # Disabled: let agent check per-job for more results
 
         search_url = f"{LINKEDIN_JOBS}search/?{urllib.parse.urlencode(params)}"
         await page.goto(search_url, wait_until="domcontentloaded")
