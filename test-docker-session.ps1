@@ -71,7 +71,7 @@ elseif ($result -match "^EXPIRED") {
     Write-Host "  =====================================" -ForegroundColor Red
     Write-Host ""
     Write-Host "  Fix: Copy your local session into Docker:" -ForegroundColor Yellow
-    Write-Host "    .\copy-session.ps1" -ForegroundColor White
+    Write-Host "    copy-session.ps1" -ForegroundColor White
 }
 else {
     Write-Host "  ⚠️  Unexpected result:" -ForegroundColor Yellow
@@ -79,7 +79,7 @@ else {
     Write-Host ""
     Write-Host "  Possible issues:" -ForegroundColor Yellow
     Write-Host "    - Chromium not installed (rebuild: docker-compose up --build)" -ForegroundColor Gray
-    Write-Host "    - No session files (run: .\copy-session.ps1)" -ForegroundColor Gray
+    Write-Host "    - No session files (run copy-session.ps1)" -ForegroundColor Gray
 }
 
 Write-Host ""
