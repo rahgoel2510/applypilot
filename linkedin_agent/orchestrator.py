@@ -299,15 +299,21 @@ class JobAgent:
 
             # Source 1: Recommended jobs (LinkedIn's best matches for your profile)
             self.log.info("Checking Recommended jobs...")
-            await self.browser.navigate_to_jobs(collection=collection)
-            remaining = max_postings
-            rec_jobs = await self.browser.get_job_listings(max_count=min(remaining, 15))
-            for j in rec_jobs:
-                jid = j.get("job_id", "")
-                if jid and jid not in seen_job_ids:
-                    all_jobs.append(j)
-                    seen_job_ids.add(jid)
-            self.log.info(f"  Recommended → {len(rec_jobs)} jobs")
+            try:
+                await self.browser.navigate_to_jobs(collection=collection)
+                remaining = max_postings
+                rec_jobs = await self.browser.get_job_listings(max_count=min(remaining, 15))
+                for j in rec_jobs:
+                    jid = j.get("job_id", "")
+                    if jid and jid not in seen_job_ids:
+                        all_jobs.append(j)
+                        seen_job_ids.add(jid)
+                if rec_jobs:
+                    self.log.info(f"  Recommended → {len(rec_jobs)} jobs")
+                else:
+                    self.log.info(f"  Recommended → 0 jobs (may not be available in headless)")
+            except Exception as rec_exc:
+                self.log.info(f"  Recommended → skipped ({str(rec_exc)[:40]})")
 
             # Source 2: Keyword search (combined OR + individual)
             if len(all_jobs) < max_postings:
