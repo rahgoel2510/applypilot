@@ -14,6 +14,7 @@ export default function AgentControlPanel() {
   const [status, setStatus] = useState({ state: 'idle', pid: null, started_at: null, uptime_seconds: 0, config: {}, last_error: null });
   const [output, setOutput] = useState([]);
   const [showOutput, setShowOutput] = useState(true);
+  const [outputTab, setOutputTab] = useState('updates');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [missingFields, setMissingFields] = useState([]);
@@ -370,71 +371,51 @@ export default function AgentControlPanel() {
       {/* Agent Pipeline Visualization */}
       <AgentPipelineView />
 
-      {/* Agent Live Updates — conversational style */}
+      {/* Agent Output — Updates & Debug tabs */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
-          <div className="flex items-center gap-3">
-            <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-emerald-600">
-              <Bot className="h-4 w-4 text-white" />
-              {isRunning && (
-                <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
-              )}
+        {/* Tab header */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+          <div className="flex items-center gap-4">
+            <div className="flex rounded-lg bg-slate-100 p-0.5">
+              <button
+                onClick={() => setOutputTab('updates')}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  outputTab === 'updates' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Updates
+              </button>
+              <button
+                onClick={() => setOutputTab('debug')}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  outputTab === 'debug' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Debug
+              </button>
             </div>
-            <div>
-              <span className="text-sm font-semibold text-slate-800">Pilot Updates</span>
-              <p className="text-[11px] text-slate-400">
-                {isRunning ? 'Working on your applications...' : 'Waiting for instructions'}
-              </p>
-            </div>
-          </div>
-
-      {/* Run History */}
-      <RunHistory />
-
-      {/* Missing Settings Modal */}
-      <MissingSettingsModal
-        isOpen={showMissingModal}
-        onClose={() => setShowMissingModal(false)}
-        missingFields={missingFields}
-        onSaved={() => {
-          setShowMissingModal(false);
-          // Retry trigger after settings are saved
-          setTimeout(doTrigger, 500);
-        }}
-      />
-          <div className="flex items-center gap-2">
             {isRunning && (
               <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-600 ring-1 ring-inset ring-emerald-200">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
                 Live
               </span>
             )}
-            <button
-              onClick={() => setShowOutput(!showOutput)}
-              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-            >
-              {showOutput ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
           </div>
+          <button
+            onClick={() => setShowOutput(!showOutput)}
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          >
+            {showOutput ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
         </div>
 
-        {showOutput && (
-          <div
-            ref={outputRef}
-            className="max-h-[420px] overflow-y-auto p-4 space-y-3"
-          >
+        {showOutput && outputTab === 'updates' && (
+          <div ref={outputRef} className="max-h-[420px] overflow-y-auto p-4 space-y-2">
             {output.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50">
-                  <Bot className="h-6 w-6 text-slate-300" />
-                </div>
-                <p className="text-sm font-medium text-slate-500">
-                  {isRunning ? "I'm getting ready..." : "Hi! I'm your ApplyPilot."}
-                </p>
-                <p className="mt-1 max-w-[280px] text-xs text-slate-400">
-                  {isRunning
-                    ? "Setting up the browser and connecting to LinkedIn. Updates will appear shortly."
-                    : "Hit 'Launch Agent' and I'll start scanning LinkedIn for matching jobs. I'll keep you updated on every step."}
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Bot className="h-8 w-8 text-slate-200 mb-3" />
+                <p className="text-sm text-slate-500">
+                  {isRunning ? "Getting ready..." : "Ready to scan. Hit Start to begin."}
                 </p>
               </div>
             ) : (
@@ -453,7 +434,41 @@ export default function AgentControlPanel() {
             )}
           </div>
         )}
+
+        {showOutput && outputTab === 'debug' && (
+          <div ref={outputRef} className="max-h-[420px] overflow-y-auto bg-[#0d1117] p-4 font-mono text-[11px] leading-5 select-text">
+            {output.length === 0 ? (
+              <div className="py-8 text-center text-slate-600">No logs yet.</div>
+            ) : (
+              output.map((line, i) => (
+                <div key={i} className={`flex hover:bg-slate-800/50 rounded px-1 ${
+                  line.includes('ERROR') || line.includes('Traceback') ? 'text-red-400' :
+                  line.includes('WARNING') ? 'text-amber-400' :
+                  line.includes('✓') || line.includes('submitted') ? 'text-emerald-400' :
+                  'text-slate-300'
+                }`}>
+                  <span className="mr-3 min-w-[3ch] select-none text-right text-slate-700">{i+1}</span>
+                  <span className="whitespace-pre-wrap break-all">{line}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Run History */}
+      <RunHistory />
+
+      {/* Missing Settings Modal */}
+      <MissingSettingsModal
+        isOpen={showMissingModal}
+        onClose={() => setShowMissingModal(false)}
+        missingFields={missingFields}
+        onSaved={() => {
+          setShowMissingModal(false);
+          setTimeout(doTrigger, 500);
+        }}
+      />
     </div>
   );
 }
@@ -620,6 +635,4 @@ function ConfigField({ label, icon: Icon, description, children }) {
   );
 }
 
-function getLineColor(line) {
-  return 'text-slate-300';
-}
+// end of file

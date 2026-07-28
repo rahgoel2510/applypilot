@@ -548,11 +548,25 @@ class JobAgent:
                 current_hour = now.hour
 
                 if active_start <= current_hour < active_end:
+                    self.log.info(f"Scheduled scan starting ({now.strftime('%H:%M')})")
+                    await self.notifier.send_notification(
+                        f"⏰ Scheduled scan starting ({now.strftime('%H:%M')})"
+                    )
                     await self.run_scan_cycle()
+
+                    # Send summary to Telegram
+                    summary = (
+                        f"📊 Scan complete!\n"
+                        f"Applied: {self.tally.submitted} | "
+                        f"Skipped: {self.tally.skipped} | "
+                        f"Errors: {self.tally.errors}\n"
+                        f"Next scan: ~{interval}min"
+                    )
+                    await self.notifier.send_notification(summary)
                 else:
                     self.log.info(
-                        f"Outside active hours ({active_start}–{active_end}), "
-                        f"sleeping until next check"
+                        f"Outside active hours ({active_start}:00–{active_end}:00). "
+                        f"Sleeping {interval}min..."
                     )
 
                 # Wait for next interval or shutdown
