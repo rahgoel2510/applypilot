@@ -43,7 +43,6 @@ const NAV_ITEMS = [
   { path: '/board', label: 'Board', icon: ViewKanbanIcon },
   { path: '/scheduler', label: 'Scheduler', icon: ScheduleIcon },
   { path: '/agents', label: 'Agents', icon: HubIcon },
-  { path: '/activity', label: 'Activity Log', icon: TimelineIcon },
   { path: '/settings', label: 'Settings', icon: SettingsIcon },
   { path: '/service', label: 'Service', icon: CloudIcon },
 ];

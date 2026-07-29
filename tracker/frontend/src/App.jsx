@@ -11,7 +11,6 @@ const PipelineView = lazy(() => import('./components/AgentPipelineView'));
 const Board = lazy(() => import('./pages/Board'));
 const Scheduler = lazy(() => import('./pages/Scheduler'));
 const Agents = lazy(() => import('./pages/Agents'));
-const ActivityLog = lazy(() => import('./pages/ActivityLog'));
 const Settings = lazy(() => import('./pages/Settings'));
 const ServiceManager = lazy(() => import('./pages/ServiceManager'));
 
@@ -49,7 +48,6 @@ export default function App() {
         <Route path="/board" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Board /></PageTransition></Suspense>} />
         <Route path="/scheduler" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Scheduler /></PageTransition></Suspense>} />
         <Route path="/agents" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Agents /></PageTransition></Suspense>} />
-        <Route path="/activity" element={<Suspense fallback={<MinimalFallback />}><PageTransition><ActivityLog /></PageTransition></Suspense>} />
         <Route path="/settings" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Settings /></PageTransition></Suspense>} />
         <Route path="/service" element={<Suspense fallback={<MinimalFallback />}><PageTransition><ServiceManager /></PageTransition></Suspense>} />
         <Route path="*" element={<Navigate to="/" replace />} />
