@@ -112,10 +112,17 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // Derived values
-  const totalJobs = stats?.total_jobs ?? stats?.total ?? 0;
-  const appliedCount = stats?.applied_today ?? stats?.applied ?? stats?.by_stage?.applied ?? 0;
-  const matchRate = stats?.match_rate ?? stats?.avg_match_score ?? 0;
+  // Derived values — compute from actual data
+  const totalJobs = stats?.total ?? 0;
+  const appliedCount = stats?.applied ?? 0;
+
+  // Compute match rate from jobs with scores
+  const matchRate = useMemo(() => {
+    const scored = jobs.filter(j => j.match_score != null);
+    if (scored.length === 0) return 0;
+    const avg = scored.reduce((sum, j) => sum + j.match_score, 0) / scored.length;
+    return avg; // 0-1 float
+  }, [jobs]);
 
   // Stage data for pipeline bar and funnel
   const stages = useMemo(() => {
