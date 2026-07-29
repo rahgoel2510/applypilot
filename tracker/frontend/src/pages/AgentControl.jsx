@@ -132,95 +132,79 @@ export default function AgentControl() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* ═══ STATUS BANNER ═══ */}
-      <Card
-        sx={{
-          m: 1.5,
-          mb: 0,
-          borderRadius: 3,
-          background: isRunning
-            ? 'linear-gradient(135deg, #059669 0%, #10b981 50%, #06b6d4 100%)'
-            : 'linear-gradient(135deg, #7c3aed 0%, #6366f1 50%, #3b82f6 100%)',
-          color: '#fff',
-          border: 'none',
-        }}
-      >
-        <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-          {/* Row 1: Status + Actions */}
-          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-            <Stack direction="row" alignItems="center" spacing={2}>
-              <Box
-                sx={{
-                  width: 16, height: 16, borderRadius: '50%', bgcolor: '#fff',
-                  boxShadow: '0 0 12px rgba(255,255,255,0.6)',
-                  animation: isRunning ? 'pulse 1.5s ease-in-out infinite' : 'none',
-                  '@keyframes pulse': { '0%,100%': { opacity: 1, transform: 'scale(1)' }, '50%': { opacity: 0.5, transform: 'scale(1.3)' } },
-                }}
-              />
-              <Typography sx={{ fontWeight: 800, fontSize: '1.5rem', letterSpacing: 1 }}>
-                {isRunning ? 'RUNNING' : 'IDLE'}
-              </Typography>
-              {uptimeStr && (
-                <Chip label={uptimeStr} sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600, fontSize: '0.9rem', height: 30 }} />
-              )}
-              {status.current_step && (
-                <Typography sx={{ fontSize: '0.9rem', opacity: 0.8 }}>• {status.current_step}</Typography>
-              )}
-            </Stack>
-            <Stack direction="row" spacing={1.5}>
-              <Button
-                variant="contained"
-                startIcon={loadingAction ? <CircularProgress size={16} color="inherit" /> : <PlayArrowIcon />}
-                onClick={handleStart}
-                disabled={isRunning || loadingAction}
-                sx={{ bgcolor: '#fff', color: '#059669', fontWeight: 700, fontSize: '0.9rem', px: 3, borderRadius: 2, '&:hover': { bgcolor: '#f0fdf4' }, '&.Mui-disabled': { opacity: 0.5, bgcolor: 'rgba(255,255,255,0.5)' } }}
-              >
-                Start
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<StopIcon />}
-                onClick={handleStop}
-                disabled={!isRunning || loadingAction}
-                sx={{ borderColor: 'rgba(255,255,255,0.5)', color: '#fff', fontWeight: 700, fontSize: '0.9rem', px: 3, borderRadius: 2, '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }, '&.Mui-disabled': { opacity: 0.4 } }}
-              >
-                Stop
-              </Button>
-            </Stack>
+      {/* ═══ CONTROL PANEL ═══ */}
+      <Box sx={{ m: 1.5, mb: 0 }}>
+        {/* Status Row */}
+        <Box sx={{ 
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          p: 1.5, mb: 1, borderRadius: 1.5,
+          bgcolor: isRunning ? '#E6F5F2' : 'background.paper',
+          border: '1px solid',
+          borderColor: isRunning ? '#067D68' : 'divider',
+        }}>
+          <Stack direction="row" alignItems="center" spacing={1.5}>
+            <Box sx={{
+              width: 12, height: 12, borderRadius: '50%',
+              bgcolor: isRunning ? '#067D68' : '#545B64',
+              boxShadow: isRunning ? '0 0 8px #067D68' : 'none',
+              animation: isRunning ? 'pulse 1.5s ease-in-out infinite' : 'none',
+              '@keyframes pulse': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.4 } },
+            }} />
+            <Typography sx={{ fontWeight: 700, fontSize: '1rem' }}>
+              {isRunning ? 'Agent Running' : 'Agent Idle'}
+            </Typography>
+            {uptimeStr && <Chip label={uptimeStr} size="small" sx={{ fontFamily: 'monospace', fontWeight: 600 }} />}
+            {status.current_step && <Typography color="text.secondary">— {status.current_step}</Typography>}
           </Stack>
+          <Stack direction="row" spacing={1}>
+            <Button variant="contained" size="small" color="primary"
+              startIcon={loadingAction ? <CircularProgress size={14} color="inherit" /> : <PlayArrowIcon />}
+              onClick={handleStart} disabled={isRunning || loadingAction}
+            >Start</Button>
+            <Button variant="outlined" size="small" color="error"
+              startIcon={<StopIcon />}
+              onClick={handleStop} disabled={!isRunning || loadingAction}
+            >Stop</Button>
+          </Stack>
+        </Box>
 
-          {/* Row 2: Controls */}
-          <Stack direction="row" alignItems="center" spacing={3} sx={{ pl: 0.5 }}>
-            <ToggleButtonGroup
-              value={mode}
-              exclusive
-              onChange={(_, v) => v && setMode(v)}
-              size="small"
-              sx={{
-                '& .MuiToggleButton-root': {
-                  textTransform: 'none', fontSize: '0.9rem', fontWeight: 600, px: 2.5, py: 0.5,
-                  borderRadius: '20px !important', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.3)',
-                  '&.Mui-selected': { bgcolor: 'rgba(255,255,255,0.25)', color: '#fff', border: '1px solid rgba(255,255,255,0.6)' },
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' },
-                },
-              }}
+        {/* Config Row */}
+        <Box sx={{
+          display: 'flex', alignItems: 'center', gap: 3, p: 1.5,
+          borderRadius: 1.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper',
+        }}>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mode</Typography>
+            <ToggleButtonGroup value={mode} exclusive onChange={(_, v) => v && setMode(v)} size="small"
+              sx={{ '& .MuiToggleButton-root': { textTransform: 'none', fontSize: '0.85rem', fontWeight: 600, px: 2, py: 0.25, borderRadius: '8px !important' } }}
             >
-              <ToggleButton value="single">Single Scan</ToggleButton>
+              <ToggleButton value="single">Single</ToggleButton>
               <ToggleButton value="daemon">Daemon</ToggleButton>
             </ToggleButtonGroup>
-
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Switch size="small" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)}
-                sx={{ '& .MuiSwitch-thumb': { bgcolor: '#fff' }, '& .MuiSwitch-track': { bgcolor: 'rgba(255,255,255,0.3)' }, '& .Mui-checked .MuiSwitch-thumb': { bgcolor: '#fff' }, '& .Mui-checked+.MuiSwitch-track': { bgcolor: 'rgba(255,255,255,0.5) !important' } }}
-              />
-              <Typography sx={{ fontSize: '0.9rem', fontWeight: 500 }}>Dry Run</Typography>
-            </Stack>
-
-            <Chip label={`Threshold: ${threshold}%`} sx={{ bgcolor: 'rgba(255,255,255,0.15)', color: '#fff', fontWeight: 600, fontSize: '0.9rem', height: 30, border: '1px solid rgba(255,255,255,0.2)' }} />
-            <Chip label={`Limit: ${limit}`} sx={{ bgcolor: 'rgba(255,255,255,0.15)', color: '#fff', fontWeight: 600, fontSize: '0.9rem', height: 30, border: '1px solid rgba(255,255,255,0.2)' }} />
           </Stack>
-        </CardContent>
-      </Card>
+
+          <Box sx={{ width: 1, height: 24, bgcolor: 'divider' }} />
+
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dry Run</Typography>
+            <Switch size="small" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
+          </Stack>
+
+          <Box sx={{ width: 1, height: 24, bgcolor: 'divider' }} />
+
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Threshold</Typography>
+            <Chip label={`${threshold}%`} size="small" variant="outlined" sx={{ fontWeight: 700, fontFamily: 'monospace' }} />
+          </Stack>
+
+          <Box sx={{ width: 1, height: 24, bgcolor: 'divider' }} />
+
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Limit</Typography>
+            <Chip label={`${limit}`} size="small" variant="outlined" sx={{ fontWeight: 700, fontFamily: 'monospace' }} />
+          </Stack>
+        </Box>
+      </Box>
 
       {/* ═══ MAIN CONTENT ═══ */}
       <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', m: 1.5, mt: 1.5, gap: 1.5 }}>

@@ -90,8 +90,7 @@ export default function AppLayout({ mode, toggleMode }) {
               content: '""',
               position: 'absolute',
               inset: 0,
-              background:
-                'linear-gradient(180deg, rgba(30,27,75,0) 0%, rgba(15,14,23,0.4) 100%)',
+              background: 'transparent',
               pointerEvents: 'none',
             },
           },
@@ -126,13 +125,13 @@ export default function AppLayout({ mode, toggleMode }) {
           <IconButton
             size="small"
             onClick={() => setCollapsed(!collapsed)}
-            sx={{ color: '#c4b5fd' }}
+            sx={{ color: '#8b9bab' }}
           >
             {collapsed ? <MenuIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
           </IconButton>
         </Box>
 
-        <Divider sx={{ borderColor: 'rgba(99, 102, 241, 0.15)' }} />
+        <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
 
         {/* Navigation */}
         <List sx={{ flex: 1, py: 1, position: 'relative', zIndex: 1 }}>
@@ -152,7 +151,7 @@ export default function AppLayout({ mode, toggleMode }) {
                 <ListItemIcon
                   sx={{
                     justifyContent: 'center',
-                    color: isActive(path) ? '#a78bfa' : '#8b7ab8',
+                    color: isActive(path) ? '#fff' : 'rgba(255,255,255,0.6)',
                   }}
                 >
                   <Icon fontSize="small" />
@@ -172,7 +171,7 @@ export default function AppLayout({ mode, toggleMode }) {
         </List>
 
         {/* Sidebar Footer */}
-        <Box sx={{ p: collapsed ? 1 : 2, borderTop: '1px solid rgba(99, 102, 241, 0.15)', position: 'relative', zIndex: 1 }}>
+        <Box sx={{ p: collapsed ? 1 : 2, borderTop: '1px solid rgba(255, 255, 255, 0.1)', position: 'relative', zIndex: 1 }}>
           {!collapsed && (
             <>
               <Chip

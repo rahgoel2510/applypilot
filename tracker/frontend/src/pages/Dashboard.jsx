@@ -39,30 +39,26 @@ const cardSx = {
   overflow: 'hidden',
   border: '1px solid',
   borderColor: 'divider',
-  boxShadow: 'none',
-  '&:hover': { boxShadow: 'none' },
+  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+  '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.08)' },
 };
 
-const cardContentSx = { p: 1.5, '&:last-child': { pb: 1.5 } };
+const cardContentSx = { p: 2.5, '&:last-child': { pb: 2.5 } };
 
-// Gradient stat card backgrounds
-const STAT_GRADIENTS = [
-  'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',  // purple
-  'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',  // cyan-blue
-  'linear-gradient(135deg, #f59e0b 0%, #ec4899 100%)',  // amber-pink
-  'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)',  // green-cyan
-];
+// Metric card colors (colored top strip)
+const METRIC_COLORS = ['#0073BB', '#067D68', '#EC7211', '#6B40B2'];
+const METRIC_BG = ['#E6F2FA', '#E6F5F2', '#FEF3E8', '#F3EEFB'];
 
 // Stage colors — vibrant
 const STAGE_COLORS = {
-  discovered: '#7c3aed',
-  matched: '#a855f7',
-  applied: '#3b82f6',
-  reached_out: '#ec4899',
-  saved: '#f59e0b',
-  interviewing: '#06b6d4',
-  offered: '#10b981',
-  rejected: '#f43f5e',
+  discovered: '#0073BB',
+  matched: '#6B40B2',
+  applied: '#067D68',
+  reached_out: '#6B40B2',
+  saved: '#EC7211',
+  interviewing: '#0073BB',
+  offered: '#067D68',
+  rejected: '#D13212',
 };
 
 const STAGE_LABELS = {
@@ -181,62 +177,68 @@ export default function Dashboard() {
       <Grid container spacing={1.5}>
         {/* ═══════════════ ROW 1: Stat Cards ═══════════════ */}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ ...cardSx, background: STAT_GRADIENTS[0], color: '#fff', border: 'none' }}>
+          <Card sx={{ ...cardSx, borderTop: `4px solid ${METRIC_COLORS[0]}` }}>
             <CardContent sx={cardContentSx}>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                 <Box>
-                  <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>Total Jobs</Typography>
-                  <Typography variant="h4" fontWeight={800} sx={{ lineHeight: 1.2, mt: 0.25, color: '#fff' }}>
+                  <Typography variant="overline" sx={{ mb: 0.5, display: 'block' }}>Total Jobs</Typography>
+                  <Typography variant="h2" sx={{ lineHeight: 1.2 }}>
                     {totalJobs}
                   </Typography>
-                  <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>All tracked jobs</Typography>
+                  <Typography variant="caption">All tracked jobs</Typography>
                 </Box>
-                <TrendingUpIcon sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 24 }} />
+                <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: METRIC_BG[0], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <TrendingUpIcon sx={{ color: METRIC_COLORS[0], fontSize: 20 }} />
+                </Box>
               </Stack>
             </CardContent>
           </Card>
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ ...cardSx, background: STAT_GRADIENTS[1], color: '#fff', border: 'none' }}>
+          <Card sx={{ ...cardSx, borderTop: `4px solid ${METRIC_COLORS[1]}` }}>
             <CardContent sx={cardContentSx}>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                 <Box>
-                  <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>Applied</Typography>
-                  <Typography variant="h4" fontWeight={800} sx={{ lineHeight: 1.2, mt: 0.25, color: '#fff' }}>
+                  <Typography variant="overline" sx={{ mb: 0.5, display: 'block' }}>Applied</Typography>
+                  <Typography variant="h2" sx={{ lineHeight: 1.2 }}>
                     {appliedCount}
                   </Typography>
-                  <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>This session</Typography>
+                  <Typography variant="caption">This session</Typography>
                 </Box>
-                <SendIcon sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 24 }} />
+                <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: METRIC_BG[1], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <SendIcon sx={{ color: METRIC_COLORS[1], fontSize: 20 }} />
+                </Box>
               </Stack>
             </CardContent>
           </Card>
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ ...cardSx, background: STAT_GRADIENTS[2], color: '#fff', border: 'none' }}>
+          <Card sx={{ ...cardSx, borderTop: `4px solid ${METRIC_COLORS[2]}` }}>
             <CardContent sx={cardContentSx}>
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                 <Box>
-                  <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>Match Rate</Typography>
-                  <Typography variant="h4" fontWeight={800} sx={{ lineHeight: 1.2, mt: 0.25, color: '#fff' }}>
+                  <Typography variant="overline" sx={{ mb: 0.5, display: 'block' }}>Match Rate</Typography>
+                  <Typography variant="h2" sx={{ lineHeight: 1.2 }}>
                     {Math.round(matchRate <= 1 ? matchRate * 100 : matchRate)}%
                   </Typography>
-                  <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)' }}>Avg score</Typography>
+                  <Typography variant="caption">Avg score</Typography>
                 </Box>
-                <PercentIcon sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 24 }} />
+                <Box sx={{ width: 40, height: 40, borderRadius: '10px', bgcolor: METRIC_BG[2], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <PercentIcon sx={{ color: METRIC_COLORS[2], fontSize: 20 }} />
+                </Box>
               </Stack>
             </CardContent>
           </Card>
         </Grid>
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Card sx={{ ...cardSx, background: STAT_GRADIENTS[3], color: '#fff', border: 'none' }}>
+          <Card sx={{ ...cardSx, borderTop: `4px solid ${METRIC_COLORS[3]}` }}>
             <CardContent sx={cardContentSx}>
-              <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)', mb: 0.5 }}>Pipeline</Typography>
+              <Typography variant="overline" sx={{ mb: 0.5, display: 'block' }}>Pipeline</Typography>
               {/* Stacked progress bar */}
-              <Box sx={{ display: 'flex', height: 18, borderRadius: 1, overflow: 'hidden', mb: 0.75, bgcolor: 'rgba(255,255,255,0.2)' }}>
+              <Box sx={{ display: 'flex', height: 18, borderRadius: 1, overflow: 'hidden', mb: 0.75, bgcolor: 'rgba(0,0,0,0.05)' }}>
                 {stages.filter(s => s.count > 0).map((s) => (
                   <Box
                     key={s.key}
@@ -253,7 +255,7 @@ export default function Dashboard() {
               </Box>
               <Stack direction="row" flexWrap="wrap" gap={0.5}>
                 {stages.filter(s => s.count > 0).map((s) => (
-                  <Typography key={s.key} variant="caption" sx={{ color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>
+                  <Typography key={s.key} variant="caption" sx={{ color: s.color, fontWeight: 600 }}>
                     {s.label}: {s.count}
                   </Typography>
                 ))}

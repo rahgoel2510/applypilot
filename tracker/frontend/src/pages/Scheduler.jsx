@@ -1,38 +1,37 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Box, Typography, Switch, TextField, Button, Grid, Chip,
-  FormControl, InputLabel, Select, MenuItem, List, ListItem,
-  ListItemIcon, ListItemText, Alert, ToggleButton, ToggleButtonGroup,
-  CircularProgress, RadioGroup, Radio, FormControlLabel, Stack,
+  Box, Typography, Switch, TextField, Button, Chip, Stack,
+  FormControl, InputLabel, Select, MenuItem, ToggleButton, ToggleButtonGroup,
+  CircularProgress, Card, CardContent,
 } from '@mui/material';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import TimerIcon from '@mui/icons-material/Timer';
 import EventRepeatIcon from '@mui/icons-material/EventRepeat';
-import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { useSnackbar } from 'notistack';
 import { getSchedule, updateSchedule, getNextRuns } from '../api';
 
-const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function describeCron(expression) {
   if (!expression || !expression.trim()) return '';
   const parts = expression.trim().split(/\s+/);
-  if (parts.length < 5) return 'Invalid cron expression';
+  if (parts.length < 5) return 'Invalid expression';
   const [minute, hour, , , dayOfWeek] = parts;
-  const dayNames = { '0': 'Sun', '1': 'Mon', '2': 'Tue', '3': 'Wed', '4': 'Thu', '5': 'Fri', '6': 'Sat', '7': 'Sun' };
+  const dayNames = { '0': 'Sun', '1': 'Mon', '2': 'Tue', '3': 'Wed', '4': 'Thu', '5': 'Fri', '6': 'Sat' };
   let desc = '';
-  if (minute.startsWith('*/')) desc += `Every ${minute.slice(2)} min`;
-  else if (minute === '*') desc += 'Every min';
-  else desc += `At :${minute.padStart(2, '0')}`;
-  if (hour.includes('-')) { const [s, e] = hour.split('-'); desc += ` (${s}:00–${e}:00)`; }
-  else if (hour.startsWith('*/')) desc += `, every ${hour.slice(2)}h`;
+  if (minute.startsWith('*/')) desc += `Every ${minute.slice(2)} minutes`;
+  else if (minute === '*') desc += 'Every minute';
+  else desc += `At minute ${minute}`;
+  if (hour.includes('-')) { const [s, e] = hour.split('-'); desc += ` between ${s}:00–${e}:00`; }
   else if (hour !== '*') desc += ` at ${hour.padStart(2, '0')}:00`;
   if (dayOfWeek !== '*' && dayOfWeek !== '?') {
-    if (dayOfWeek.includes(',')) desc += `, ${dayOfWeek.split(',').map((d) => dayNames[d] || d).join('/')}`;
-    else if (dayOfWeek.includes('-')) { const [s, e] = dayOfWeek.split('-'); desc += `, ${dayNames[s]||s}–${dayNames[e]||e}`; }
-    else desc += `, ${dayNames[dayOfWeek] || dayOfWeek}`;
+    const days = dayOfWeek.split(',').map(d => dayNames[d] || d).join(', ');
+    desc += ` on ${days}`;
   }
   return desc;
 }
@@ -43,17 +42,15 @@ export default function Scheduler() {
   const [saving, setSaving] = useState(false);
   const [nextRuns, setNextRuns] = useState([]);
   const [config, setConfig] = useState({
-    enabled: true, mode: 'interval', interval_minutes: 60, cron_expression: '',
-    cron_frequency: 'hourly', cron_minute: 0, cron_hour: 9,
-    cron_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-    active_hours_start: 9, active_hours_end: 18,
+    enabled: true, mode: 'interval', interval_minutes: 60,
+    cron_expression: '', active_hours_start: 9, active_hours_end: 18,
     days_of_week: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
   });
 
   const loadSchedule = useCallback(async () => {
     try {
       const data = await getSchedule();
-      if (data) setConfig((prev) => ({ ...prev, ...data }));
+      if (data) setConfig(prev => ({ ...prev, ...data }));
       const runs = await getNextRuns();
       if (runs?.next_runs) setNextRuns(runs.next_runs);
     } catch (err) { console.error(err); }
@@ -66,155 +63,284 @@ export default function Scheduler() {
     setSaving(true);
     try {
       await updateSchedule(config);
-      enqueueSnackbar('Schedule saved', { variant: 'success' });
+      enqueueSnackbar('Schedule saved successfully', { variant: 'success' });
       const runs = await getNextRuns();
       if (runs?.next_runs) setNextRuns(runs.next_runs);
-    } catch { enqueueSnackbar('Failed to save', { variant: 'error' }); }
+    } catch { enqueueSnackbar('Failed to save schedule', { variant: 'error' }); }
     finally { setSaving(false); }
   };
 
-  const toggleDay = (day) => setConfig((p) => ({ ...p, days_of_week: p.days_of_week.includes(day) ? p.days_of_week.filter((d) => d !== day) : [...p.days_of_week, day] }));
-  const toggleCronDay = (day) => setConfig((p) => ({ ...p, cron_days: p.cron_days.includes(day) ? p.cron_days.filter((d) => d !== day) : [...p.cron_days, day] }));
+  const toggleDay = (day) => setConfig(p => ({
+    ...p, days_of_week: p.days_of_week.includes(day) ? p.days_of_week.filter(d => d !== day) : [...p.days_of_week, day]
+  }));
+
   const cronDescription = useMemo(() => describeCron(config.cron_expression), [config.cron_expression]);
 
-  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}><CircularProgress size={24} /></Box>;
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8 }}><CircularProgress /></Box>;
 
   return (
-    <Box sx={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }}>
-      {/* Top bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75, borderBottom: 1, borderColor: 'divider' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography sx={{ fontSize: 14, fontWeight: 700 }}>Scheduler</Typography>
-          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: config.enabled ? 'success.main' : 'grey.400' }} />
-          <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>{config.enabled ? 'Active' : 'Off'}</Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Switch size="small" checked={config.enabled} onChange={(e) => setConfig({ ...config, enabled: e.target.checked })} />
-          <Button variant="contained" size="small" startIcon={saving ? <CircularProgress size={12} color="inherit" /> : <SaveIcon sx={{ fontSize: 14 }} />} onClick={handleSave} disabled={saving} sx={{ fontSize: 11, py: 0.25, px: 1.5 }}>Save</Button>
-        </Box>
-      </Box>
+    <Box sx={{ p: 2, maxWidth: 1100, mx: 'auto' }}>
+      {/* Header */}
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <ScheduleIcon sx={{ fontSize: 28, color: 'primary.main' }} />
+          <Box>
+            <Typography variant="h5" fontWeight={700}>Agent Scheduler</Typography>
+            <Typography color="text.secondary">Configure when the agent runs automatically</Typography>
+          </Box>
+        </Stack>
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography fontWeight={600} color={config.enabled ? 'success.main' : 'text.secondary'}>
+              {config.enabled ? 'Enabled' : 'Disabled'}
+            </Typography>
+            <Switch checked={config.enabled} onChange={(e) => setConfig({ ...config, enabled: e.target.checked })} />
+          </Stack>
+          <Button
+            variant="contained" startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+            onClick={handleSave} disabled={saving}
+          >
+            Save Schedule
+          </Button>
+        </Stack>
+      </Stack>
 
-      {/* 2-column content */}
-      <Grid container spacing={1.5} sx={{ flex: 1, pt: 1.5, overflow: 'auto' }}>
-        {/* Left: Config */}
-        <Grid size={{ xs: 12, md: 7 }}>
-          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-            {/* Mode */}
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.5 }}>Mode</Typography>
-            <ToggleButtonGroup value={config.mode} exclusive onChange={(_, v) => v && setConfig({ ...config, mode: v })} size="small" sx={{ mb: 1.5 }}>
-              <ToggleButton value="interval" sx={{ py: 0.25, px: 1.5, fontSize: 11 }}><TimerIcon sx={{ fontSize: 14, mr: 0.5 }} />Interval</ToggleButton>
-              <ToggleButton value="cron" sx={{ py: 0.25, px: 1.5, fontSize: 11 }}><EventRepeatIcon sx={{ fontSize: 14, mr: 0.5 }} />Cron</ToggleButton>
-            </ToggleButtonGroup>
+      <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
+        {/* LEFT: Configuration */}
+        <Box sx={{ flex: 1 }}>
+          {/* Schedule Mode */}
+          <Card sx={{ mb: 2 }}>
+            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+              <Typography fontWeight={700} sx={{ mb: 1.5 }}>Schedule Mode</Typography>
+              <ToggleButtonGroup
+                value={config.mode} exclusive
+                onChange={(_, v) => v && setConfig({ ...config, mode: v })}
+                sx={{ '& .MuiToggleButton-root': { textTransform: 'none', fontWeight: 600, px: 3, py: 1 } }}
+              >
+                <ToggleButton value="interval"><TimerIcon sx={{ mr: 1 }} />Fixed Interval</ToggleButton>
+                <ToggleButton value="cron"><EventRepeatIcon sx={{ mr: 1 }} />Custom Schedule</ToggleButton>
+              </ToggleButtonGroup>
 
-            {config.mode === 'interval' && (
-              <Box sx={{ mb: 1.5 }}>
-                <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Interval (minutes)</Typography>
-                <TextField size="small" type="number" value={config.interval_minutes} onChange={(e) => setConfig({ ...config, interval_minutes: parseInt(e.target.value) || 30 })} inputProps={{ min: 5, max: 1440 }} sx={{ width: 120, '& .MuiInputBase-input': { fontSize: 12, py: 0.5 } }} />
-              </Box>
-            )}
+              <Box sx={{ mt: 2.5 }}>
+                {config.mode === 'interval' ? (
+                  <TextField
+                    type="number" value={config.interval_minutes}
+                    onChange={(e) => setConfig({ ...config, interval_minutes: parseInt(e.target.value) || 30 })}
+                    inputProps={{ min: 5, max: 1440 }}
+                    label="Interval (minutes)"
+                    helperText="Agent will scan every X minutes during active hours"
+                    sx={{ width: 220 }}
+                  />
+                ) : (
+                  <Stack spacing={2.5}>
+                    <Typography color="text.secondary" sx={{ fontSize: '0.9rem' }}>
+                      Pick specific times when the agent should run
+                    </Typography>
 
-            {config.mode === 'cron' && (
-              <Box sx={{ mb: 1.5 }}>
-                <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Cron Expression</Typography>
-                <TextField size="small" fullWidth value={config.cron_expression} onChange={(e) => setConfig({ ...config, cron_expression: e.target.value })} placeholder="*/30 9-18 * * 1-5" sx={{ mb: 1, '& .MuiInputBase-input': { fontSize: 12, py: 0.5 } }} />
-                <RadioGroup row value={config.cron_frequency} onChange={(e) => setConfig({ ...config, cron_frequency: e.target.value })} sx={{ gap: 0 }}>
-                  {['every_x_min', 'hourly', 'daily', 'weekly'].map((f) => (
-                    <FormControlLabel key={f} value={f} control={<Radio size="small" sx={{ p: 0.25 }} />} label={<Typography sx={{ fontSize: 11 }}>{f.replace('_', ' ')}</Typography>} sx={{ mr: 1.5 }} />
-                  ))}
-                </RadioGroup>
-                {config.cron_frequency === 'weekly' && (
-                  <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
-                    {DAYS_OF_WEEK.map((day) => (
-                      <Chip key={day} label={day} size="small" onClick={() => toggleCronDay(day)} color={config.cron_days.includes(day) ? 'primary' : 'default'} variant={config.cron_days.includes(day) ? 'filled' : 'outlined'} sx={{ fontSize: 10, height: 20 }} />
-                    ))}
-                  </Box>
-                )}
-                {(config.cron_frequency === 'daily' || config.cron_frequency === 'weekly') && (
-                  <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                    <FormControl size="small" sx={{ width: 80 }}>
-                      <InputLabel sx={{ fontSize: 11 }}>Hour</InputLabel>
-                      <Select value={config.cron_hour} label="Hour" onChange={(e) => setConfig({ ...config, cron_hour: e.target.value })} sx={{ fontSize: 11 }}>
-                        {HOURS.map((h) => <MenuItem key={h} value={h}>{String(h).padStart(2, '0')}</MenuItem>)}
+                    {/* Frequency type */}
+                    <FormControl sx={{ width: 280 }}>
+                      <InputLabel>Run frequency</InputLabel>
+                      <Select value={config.cron_frequency || 'specific_times'} label="Run frequency"
+                        onChange={(e) => setConfig({ ...config, cron_frequency: e.target.value })}
+                      >
+                        <MenuItem value="every_15_min">Every 15 minutes</MenuItem>
+                        <MenuItem value="every_30_min">Every 30 minutes</MenuItem>
+                        <MenuItem value="every_hour">Every hour</MenuItem>
+                        <MenuItem value="every_2_hours">Every 2 hours</MenuItem>
+                        <MenuItem value="specific_times">At specific times each day</MenuItem>
                       </Select>
                     </FormControl>
-                    <FormControl size="small" sx={{ width: 80 }}>
-                      <InputLabel sx={{ fontSize: 11 }}>Min</InputLabel>
-                      <Select value={config.cron_minute} label="Min" onChange={(e) => setConfig({ ...config, cron_minute: e.target.value })} sx={{ fontSize: 11 }}>
-                        {[0, 5, 10, 15, 20, 30, 45].map((m) => <MenuItem key={m} value={m}>:{String(m).padStart(2, '0')}</MenuItem>)}
-                      </Select>
-                    </FormControl>
+
+                    {/* Specific time slots */}
+                    {config.cron_frequency === 'specific_times' && (
+                      <Box>
+                        <Typography fontWeight={600} sx={{ mb: 1 }}>Run at these times:</Typography>
+                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+                          {(config.run_times || ['09:00', '13:00', '17:00']).map((time, idx) => (
+                            <Chip
+                              key={idx}
+                              label={time}
+                              color="primary"
+                              onDelete={() => {
+                                const times = [...(config.run_times || ['09:00', '13:00', '17:00'])];
+                                times.splice(idx, 1);
+                                setConfig({ ...config, run_times: times });
+                              }}
+                              sx={{ fontWeight: 600, fontSize: '0.9rem', height: 32 }}
+                            />
+                          ))}
+                        </Stack>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <FormControl sx={{ width: 120 }}>
+                            <InputLabel>Hour</InputLabel>
+                            <Select value={config._newHour ?? 9} label="Hour"
+                              onChange={(e) => setConfig({ ...config, _newHour: e.target.value })}
+                            >
+                              {HOURS.map(h => <MenuItem key={h} value={h}>{String(h).padStart(2, '0')}</MenuItem>)}
+                            </Select>
+                          </FormControl>
+                          <Typography fontWeight={600}>:</Typography>
+                          <FormControl sx={{ width: 120 }}>
+                            <InputLabel>Minute</InputLabel>
+                            <Select value={config._newMinute ?? 0} label="Minute"
+                              onChange={(e) => setConfig({ ...config, _newMinute: e.target.value })}
+                            >
+                              {[0, 15, 30, 45].map(m => <MenuItem key={m} value={m}>{String(m).padStart(2, '0')}</MenuItem>)}
+                            </Select>
+                          </FormControl>
+                          <Button variant="outlined" size="small"
+                            onClick={() => {
+                              const h = String(config._newHour ?? 9).padStart(2, '0');
+                              const m = String(config._newMinute ?? 0).padStart(2, '0');
+                              const newTime = `${h}:${m}`;
+                              const times = [...(config.run_times || ['09:00', '13:00', '17:00'])];
+                              if (!times.includes(newTime)) {
+                                times.push(newTime);
+                                times.sort();
+                                setConfig({ ...config, run_times: times });
+                              }
+                            }}
+                          >
+                            + Add Time
+                          </Button>
+                        </Stack>
+                      </Box>
+                    )}
+
+                    {/* On which days */}
+                    <Box>
+                      <Typography fontWeight={600} sx={{ mb: 1 }}>On which days:</Typography>
+                      <Stack direction="row" spacing={1}>
+                        {DAYS.map(day => (
+                          <Chip
+                            key={day} label={day} clickable
+                            onClick={() => {
+                              const days = config.cron_days || ['Mon','Tue','Wed','Thu','Fri'];
+                              setConfig({ ...config, cron_days: days.includes(day) ? days.filter(d => d !== day) : [...days, day] });
+                            }}
+                            color={(config.cron_days || ['Mon','Tue','Wed','Thu','Fri']).includes(day) ? 'primary' : 'default'}
+                            variant={(config.cron_days || ['Mon','Tue','Wed','Thu','Fri']).includes(day) ? 'filled' : 'outlined'}
+                            sx={{ fontWeight: 600, fontSize: '0.85rem', height: 34 }}
+                          />
+                        ))}
+                      </Stack>
+                    </Box>
+
+                    {/* Summary */}
+                    <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'rgba(124,58,237,0.05)', border: '1px solid', borderColor: 'rgba(124,58,237,0.15)' }}>
+                      <Typography sx={{ fontSize: '0.9rem', color: 'primary.main', fontWeight: 500 }}>
+                        📅 {config.cron_frequency === 'every_15_min' ? 'Every 15 minutes'
+                          : config.cron_frequency === 'every_30_min' ? 'Every 30 minutes'
+                          : config.cron_frequency === 'every_hour' ? 'Every hour'
+                          : config.cron_frequency === 'every_2_hours' ? 'Every 2 hours'
+                          : `At ${(config.run_times || ['09:00', '13:00', '17:00']).join(', ')}`}
+                        {' '}on {(config.cron_days || ['Mon','Tue','Wed','Thu','Fri']).join(', ')}
+                      </Typography>
+                    </Box>
                   </Stack>
                 )}
               </Box>
-            )}
+            </CardContent>
+          </Card>
 
-            {/* Active hours */}
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.5 }}>Active Hours</Typography>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-              <FormControl size="small" sx={{ width: 80 }}>
-                <Select value={config.active_hours_start} onChange={(e) => setConfig({ ...config, active_hours_start: e.target.value })} sx={{ fontSize: 11 }}>
-                  {HOURS.map((h) => <MenuItem key={h} value={h}>{String(h).padStart(2, '0')}:00</MenuItem>)}
-                </Select>
-              </FormControl>
-              <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>to</Typography>
-              <FormControl size="small" sx={{ width: 80 }}>
-                <Select value={config.active_hours_end} onChange={(e) => setConfig({ ...config, active_hours_end: e.target.value })} sx={{ fontSize: 11 }}>
-                  {HOURS.map((h) => <MenuItem key={h} value={h}>{String(h).padStart(2, '0')}:00</MenuItem>)}
-                </Select>
-              </FormControl>
-            </Stack>
+          {/* Active Hours */}
+          <Card sx={{ mb: 2 }}>
+            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+                <AccessTimeIcon sx={{ color: 'text.secondary' }} />
+                <Typography fontWeight={700}>Active Hours</Typography>
+              </Stack>
+              <Typography color="text.secondary" sx={{ mb: 2 }}>
+                Agent will only run between these hours
+              </Typography>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <FormControl sx={{ width: 130 }}>
+                  <InputLabel>From</InputLabel>
+                  <Select value={config.active_hours_start} label="From" onChange={(e) => setConfig({ ...config, active_hours_start: e.target.value })}>
+                    {HOURS.map(h => <MenuItem key={h} value={h}>{String(h).padStart(2, '0')}:00</MenuItem>)}
+                  </Select>
+                </FormControl>
+                <Typography fontWeight={600} color="text.secondary">to</Typography>
+                <FormControl sx={{ width: 130 }}>
+                  <InputLabel>To</InputLabel>
+                  <Select value={config.active_hours_end} label="To" onChange={(e) => setConfig({ ...config, active_hours_end: e.target.value })}>
+                    {HOURS.map(h => <MenuItem key={h} value={h}>{String(h).padStart(2, '0')}:00</MenuItem>)}
+                  </Select>
+                </FormControl>
+                <Chip label={`${config.active_hours_end - config.active_hours_start}h window`} size="small" color="primary" variant="outlined" />
+              </Stack>
+            </CardContent>
+          </Card>
 
-            {/* Days */}
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.5 }}>Days of Week</Typography>
-            <Box sx={{ display: 'flex', gap: 0.5 }}>
-              {DAYS_OF_WEEK.map((day) => (
-                <Chip key={day} label={day} size="small" onClick={() => toggleDay(day)} color={config.days_of_week.includes(day) ? 'primary' : 'default'} variant={config.days_of_week.includes(day) ? 'filled' : 'outlined'} sx={{ fontSize: 10, height: 22 }} />
-              ))}
-            </Box>
-          </Box>
-        </Grid>
-
-        {/* Right: Preview */}
-        <Grid size={{ xs: 12, md: 5 }}>
-          {/* Status */}
-          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5, mb: 1.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-              <FiberManualRecordIcon sx={{ fontSize: 10, color: config.enabled ? 'success.main' : 'grey.400' }} />
-              <Typography sx={{ fontSize: 11, fontWeight: 600 }}>Schedule Status</Typography>
-            </Box>
-            <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>
-              {config.mode === 'interval'
-                ? `Every ${config.interval_minutes}min, ${String(config.active_hours_start).padStart(2, '0')}:00–${String(config.active_hours_end).padStart(2, '0')}:00`
-                : config.cron_expression ? `Cron: ${config.cron_expression}` : 'Cron not set'
-              }
-            </Typography>
-            {cronDescription && config.mode === 'cron' && (
-              <Typography sx={{ fontSize: 10, color: 'text.secondary', mt: 0.5, fontStyle: 'italic' }}>📅 {cronDescription}</Typography>
-            )}
-          </Box>
-
-          {/* Next runs */}
-          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.75 }}>Next Runs</Typography>
-            {!config.enabled ? (
-              <Typography sx={{ fontSize: 11, color: 'warning.main' }}>Scheduler disabled</Typography>
-            ) : nextRuns.length === 0 ? (
-              <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>No runs scheduled</Typography>
-            ) : (
-              <List dense disablePadding>
-                {nextRuns.slice(0, 5).map((run, idx) => (
-                  <ListItem key={idx} disablePadding sx={{ py: 0.25 }}>
-                    <ListItemIcon sx={{ minWidth: 20 }}>
-                      <PlayArrowIcon sx={{ fontSize: 12, color: 'primary.main' }} />
-                    </ListItemIcon>
-                    <ListItemText primary={run} primaryTypographyProps={{ fontSize: 11, fontFamily: 'monospace' }} />
-                  </ListItem>
+          {/* Days of Week */}
+          <Card>
+            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+                <CalendarTodayIcon sx={{ color: 'text.secondary' }} />
+                <Typography fontWeight={700}>Days of Week</Typography>
+              </Stack>
+              <Typography color="text.secondary" sx={{ mb: 2 }}>
+                Select which days the agent is allowed to run
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                {DAYS.map(day => (
+                  <Chip
+                    key={day} label={day} clickable
+                    onClick={() => toggleDay(day)}
+                    color={config.days_of_week.includes(day) ? 'primary' : 'default'}
+                    variant={config.days_of_week.includes(day) ? 'filled' : 'outlined'}
+                    sx={{ fontWeight: 600, fontSize: '0.85rem', height: 34, px: 0.5 }}
+                  />
                 ))}
-              </List>
-            )}
-          </Box>
-        </Grid>
-      </Grid>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Box>
+
+        {/* RIGHT: Preview */}
+        <Box sx={{ width: 320, minWidth: 320 }}>
+          {/* Summary */}
+          <Card sx={{ mb: 2, background: 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)', color: '#fff', border: 'none' }}>
+            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+              <Typography sx={{ fontWeight: 700, fontSize: '1rem', mb: 1 }}>Current Schedule</Typography>
+              <Typography sx={{ opacity: 0.9 }}>
+                {config.mode === 'interval'
+                  ? `Every ${config.interval_minutes} min`
+                  : config.cron_expression || 'No cron set'}
+              </Typography>
+              <Typography sx={{ opacity: 0.7, fontSize: '0.85rem', mt: 0.5 }}>
+                {String(config.active_hours_start).padStart(2, '0')}:00 – {String(config.active_hours_end).padStart(2, '0')}:00 • {config.days_of_week.join(', ')}
+              </Typography>
+            </CardContent>
+          </Card>
+
+          {/* Next Runs */}
+          <Card>
+            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+              <Typography fontWeight={700} sx={{ mb: 1.5 }}>Upcoming Runs</Typography>
+              {!config.enabled ? (
+                <Typography color="warning.main" sx={{ fontStyle: 'italic' }}>Scheduler is disabled</Typography>
+              ) : nextRuns.length === 0 ? (
+                <Typography color="text.secondary">No upcoming runs calculated</Typography>
+              ) : (
+                <Stack spacing={1}>
+                  {nextRuns.slice(0, 5).map((run, idx) => (
+                    <Stack key={idx} direction="row" alignItems="center" spacing={1.5}
+                      sx={{ p: 1, borderRadius: 1.5, bgcolor: idx === 0 ? 'rgba(124,58,237,0.06)' : 'transparent', border: idx === 0 ? '1px solid rgba(124,58,237,0.15)' : 'none' }}
+                    >
+                      <PlayArrowIcon sx={{ fontSize: 16, color: idx === 0 ? 'primary.main' : 'text.disabled' }} />
+                      <Typography sx={{ fontFamily: 'monospace', fontWeight: idx === 0 ? 700 : 400, color: idx === 0 ? 'primary.main' : 'text.secondary' }}>
+                        {run}
+                      </Typography>
+                      {idx === 0 && <Chip label="NEXT" size="small" color="primary" sx={{ height: 20, fontSize: '0.7rem', fontWeight: 700 }} />}
+                    </Stack>
+                  ))}
+                </Stack>
+              )}
+            </CardContent>
+          </Card>
+        </Box>
+      </Stack>
     </Box>
   );
 }
