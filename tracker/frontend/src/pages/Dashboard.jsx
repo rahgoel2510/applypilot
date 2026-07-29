@@ -35,11 +35,15 @@ dayjs.extend(relativeTime);
 // Shared card style
 const cardSx = {
   height: '100%',
-  borderRadius: '16px',
+  borderRadius: '12px',
   overflow: 'hidden',
+  border: '1px solid',
+  borderColor: 'divider',
+  boxShadow: 'none',
+  '&:hover': { boxShadow: 'none' },
 };
 
-const cardContentSx = { p: 2, '&:last-child': { pb: 2 } };
+const cardContentSx = { p: 1.5, '&:last-child': { pb: 1.5 } };
 
 // Gradient stat card backgrounds
 const STAT_GRADIENTS = [

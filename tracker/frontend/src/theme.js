@@ -93,7 +93,7 @@ export function createAppTheme(mode) {
     },
     spacing: 8,
     shape: {
-      borderRadius: 12,
+      borderRadius: 10,
     },
     components: {
       MuiCssBaseline: {
@@ -152,18 +152,12 @@ export function createAppTheme(mode) {
         defaultProps: { elevation: 0 },
         styleOverrides: {
           root: {
-            borderRadius: 16,
-            border: `1px solid ${isLight ? 'rgba(124, 58, 237, 0.06)' : 'rgba(167, 139, 250, 0.1)'}`,
-            boxShadow: isLight
-              ? '0 4px 20px rgba(124, 58, 237, 0.05), 0 1px 3px rgba(0,0,0,0.03)'
-              : '0 4px 20px rgba(0, 0, 0, 0.3)',
-            transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+            borderRadius: 12,
+            border: `1px solid ${isLight ? 'rgba(124, 58, 237, 0.08)' : 'rgba(167, 139, 250, 0.1)'}`,
+            boxShadow: 'none',
+            transition: 'border-color 0.2s ease',
             '&:hover': {
-              borderColor: isLight ? 'rgba(124, 58, 237, 0.15)' : 'rgba(167, 139, 250, 0.2)',
-              boxShadow: isLight
-                ? '0 8px 30px rgba(124, 58, 237, 0.1), 0 2px 8px rgba(0,0,0,0.04)'
-                : '0 8px 30px rgba(0, 0, 0, 0.4)',
-              transform: 'translateY(-2px)',
+              borderColor: isLight ? 'rgba(124, 58, 237, 0.18)' : 'rgba(167, 139, 250, 0.2)',
             },
           },
         },
@@ -206,7 +200,7 @@ export function createAppTheme(mode) {
         styleOverrides: {
           outlined: {
             borderColor: isLight ? 'rgba(124, 58, 237, 0.08)' : 'rgba(167, 139, 250, 0.1)',
-            borderRadius: 16,
+            borderRadius: 12,
           },
         },
       },
