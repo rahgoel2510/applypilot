@@ -25,10 +25,10 @@ import PercentIcon from '@mui/icons-material/Percent';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CircleIcon from '@mui/icons-material/Circle';
 import { useNavigate } from 'react-router-dom';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { fetchStats, fetchLogs, fetchJobs, getAgentStatus, triggerAgent } from '../api';
+import { FunnelChart, ScoreDonut, RadialGauge, Sparkline } from '../components/D3Charts';
 
 dayjs.extend(relativeTime);
 
@@ -284,19 +284,7 @@ export default function Dashboard() {
               <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
                 Application Funnel
               </Typography>
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={stages.filter(s => s.count > 0 || ['discovered', 'applied', 'interviewing', 'offered'].includes(s.key))} layout="vertical" margin={{ top: 5, right: 50, left: 90, bottom: 5 }}>
-                  <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="label" tick={{ fontSize: 13, fontWeight: 500 }} width={85} />
-                  <Tooltip contentStyle={{ fontSize: 13, padding: '8px 12px' }} formatter={(val) => [`${val} jobs`, 'Count']} />
-                  <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={28}>
-                    {stages.filter(s => s.count > 0 || ['discovered', 'applied', 'interviewing', 'offered'].includes(s.key)).map((s, idx) => (
-                      <Cell key={idx} fill={s.color} />
-                    ))}
-                    <LabelList dataKey="count" position="right" style={{ fontSize: 13, fontWeight: 700, fill: '#16191F' }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <FunnelChart data={stages.filter(s => s.count > 0 || ['discovered', 'applied', 'interviewing', 'offered'].includes(s.key))} height={240} />
             </CardContent>
           </Card>
         </Grid>
@@ -307,19 +295,7 @@ export default function Dashboard() {
               <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
                 Score Distribution
               </Typography>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={scoreDistribution} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
-                  <XAxis dataKey="range" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
-                  <Tooltip contentStyle={{ fontSize: 13, padding: '6px 12px' }} formatter={(val) => [`${val} jobs`, 'Count']} />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={36}>
-                    {scoreDistribution.map((entry, idx) => (
-                      <Cell key={idx} fill={entry.color} />
-                    ))}
-                    <LabelList dataKey="count" position="top" style={{ fontSize: 12, fontWeight: 600, fill: '#545B64' }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <ScoreDonut data={scoreDistribution} size={200} />
             </CardContent>
           </Card>
         </Grid>
