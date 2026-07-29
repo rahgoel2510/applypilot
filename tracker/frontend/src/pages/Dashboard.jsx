@@ -52,23 +52,22 @@ const METRIC_BG = ['#E6F2FA', '#E6F5F2', '#FEF3E8', '#F3EEFB'];
 // Stage colors — vibrant
 const STAGE_COLORS = {
   discovered: '#0073BB',
-  matched: '#6B40B2',
-  applied: '#067D68',
   reached_out: '#6B40B2',
   saved: '#EC7211',
-  interviewing: '#0073BB',
+  applied: '#067D68',
+  interviewing: '#EC7211',
   offered: '#067D68',
   rejected: '#D13212',
 };
 
 const STAGE_LABELS = {
   discovered: 'Discovered',
-  matched: 'Matched',
+  reached_out: 'Reached Out',
+  saved: 'Saved',
   applied: 'Applied',
   interviewing: 'Interviewing',
   offered: 'Offered',
   rejected: 'Rejected',
-  withdrawn: 'Withdrawn',
 };
 
 // Severity dot colors
@@ -120,25 +119,39 @@ export default function Dashboard() {
 
   // Stage data for pipeline bar and funnel
   const stages = useMemo(() => {
-    const src = stats?.stages || stats?.by_stage || {};
+    // The API returns { discovered: 12, reached_out: 9, ... } at top level
+    const src = stats || {};
     return Object.keys(STAGE_LABELS).map((key) => ({
       key,
       label: STAGE_LABELS[key],
-      count: src[key] ?? 0,
+      count: src[key] ?? src?.stages?.[key] ?? src?.by_stage?.[key] ?? 0,
       color: STAGE_COLORS[key],
     }));
   }, [stats]);
 
   const totalInPipeline = stages.reduce((s, st) => s + st.count, 0) || 1;
 
-  // Score distribution
-  const scoreDistribution = stats?.score_distribution || [
-    { range: '0-20', count: 0 },
-    { range: '21-40', count: 0 },
-    { range: '41-60', count: 0 },
-    { range: '61-80', count: 0 },
-    { range: '81-100', count: 0 },
-  ];
+  // Score distribution — compute from actual jobs data
+  const scoreDistribution = useMemo(() => {
+    const buckets = [
+      { range: '0-20%', count: 0, color: '#D13212' },
+      { range: '21-40%', count: 0, color: '#D13212' },
+      { range: '41-60%', count: 0, color: '#EC7211' },
+      { range: '61-80%', count: 0, color: '#EC7211' },
+      { range: '81-100%', count: 0, color: '#067D68' },
+    ];
+    jobs.forEach((j) => {
+      const s = j.match_score;
+      if (s == null) return;
+      const pct = s <= 1 ? s * 100 : s;
+      if (pct <= 20) buckets[0].count++;
+      else if (pct <= 40) buckets[1].count++;
+      else if (pct <= 60) buckets[2].count++;
+      else if (pct <= 80) buckets[3].count++;
+      else buckets[4].count++;
+    });
+    return buckets;
+  }, [jobs]);
 
   // Top companies
   const topCompanies = useMemo(() => {
@@ -271,16 +284,16 @@ export default function Dashboard() {
               <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
                 Application Funnel
               </Typography>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={stages} layout="vertical" margin={{ top: 0, right: 50, left: 80, bottom: 0 }}>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={stages.filter(s => s.count > 0 || ['discovered', 'applied', 'interviewing', 'offered'].includes(s.key))} layout="vertical" margin={{ top: 5, right: 50, left: 90, bottom: 5 }}>
                   <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="label" tick={{ fontSize: 12 }} width={75} />
-                  <Tooltip contentStyle={{ fontSize: 12, padding: '4px 8px' }} formatter={(val) => [val, 'Jobs']} />
-                  <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={22}>
-                    {stages.map((s, idx) => (
+                  <YAxis type="category" dataKey="label" tick={{ fontSize: 13, fontWeight: 500 }} width={85} />
+                  <Tooltip contentStyle={{ fontSize: 13, padding: '8px 12px' }} formatter={(val) => [`${val} jobs`, 'Count']} />
+                  <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={28}>
+                    {stages.filter(s => s.count > 0 || ['discovered', 'applied', 'interviewing', 'offered'].includes(s.key)).map((s, idx) => (
                       <Cell key={idx} fill={s.color} />
                     ))}
-                    <LabelList dataKey="count" position="right" style={{ fontSize: 12, fontWeight: 600, fill: '#374151' }} />
+                    <LabelList dataKey="count" position="right" style={{ fontSize: 13, fontWeight: 700, fill: '#16191F' }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -295,12 +308,15 @@ export default function Dashboard() {
                 Score Distribution
               </Typography>
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={scoreDistribution} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
-                  <XAxis dataKey="range" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                  <Tooltip contentStyle={{ fontSize: 12, padding: '4px 8px' }} />
-                  <Bar dataKey="count" fill="#6366f1" radius={[3, 3, 0, 0]} barSize={28}>
-                    <LabelList dataKey="count" position="top" style={{ fontSize: 10, fill: '#6b7280' }} />
+                <BarChart data={scoreDistribution} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
+                  <XAxis dataKey="range" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ fontSize: 13, padding: '6px 12px' }} formatter={(val) => [`${val} jobs`, 'Count']} />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={36}>
+                    {scoreDistribution.map((entry, idx) => (
+                      <Cell key={idx} fill={entry.color} />
+                    ))}
+                    <LabelList dataKey="count" position="top" style={{ fontSize: 12, fontWeight: 600, fill: '#545B64' }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
