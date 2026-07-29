@@ -23,7 +23,7 @@ const SEVERITY_CONFIG = {
 function SeverityCell({ value }) {
   const config = SEVERITY_CONFIG[value] || SEVERITY_CONFIG.info;
   const Icon = config.icon;
-  return <Chip icon={<Icon sx={{ fontSize: 12 }} />} label={value} size="small" color={config.color} variant="outlined" sx={{ fontSize: '0.6rem', height: 20, textTransform: 'capitalize' }} />;
+  return <Chip icon={<Icon sx={{ fontSize: 14 }} />} label={value || 'info'} size="small" color={config.color} variant="outlined" sx={{ textTransform: 'capitalize' }} />;
 }
 
 export default function ActivityLog() {
@@ -79,19 +79,21 @@ export default function ActivityLog() {
 
   const columns = [
     {
-      field: 'timestamp', headerName: 'Time', width: 150,
-      valueGetter: (params) => params.row.timestamp || params.row.created_at || '',
-      renderCell: (params) => <Typography sx={{ fontSize: 11, fontFamily: 'monospace' }}>{params.value ? new Date(params.value).toLocaleString() : '—'}</Typography>,
+      field: 'timestamp', headerName: 'Time', width: 160,
+      renderCell: (params) => {
+        const val = params.row.timestamp || params.row.created_at;
+        return <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{val ? new Date(val).toLocaleString() : '—'}</Typography>;
+      },
     },
     {
-      field: 'event_type', headerName: 'Event', width: 100,
-      renderCell: (params) => <Chip label={params.value || '—'} size="small" variant="outlined" sx={{ fontSize: '0.6rem', height: 18 }} />,
+      field: 'event_type', headerName: 'Event', width: 120,
+      renderCell: (params) => <Chip label={(params.value || '—').replace(/_/g, ' ')} size="small" variant="outlined" sx={{ textTransform: 'capitalize' }} />,
     },
-    { field: 'severity', headerName: 'Severity', width: 100, renderCell: (params) => <SeverityCell value={params.value} /> },
-    { field: 'job_title', headerName: 'Job Title', flex: 1, minWidth: 150 },
-    { field: 'company', headerName: 'Company', width: 120 },
-    { field: 'message', headerName: 'Message', flex: 1, minWidth: 200 },
-    { field: 'stage', headerName: 'Stage', width: 90 },
+    { field: 'severity', headerName: 'Severity', width: 110, renderCell: (params) => <SeverityCell value={params.value} /> },
+    { field: 'title', headerName: 'Job Title', flex: 1, minWidth: 160 },
+    { field: 'company', headerName: 'Company', width: 140 },
+    { field: 'message', headerName: 'Message', flex: 1.5, minWidth: 200 },
+    { field: 'stage', headerName: 'Stage', width: 100 },
   ];
 
   if (error) return <Alert severity="error" sx={{ fontSize: 12 }}>{error}</Alert>;
@@ -107,7 +109,7 @@ export default function ActivityLog() {
             color={severityFilter === key ? cfg.color : 'default'}
             variant={severityFilter === key ? 'filled' : 'outlined'}
             onClick={() => setSeverityFilter(severityFilter === key ? '' : key)}
-            sx={{ fontSize: 10, height: 22, textTransform: 'capitalize' }}
+            sx={{ textTransform: 'capitalize' }}
           />
         ))}
 
@@ -155,10 +157,9 @@ export default function ActivityLog() {
           density="compact"
           rowHeight={36}
           sx={{
-            border: 0,
-            '& .MuiDataGrid-cell': { fontSize: 11 },
-            '& .MuiDataGrid-columnHeader': { fontSize: 11 },
-            '& .MuiDataGrid-footerContainer': { minHeight: 36 },
+            border: 'none',
+            '& .MuiDataGrid-columnHeader': { fontWeight: 600 },
+            '& .MuiDataGrid-footerContainer': { borderTop: '1px solid', borderColor: 'divider' },
           }}
           slots={{
             noRowsOverlay: () => (

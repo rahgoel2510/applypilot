@@ -1,423 +1,212 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Stack,
-  Chip,
-  IconButton,
-  Menu,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  CircularProgress,
-  Divider,
+  Box, Typography, Button, TextField, Select, MenuItem, FormControl, InputLabel,
+  Stack, Chip, IconButton, Menu, Dialog, DialogTitle, DialogContent, DialogActions,
+  CircularProgress, Divider, Avatar,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import SearchIcon from '@mui/icons-material/Search';
 import InputAdornment from '@mui/material/InputAdornment';
 import CloseIcon from '@mui/icons-material/Close';
-import LaunchIcon from '@mui/icons-material/Launch';
-import DeleteIcon from '@mui/icons-material/Delete';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import {
-  DndContext,
-  DragOverlay,
-  closestCorners,
-  PointerSensor,
-  useSensor,
-  useSensors,
+  DndContext, DragOverlay, closestCorners, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useSnackbar } from 'notistack';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { COLUMNS } from '../columns';
-import { fetchJobs, createJob, updateJob, updateJobStage, deleteJob } from '../api';
+import { fetchJobs, createJob, updateJobStage, deleteJob } from '../api';
 
 dayjs.extend(relativeTime);
 
-const STAGE_COLORS = {
-  discovered: '#6366f1',
-  reached_out: '#8b5cf6',
-  saved: '#294A73',
-  applied: '#10b981',
-  interviewing: '#f59e0b',
-  offered: '#059669',
-  rejected: '#ef4444',
+// Timeline helper
+function TimelineItem({ color, title, sub, detail, isLast }) {
+  return (
+    <Box sx={{ display: 'flex', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
+        {!isLast && <Box sx={{ width: 1.5, flex: 1, bgcolor: '#D5DBDB', mt: 0.5 }} />}
+      </Box>
+      <Box sx={{ pb: isLast ? 0 : 1 }}>
+        <Typography variant="body2" fontWeight={600}>{title}</Typography>
+        <Typography variant="caption" color="text.secondary">{sub}</Typography>
+        {detail && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{detail}</Typography>}
+      </Box>
+    </Box>
+  );
+}
+
+const STAGE_META = {
+  discovered: { color: '#0073BB', bg: '#E6F2FA', emoji: '🔍' },
+  reached_out: { color: '#6B40B2', bg: '#F3EEFB', emoji: '✉️' },
+  saved: { color: '#545B64', bg: '#F2F3F3', emoji: '📌' },
+  applied: { color: '#067D68', bg: '#E6F5F2', emoji: '✅' },
+  interviewing: { color: '#EC7211', bg: '#FEF3E8', emoji: '🎤' },
+  offered: { color: '#067D68', bg: '#E6F5F2', emoji: '🎉' },
+  rejected: { color: '#D13212', bg: '#FCECEA', emoji: '❌' },
 };
 
-function getScoreColor(score) {
-  if (score >= 0.8) return '#16a34a';
-  if (score >= 0.6) return '#ca8a04';
-  return '#dc2626';
+function getScoreStyle(score) {
+  if (score >= 0.8) return { color: '#067D68', bg: '#E6F5F2', label: 'Strong' };
+  if (score >= 0.6) return { color: '#EC7211', bg: '#FEF3E8', label: 'Fair' };
+  return { color: '#D13212', bg: '#FCECEA', label: 'Low' };
 }
 
-function getScoreBg(score) {
-  if (score >= 0.8) return 'rgba(22,163,106,0.1)';
-  if (score >= 0.6) return 'rgba(202,138,4,0.1)';
-  return 'rgba(220,38,38,0.1)';
-}
-
-// ═══ Draggable Job Card ═══
-function SortableJobCard({ job, onMenuOpen, onCardClick }) {
-  const dragActivatedRef = useRef(false);
+// ═══ Job Card ═══
+function JobCard({ job, onMenuOpen, onCardClick }) {
+  const dragRef = useRef(false);
+  const [showTooltip, setShowTooltip] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: job.id,
-    data: { job, stage: job.stage },
+    id: job.id, data: { job, stage: job.stage },
   });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
-
-  const stageColor = STAGE_COLORS[job.stage] || '#6b7280';
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1 };
   const score = job.match_score ?? job.score;
-
-  const handlePointerDown = () => { dragActivatedRef.current = false; };
-  const handlePointerMove = () => { dragActivatedRef.current = true; };
-  const handleClick = () => {
-    if (!dragActivatedRef.current) onCardClick(job);
-  };
+  const scoreStyle = score != null ? getScoreStyle(score) : null;
+  const initial = (job.company || '?')[0].toUpperCase();
 
   return (
     <Box
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onClick={handleClick}
+      ref={setNodeRef} style={style} {...attributes} {...listeners}
+      onPointerDown={() => { dragRef.current = false; }}
+      onPointerMove={() => { dragRef.current = true; }}
+      onClick={() => { if (!dragRef.current) onCardClick(job); }}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
       sx={{
-        mb: '6px',
-        p: '6px 8px',
-        cursor: 'grab',
-        borderLeft: `3px solid ${stageColor}`,
-        borderRadius: '4px',
+        mb: 1, p: 1.5, cursor: 'pointer',
         bgcolor: 'background.paper',
-        border: '1px solid',
-        borderColor: 'divider',
-        borderLeftColor: stageColor,
-        transition: 'box-shadow 0.15s, border-color 0.15s',
+        borderRadius: '8px',
+        border: '1px solid', borderColor: 'divider',
+        borderLeft: `3px solid ${STAGE_META[job.stage]?.color || '#545B64'}`,
+        transition: 'all 0.15s ease',
+        overflow: 'hidden',
         '&:hover': {
-          boxShadow: 2,
-          borderColor: 'primary.main',
-          borderLeftColor: stageColor,
-          '& .card-actions': { opacity: 1 },
+          borderColor: '#0073BB',
+          borderLeftColor: STAGE_META[job.stage]?.color || '#545B64',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+          '& .actions': { opacity: 1 },
         },
         '&:active': { cursor: 'grabbing' },
         position: 'relative',
       }}
     >
-      <Typography
-        noWrap
-        sx={{ fontSize: '0.72rem', fontWeight: 600, lineHeight: 1.3 }}
-      >
-        {job.title || 'Untitled'}
-      </Typography>
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: '2px' }}>
-        <Typography noWrap sx={{ fontSize: '0.65rem', color: 'text.secondary', flex: 1 }}>
-          {job.company || '—'}
-        </Typography>
-        {score != null && (
-          <Chip
-            label={`${Math.round(score * 100)}%`}
-            size="small"
-            sx={{
-              height: 16,
-              fontSize: '0.6rem',
-              fontWeight: 700,
-              bgcolor: getScoreBg(score),
-              color: getScoreColor(score),
-              border: 'none',
-              minWidth: 24,
-              '& .MuiChip-label': { px: '4px' },
-            }}
-          />
-        )}
-      </Stack>
-      {/* Hover actions */}
-      <Stack
-        className="card-actions"
-        direction="row"
-        spacing={0}
-        sx={{
-          position: 'absolute',
-          top: 2,
-          right: 2,
-          opacity: 0,
-          transition: 'opacity 0.15s',
-          bgcolor: 'background.paper',
-          borderRadius: '4px',
-        }}
-      >
-        {job.url && (
-          <IconButton
-            size="small"
-            onClick={(e) => { e.stopPropagation(); window.open(job.url, '_blank'); }}
-            sx={{ p: '2px' }}
-          >
-            <OpenInNewIcon sx={{ fontSize: 12 }} />
-          </IconButton>
-        )}
-        <IconButton
-          size="small"
-          onClick={(e) => { e.stopPropagation(); onMenuOpen(e, job); }}
-          sx={{ p: '2px' }}
-        >
-          <MoreVertIcon sx={{ fontSize: 12 }} />
+      {/* Hover Tooltip */}
+      {showTooltip && !dragRef.current && (
+        <Box sx={{
+          position: 'absolute', bottom: '100%', left: 0, right: 0, mb: 1, zIndex: 1000,
+          bgcolor: '#232F3E', color: '#fff', borderRadius: '8px', p: 2,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.2)', pointerEvents: 'none',
+          '&::after': { content: '""', position: 'absolute', top: '100%', left: 20, border: '6px solid transparent', borderTopColor: '#232F3E' },
+        }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '13px', mb: 0.75 }}>{job.title}</Typography>
+          <Typography sx={{ fontSize: '12px', opacity: 0.8, mb: 1 }}>{job.company}{job.location ? ` • ${job.location}` : ''}</Typography>
+          <Stack spacing={0.5}>
+            <Stack direction="row" justifyContent="space-between">
+              <Typography sx={{ fontSize: '11px', opacity: 0.6 }}>Match Score</Typography>
+              <Typography sx={{ fontSize: '11px', fontWeight: 700 }}>{score != null ? `${Math.round(score * 100)}%` : 'N/A'}</Typography>
+            </Stack>
+            <Stack direction="row" justifyContent="space-between">
+              <Typography sx={{ fontSize: '11px', opacity: 0.6 }}>Stage</Typography>
+              <Typography sx={{ fontSize: '11px', fontWeight: 600, textTransform: 'capitalize' }}>{job.stage}</Typography>
+            </Stack>
+            <Stack direction="row" justifyContent="space-between">
+              <Typography sx={{ fontSize: '11px', opacity: 0.6 }}>Added</Typography>
+              <Typography sx={{ fontSize: '11px' }}>{job.date_added ? dayjs(job.date_added).fromNow() : '—'}</Typography>
+            </Stack>
+            <Stack direction="row" justifyContent="space-between">
+              <Typography sx={{ fontSize: '11px', opacity: 0.6 }}>Source</Typography>
+              <Typography sx={{ fontSize: '11px', textTransform: 'capitalize' }}>{job.source || 'agent'}</Typography>
+            </Stack>
+          </Stack>
+          <Typography sx={{ fontSize: '10px', opacity: 0.5, mt: 1, textAlign: 'center' }}>Click to view full details</Typography>
+        </Box>
+      )}
+
+      {/* Actions (top right on hover) */}
+      <Stack direction="row" className="actions" sx={{ position: 'absolute', top: 6, right: 6, opacity: 0, transition: 'opacity 0.15s' }}>
+        <IconButton size="small" onClick={(e) => { e.stopPropagation(); onMenuOpen(e, job); }}>
+          <MoreHorizIcon sx={{ fontSize: 16 }} />
         </IconButton>
+      </Stack>
+
+      {/* Company avatar + Title */}
+      <Stack direction="row" spacing={1.5} alignItems="flex-start" sx={{ overflow: 'hidden' }}>
+        <Avatar sx={{ width: 32, height: 32, fontSize: 13, fontWeight: 700, bgcolor: STAGE_META[job.stage]?.bg || '#F2F3F3', color: STAGE_META[job.stage]?.color || '#545B64', flexShrink: 0 }}>
+          {initial}
+        </Avatar>
+        <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <Typography variant="body2" fontWeight={600} noWrap title={job.title} sx={{ lineHeight: 1.3 }}>
+            {job.title || 'Untitled'}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+            {job.company || '—'}
+          </Typography>
+        </Box>
+      </Stack>
+
+      {/* Bottom row */}
+      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mt: 1, overflow: 'hidden', flexWrap: 'nowrap' }}>
+        {job.location && (
+          <Chip label={job.location} size="small" variant="outlined" sx={{ fontSize: '11px', height: 20, maxWidth: 100, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }} />
+        )}
+        {scoreStyle && (
+          <Chip label={`${Math.round(score * 100)}%`} size="small" sx={{ height: 20, fontWeight: 700, fontSize: '11px', bgcolor: scoreStyle.bg, color: scoreStyle.color, border: 'none' }} />
+        )}
+        <Box sx={{ flex: 1 }} />
+        {job.date_added && (
+          <Typography variant="caption" color="text.disabled" noWrap sx={{ fontSize: '11px', flexShrink: 0 }}>
+            {dayjs(job.date_added).fromNow()}
+          </Typography>
+        )}
       </Stack>
     </Box>
   );
 }
 
 // ═══ Column ═══
-function KanbanColumn({ column, jobs, onMenuOpen, onCardClick }) {
-  const jobIds = useMemo(() => jobs.map((j) => j.id), [jobs]);
-  const stageColor = STAGE_COLORS[column.id] || '#6b7280';
+function KanbanCol({ column, jobs, onMenuOpen, onCardClick, onAddJob }) {
+  const jobIds = useMemo(() => jobs.map(j => j.id), [jobs]);
+  const meta = STAGE_META[column.id] || { color: '#545B64', bg: '#F2F3F3', emoji: '📋' };
 
   return (
-    <Box
-      sx={{
-        width: 180,
-        minWidth: 180,
-        flex: '0 0 180px',
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-      }}
-    >
-      {/* Column Header */}
-      <Box sx={{ borderTop: `3px solid ${stageColor}`, borderRadius: '4px 4px 0 0', mb: 0.5 }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 0.75, py: 0.5 }}>
-          <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            {column.label}
-          </Typography>
-          <Chip
-            label={jobs.length}
-            size="small"
-            sx={{
-              height: 16,
-              minWidth: 20,
-              fontSize: '0.6rem',
-              fontWeight: 700,
-              bgcolor: stageColor,
-              color: '#fff',
-              '& .MuiChip-label': { px: '4px' },
-            }}
-          />
-        </Stack>
-      </Box>
+    <Box sx={{ width: 280, minWidth: 280, display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#F7F8F9', borderRadius: '8px', border: '1px solid', borderColor: 'divider' }}>
+      {/* Header */}
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 1.5, py: 1.25, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Typography sx={{ fontSize: 16 }}>{meta.emoji}</Typography>
+        <Typography variant="body1" fontWeight={600} sx={{ flex: 1 }}>{column.label}</Typography>
+        <Chip label={jobs.length} size="small" sx={{ height: 20, fontSize: '11px', fontWeight: 700, bgcolor: meta.bg, color: meta.color }} />
+        <IconButton size="small" onClick={() => onAddJob(column.id)} sx={{ opacity: 0.4, '&:hover': { opacity: 1 } }}>
+          <AddIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      </Stack>
 
-      {/* Scrollable card list */}
-      <Box
-        sx={{
-          flex: 1,
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          px: 0.25,
-          pb: 0.5,
-          '&::-webkit-scrollbar': { width: 3 },
-          '&::-webkit-scrollbar-thumb': { bgcolor: 'divider', borderRadius: 2 },
-        }}
-      >
+      {/* Cards area */}
+      <Box sx={{
+        flex: 1, overflowY: 'auto', overflowX: 'hidden', p: 1,
+        '&::-webkit-scrollbar': { width: 4 },
+        '&::-webkit-scrollbar-thumb': { bgcolor: '#D5DBDB', borderRadius: 4 },
+      }}>
         <SortableContext items={jobIds} strategy={verticalListSortingStrategy}>
-          {jobs.map((job) => (
-            <SortableJobCard key={job.id} job={job} onMenuOpen={onMenuOpen} onCardClick={onCardClick} />
-          ))}
+          {jobs.map(job => <JobCard key={job.id} job={job} onMenuOpen={onMenuOpen} onCardClick={onCardClick} />)}
         </SortableContext>
         {jobs.length === 0 && (
-          <Typography sx={{ fontSize: '0.6rem', color: 'text.disabled', textAlign: 'center', py: 2 }}>
-            Empty
-          </Typography>
+          <Box sx={{ textAlign: 'center', py: 4, opacity: 0.35 }}>
+            <Typography variant="body2" color="text.secondary">No jobs</Typography>
+          </Box>
         )}
       </Box>
     </Box>
   );
 }
 
-// ═══ Drag Overlay ═══
-function DragOverlayCard({ job }) {
-  if (!job) return null;
-  const stageColor = STAGE_COLORS[job.stage] || '#6b7280';
-  return (
-    <Box sx={{ width: 180, p: '6px 8px', borderLeft: `3px solid ${stageColor}`, bgcolor: 'background.paper', borderRadius: '4px', boxShadow: 6, opacity: 0.92 }}>
-      <Typography noWrap sx={{ fontSize: '0.72rem', fontWeight: 600 }}>{job.title || 'Untitled'}</Typography>
-      <Typography noWrap sx={{ fontSize: '0.65rem', color: 'text.secondary' }}>{job.company || '—'}</Typography>
-    </Box>
-  );
-}
-
-// ═══ Job Detail Modal ═══
-function JobDetailDialog({ job, open, onClose, onUpdate, onDelete, columns }) {
-  const [stage, setStage] = useState(job?.stage || 'discovered');
-  const [notes, setNotes] = useState(job?.notes || '');
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (job) {
-      setStage(job.stage || 'discovered');
-      setNotes(job.notes || '');
-    }
-  }, [job]);
-
-  if (!job) return null;
-
-  const score = job.match_score ?? job.score ?? 0;
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await onUpdate(job.id, { stage, notes });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ pb: 0.5, pr: 6 }}>
-        <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.3 }}>
-          {job.title || 'Untitled'}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {job.company || '—'}{job.location ? ` · ${job.location}` : ''}
-        </Typography>
-        <IconButton onClick={onClose} sx={{ position: 'absolute', right: 8, top: 8 }} size="small">
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
-
-      <DialogContent dividers sx={{ py: 2 }}>
-        {/* Score circle */}
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-          <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-            <CircularProgress
-              variant="determinate"
-              value={score * 100}
-              size={56}
-              thickness={5}
-              sx={{ color: getScoreColor(score) }}
-            />
-            <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Typography sx={{ fontWeight: 800, fontSize: '0.85rem', color: getScoreColor(score) }}>
-                {Math.round(score * 100)}%
-              </Typography>
-            </Box>
-          </Box>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="body2" fontWeight={600}>Match Score</Typography>
-            <Typography variant="caption" color="text.secondary">
-              {score >= 0.8 ? 'Excellent' : score >= 0.6 ? 'Good' : 'Low'} match
-            </Typography>
-          </Box>
-          {job.url && (
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<LaunchIcon sx={{ fontSize: 14 }} />}
-              href={job.url}
-              target="_blank"
-              rel="noopener"
-              sx={{ textTransform: 'none', fontSize: '0.75rem' }}
-            >
-              LinkedIn
-            </Button>
-          )}
-        </Stack>
-
-        {/* Stage selector */}
-        <FormControl size="small" fullWidth sx={{ mb: 2 }}>
-          <InputLabel sx={{ fontSize: '0.8rem' }}>Stage</InputLabel>
-          <Select value={stage} label="Stage" onChange={(e) => setStage(e.target.value)} sx={{ fontSize: '0.85rem' }}>
-            {columns.map((col) => (
-              <MenuItem key={col.id} value={col.id} sx={{ fontSize: '0.85rem' }}>{col.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        {/* Notes */}
-        <TextField
-          label="Notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          multiline
-          rows={3}
-          fullWidth
-          size="small"
-          sx={{ mb: 2 }}
-        />
-
-        {/* Mini timeline */}
-        <Divider sx={{ mb: 1 }} />
-        <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5, display: 'block' }}>
-          Timeline
-        </Typography>
-        <Stack spacing={0.25}>
-          {job.discovered_at && (
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
-              📡 Discovered {dayjs(job.discovered_at).fromNow()}
-            </Typography>
-          )}
-          {job.scored_at && (
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
-              📊 Scored {dayjs(job.scored_at).fromNow()}
-            </Typography>
-          )}
-          {job.applied_at && (
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
-              ✅ Applied {dayjs(job.applied_at).fromNow()}
-            </Typography>
-          )}
-          {job.created_at && !job.discovered_at && (
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
-              ➕ Added {dayjs(job.created_at).fromNow()}
-            </Typography>
-          )}
-        </Stack>
-      </DialogContent>
-
-      <DialogActions sx={{ px: 2, py: 1, justifyContent: 'space-between' }}>
-        <Button size="small" color="error" startIcon={<DeleteIcon sx={{ fontSize: 14 }} />} onClick={() => { onDelete(job.id); onClose(); }} sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
-          Delete
-        </Button>
-        <Stack direction="row" spacing={1}>
-          {job.url && (
-            <Button size="small" variant="outlined" href={job.url} target="_blank" rel="noopener" sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
-              Apply Manually
-            </Button>
-          )}
-          <Button size="small" variant="contained" onClick={handleSave} disabled={saving} sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
-        </Stack>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-// ═══ MAIN BOARD ═══
+// ═══ Main ═══
 export default function Board() {
   const { enqueueSnackbar } = useSnackbar();
-
   const [jobs, setJobs] = useState([]);
   const [search, setSearch] = useState('');
   const [companyFilter, setCompanyFilter] = useState('all');
@@ -427,293 +216,241 @@ export default function Board() {
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [menuJob, setMenuJob] = useState(null);
   const [detailJob, setDetailJob] = useState(null);
-  const [detailOpen, setDetailOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [newJob, setNewJob] = useState({ title: '', company: '', location: '', url: '', stage: 'discovered', notes: '' });
+  const [addStage, setAddStage] = useState('discovered');
+  const [newJob, setNewJob] = useState({ title: '', company: '', location: '', posting_url: '', notes: '' });
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const loadJobs = useCallback(async () => {
-    try {
-      const data = await fetchJobs({ search, company: companyFilter, sort });
-      setJobs(data.jobs || data || []);
-    } catch (err) {
-      console.error('Jobs fetch error', err);
-    } finally {
-      setLoading(false);
-    }
+    try { const d = await fetchJobs({ search, company: companyFilter, sort }); setJobs(d.jobs || d || []); }
+    catch (err) { console.error(err); } finally { setLoading(false); }
   }, [search, companyFilter, sort]);
-
   useEffect(() => { loadJobs(); }, [loadJobs]);
 
-  const companies = useMemo(() => {
-    const set = new Set(jobs.map((j) => j.company).filter(Boolean));
-    return ['all', ...Array.from(set).sort()];
-  }, [jobs]);
-
+  const companies = useMemo(() => ['all', ...new Set(jobs.map(j => j.company).filter(Boolean))].sort(), [jobs]);
   const jobsByStage = useMemo(() => {
-    const map = {};
-    COLUMNS.forEach((col) => (map[col.id] = []));
-    jobs.forEach((job) => {
-      const stage = job.stage || 'discovered';
-      if (map[stage]) map[stage].push(job);
-      else map.discovered.push(job);
-    });
+    const map = {}; COLUMNS.forEach(col => (map[col.id] = []));
+    jobs.forEach(job => { const s = job.stage || 'discovered'; if (map[s]) map[s].push(job); });
     return map;
   }, [jobs]);
 
-  const handleDragStart = (event) => {
-    const job = jobs.find((j) => j.id === event.active.id);
-    setActiveJob(job || null);
+  const handleDragStart = (e) => setActiveJob(jobs.find(j => j.id === e.active.id) || null);
+  const handleDragEnd = async (e) => {
+    setActiveJob(null); const { active, over } = e; if (!over) return;
+    const job = jobs.find(j => j.id === active.id); if (!job) return;
+    let target = COLUMNS.find(c => c.id === over.id) ? over.id : jobs.find(j => j.id === over.id)?.stage;
+    if (!target || target === job.stage) return;
+    setJobs(prev => prev.map(j => j.id === active.id ? { ...j, stage: target } : j));
+    try { await updateJobStage(active.id, target); } catch { enqueueSnackbar('Failed', { variant: 'error' }); loadJobs(); }
   };
 
-  const handleDragEnd = async (event) => {
-    setActiveJob(null);
-    const { active, over } = event;
-    if (!over) return;
-    const jobId = active.id;
-    const job = jobs.find((j) => j.id === jobId);
-    if (!job) return;
-
-    let targetStage = null;
-    if (COLUMNS.find((c) => c.id === over.id)) {
-      targetStage = over.id;
-    } else {
-      const overJob = jobs.find((j) => j.id === over.id);
-      if (overJob) targetStage = overJob.stage;
-    }
-    if (!targetStage || targetStage === job.stage) return;
-
-    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, stage: targetStage } : j)));
-    try {
-      await updateJobStage(jobId, targetStage);
-    } catch (err) {
-      enqueueSnackbar('Failed to move job', { variant: 'error' });
-      loadJobs();
-    }
-  };
-
-  const handleMenuOpen = (event, job) => { setMenuAnchor(event.currentTarget); setMenuJob(job); };
+  const handleMenuOpen = (e, job) => { setMenuAnchor(e.currentTarget); setMenuJob(job); };
   const handleMenuClose = () => { setMenuAnchor(null); setMenuJob(null); };
-
-  const handleMoveToStage = async (stage) => {
-    if (!menuJob) return;
-    handleMenuClose();
-    setJobs((prev) => prev.map((j) => (j.id === menuJob.id ? { ...j, stage } : j)));
-    try {
-      await updateJobStage(menuJob.id, stage);
-    } catch (err) {
-      enqueueSnackbar('Failed to move job', { variant: 'error' });
-      loadJobs();
-    }
+  const handleMove = async (stage) => { if (!menuJob) return; handleMenuClose(); setJobs(p => p.map(j => j.id === menuJob.id ? { ...j, stage } : j)); try { await updateJobStage(menuJob.id, stage); } catch { loadJobs(); } };
+  const handleDelete = async () => { if (!menuJob) return; const id = menuJob.id; handleMenuClose(); setJobs(p => p.filter(j => j.id !== id)); try { await deleteJob(id); } catch { loadJobs(); } };
+  const handleAdd = async () => {
+    try { await createJob({ ...newJob, stage: addStage }); enqueueSnackbar('Added', { variant: 'success' }); setAddOpen(false); setNewJob({ title: '', company: '', location: '', posting_url: '', notes: '' }); loadJobs(); }
+    catch (err) { enqueueSnackbar(err.message, { variant: 'error' }); }
   };
+  const openAdd = (stage) => { setAddStage(stage); setAddOpen(true); };
 
-  const handleDeleteJob = async (id) => {
-    const jobId = id || menuJob?.id;
-    if (!jobId) return;
-    handleMenuClose();
-    setJobs((prev) => prev.filter((j) => j.id !== jobId));
-    try {
-      await deleteJob(jobId);
-      enqueueSnackbar('Job deleted', { variant: 'info' });
-    } catch (err) {
-      enqueueSnackbar('Failed to delete job', { variant: 'error' });
-      loadJobs();
-    }
-  };
-
-  const handleCardClick = (job) => { setDetailJob(job); setDetailOpen(true); };
-
-  const handleDetailUpdate = async (id, updates) => {
-    try {
-      await updateJob(id, updates);
-      setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...updates } : j)));
-      enqueueSnackbar('Job updated', { variant: 'success' });
-      setDetailOpen(false);
-    } catch (err) {
-      enqueueSnackbar('Failed to update job', { variant: 'error' });
-    }
-  };
-
-  const handleAddJob = async () => {
-    try {
-      await createJob(newJob);
-      enqueueSnackbar('Job added', { variant: 'success' });
-      setAddOpen(false);
-      setNewJob({ title: '', company: '', location: '', url: '', stage: 'discovered', notes: '' });
-      loadJobs();
-    } catch (err) {
-      enqueueSnackbar(err.message, { variant: 'error' });
-    }
-  };
+  const score = detailJob?.match_score ?? detailJob?.score;
+  const scoreStyle = score != null ? getScoreStyle(score) : null;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* ═══ TOP BAR ═══ */}
-      <Box
-        sx={{
-          height: 44,
-          minHeight: 44,
-          display: 'flex',
-          alignItems: 'center',
-          px: 1.5,
-          gap: 1,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-        }}
-      >
-        <TextField
-          size="small"
-          placeholder="Search..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{
-            width: 180,
-            '& .MuiOutlinedInput-root': { height: 30, fontSize: '0.75rem' },
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ fontSize: 16 }} />
-              </InputAdornment>
-            ),
-          }}
-        />
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <Select
-            value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
-            displayEmpty
-            sx={{ height: 30, fontSize: '0.72rem' }}
-          >
-            {companies.map((c) => (
-              <MenuItem key={c} value={c} sx={{ fontSize: '0.75rem' }}>
-                {c === 'all' ? 'All Companies' : c}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 100 }}>
-          <Select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            displayEmpty
-            sx={{ height: 30, fontSize: '0.72rem' }}
-          >
-            <MenuItem value="newest" sx={{ fontSize: '0.75rem' }}>Newest</MenuItem>
-            <MenuItem value="oldest" sx={{ fontSize: '0.75rem' }}>Oldest</MenuItem>
-            <MenuItem value="score_desc" sx={{ fontSize: '0.75rem' }}>Score ↓</MenuItem>
-            <MenuItem value="score_asc" sx={{ fontSize: '0.75rem' }}>Score ↑</MenuItem>
-          </Select>
-        </FormControl>
-        <Chip
-          label={`${jobs.length} jobs`}
-          size="small"
-          sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700 }}
-        />
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
+      {/* Header */}
+      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+        <Typography variant="h3">Job Board</Typography>
+        <Chip label={`${jobs.length} jobs`} size="small" sx={{ fontWeight: 600 }} />
         <Box sx={{ flex: 1 }} />
-        <Button
-          size="small"
-          variant="contained"
-          startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-          onClick={() => setAddOpen(true)}
-          sx={{ textTransform: 'none', fontSize: '0.72rem', height: 28, px: 1.5, boxShadow: 'none' }}
-        >
-          Add Job
-        </Button>
-      </Box>
+        <TextField
+          placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} size="small"
+          sx={{ width: 180 }}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" color="action" /></InputAdornment> }}
+        />
+        <FormControl size="small" sx={{ minWidth: 140 }}>
+          <Select value={companyFilter} displayEmpty onChange={(e) => setCompanyFilter(e.target.value)} size="small">
+            <MenuItem value="all">All companies</MenuItem>
+            {companies.filter(c => c !== 'all').map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+          </Select>
+        </FormControl>
+        <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => openAdd('discovered')}>Add Job</Button>
+      </Stack>
 
-      {/* ═══ KANBAN AREA ═══ */}
-      <Box sx={{ flex: 1, overflow: 'hidden', p: 1 }}>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <Box
-            sx={{
-              display: 'flex',
-              gap: '8px',
-              height: '100%',
-              overflowX: 'auto',
-              '&::-webkit-scrollbar': { height: 5 },
-              '&::-webkit-scrollbar-thumb': { bgcolor: 'divider', borderRadius: 3 },
-            }}
-          >
-            {COLUMNS.map((col) => (
-              <SortableContext
-                key={col.id}
-                id={col.id}
-                items={(jobsByStage[col.id] || []).map((j) => j.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <KanbanColumn
-                  column={col}
-                  jobs={jobsByStage[col.id] || []}
-                  onMenuOpen={handleMenuOpen}
-                  onCardClick={handleCardClick}
-                />
-              </SortableContext>
-            ))}
-          </Box>
-          <DragOverlay>
-            <DragOverlayCard job={activeJob} />
-          </DragOverlay>
-        </DndContext>
-      </Box>
+      {/* Board */}
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
+      ) : (
+        <Box sx={{ flex: 1, overflow: 'hidden' }}>
+          <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <Box sx={{ display: 'flex', gap: 2, height: '100%', overflowX: 'auto', pb: 1 }}>
+              {COLUMNS.map(col => (
+                <SortableContext key={col.id} id={col.id} items={(jobsByStage[col.id] || []).map(j => j.id)} strategy={verticalListSortingStrategy}>
+                  <KanbanCol column={col} jobs={jobsByStage[col.id] || []} onMenuOpen={handleMenuOpen} onCardClick={setDetailJob} onAddJob={openAdd} />
+                </SortableContext>
+              ))}
+            </Box>
+            <DragOverlay>
+              {activeJob && (
+                <Box sx={{ width: 280, p: 2, bgcolor: 'background.paper', borderRadius: '10px', boxShadow: 8, opacity: 0.95, border: '1px solid', borderColor: 'primary.main' }}>
+                  <Typography fontWeight={600}>{activeJob.title}</Typography>
+                  <Typography variant="body2" color="text.secondary">{activeJob.company}</Typography>
+                </Box>
+              )}
+            </DragOverlay>
+          </DndContext>
+        </Box>
+      )}
 
       {/* Context Menu */}
-      <Menu
-        anchorEl={menuAnchor}
-        open={Boolean(menuAnchor)}
-        onClose={handleMenuClose}
-        slotProps={{ paper: { sx: { minWidth: 130 } } }}
-      >
-        {COLUMNS.filter((c) => c.id !== menuJob?.stage).map((col) => (
-          <MenuItem key={col.id} onClick={() => handleMoveToStage(col.id)} sx={{ fontSize: '0.75rem', py: 0.5 }}>
-            Move → {col.label}
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose} slotProps={{ paper: { sx: { minWidth: 160, borderRadius: 2 } } }}>
+        <Typography variant="overline" sx={{ px: 2, py: 0.5, display: 'block' }}>Move to</Typography>
+        {COLUMNS.filter(c => c.id !== menuJob?.stage).map(col => (
+          <MenuItem key={col.id} onClick={() => handleMove(col.id)} sx={{ gap: 1 }}>
+            <Typography sx={{ fontSize: 16 }}>{STAGE_META[col.id]?.emoji}</Typography>
+            {col.label}
           </MenuItem>
         ))}
-        <Divider />
-        <MenuItem onClick={() => handleDeleteJob()} sx={{ fontSize: '0.75rem', py: 0.5, color: 'error.main' }}>
-          Delete
-        </MenuItem>
+        <Divider sx={{ my: 0.5 }} />
+        <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}><DeleteOutlineIcon fontSize="small" sx={{ mr: 1 }} />Delete</MenuItem>
       </Menu>
 
-      {/* Job Detail Modal */}
-      <JobDetailDialog
-        job={detailJob}
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        onUpdate={handleDetailUpdate}
-        onDelete={handleDeleteJob}
-        columns={COLUMNS}
-      />
+      {/* Detail Dialog */}
+      <Dialog open={Boolean(detailJob)} onClose={() => setDetailJob(null)} maxWidth="md" fullWidth
+        PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}
+      >
+        {detailJob && (() => {
+          const dScore = detailJob.match_score ?? detailJob.score;
+          const dStyle = dScore != null ? getScoreStyle(dScore) : null;
+          return (
+          <>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Stack direction="row" spacing={2} alignItems="center">
+                <Avatar sx={{ width: 44, height: 44, bgcolor: STAGE_META[detailJob.stage]?.bg, color: STAGE_META[detailJob.stage]?.color, fontWeight: 700, fontSize: 16 }}>
+                  {(detailJob.company || '?')[0]}
+                </Avatar>
+                <Box>
+                  <Typography variant="h4" sx={{ lineHeight: 1.3 }}>{detailJob.title}</Typography>
+                  <Typography variant="body2" color="text.secondary">{detailJob.company}{detailJob.location ? ` • ${detailJob.location}` : ''}</Typography>
+                </Box>
+              </Stack>
+              <IconButton onClick={() => setDetailJob(null)} size="small" sx={{ bgcolor: '#F2F3F3', '&:hover': { bgcolor: '#EAEDED' } }}>
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+            <DialogContent sx={{ p: 0 }}>
+              <Stack direction="row">
+                {/* Left Panel */}
+                <Box sx={{ flex: 1, p: 3 }}>
+                  {/* Score + Stage */}
+                  <Stack direction="row" spacing={3} alignItems="center" sx={{ mb: 3 }}>
+                    {dStyle && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+                          <CircularProgress variant="determinate" value={dScore * 100} size={72} thickness={5} sx={{ color: dStyle.color }} />
+                          <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Typography variant="h4" fontWeight={700} sx={{ color: dStyle.color }}>{Math.round(dScore * 100)}%</Typography>
+                          </Box>
+                        </Box>
+                        <Box>
+                          <Typography fontWeight={600}>{dStyle.label} Match</Typography>
+                          <Typography variant="caption" color="text.secondary">LinkedIn Premium score</Typography>
+                        </Box>
+                      </Box>
+                    )}
+                    <Chip label={detailJob.stage} icon={<span style={{ fontSize: 14 }}>{STAGE_META[detailJob.stage]?.emoji}</span>} sx={{ fontWeight: 600, textTransform: 'capitalize', bgcolor: STAGE_META[detailJob.stage]?.bg, color: STAGE_META[detailJob.stage]?.color, height: 30, fontSize: '13px' }} />
+                  </Stack>
 
-      {/* Add Job Dialog */}
+                  {/* Job URL */}
+                  {(detailJob.posting_url || detailJob.url) && (
+                    <Button variant="outlined" fullWidth startIcon={<OpenInNewIcon />} href={detailJob.posting_url || detailJob.url} target="_blank" sx={{ mb: 3, py: 1.25 }}>
+                      View Job Posting on LinkedIn
+                    </Button>
+                  )}
+
+                  {/* Analysis */}
+                  <Typography variant="h4" sx={{ mb: 1.5 }}>📊 Agent Analysis</Typography>
+                  <Box sx={{ bgcolor: '#F7F8F9', borderRadius: 2, p: 2, border: '1px solid', borderColor: 'divider', mb: 3 }}>
+                    <Stack spacing={1.5}>
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="body2" color="text.secondary">Match Score</Typography>
+                        <Typography variant="body2" fontWeight={700} sx={{ color: dStyle?.color || 'text.primary' }}>
+                          {dScore != null ? `${Math.round(dScore * 100)}% — ${dStyle?.label}` : 'Not scored'}
+                        </Typography>
+                      </Stack>
+                      <Divider />
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="body2" color="text.secondary">Application Type</Typography>
+                        <Typography variant="body2" fontWeight={500}>Easy Apply</Typography>
+                      </Stack>
+                      <Divider />
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="body2" color="text.secondary">Source</Typography>
+                        <Typography variant="body2" fontWeight={500} sx={{ textTransform: 'capitalize' }}>{detailJob.source || 'Agent'}</Typography>
+                      </Stack>
+                      <Divider />
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="body2" color="text.secondary">Discovered</Typography>
+                        <Typography variant="body2">{detailJob.date_added ? dayjs(detailJob.date_added).format('MMM D, YYYY HH:mm') : '—'}</Typography>
+                      </Stack>
+                      {dScore != null && dScore >= 0.7 && (<><Divider /><Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Recommendation</Typography><Typography variant="body2" fontWeight={600} sx={{ color: '#067D68' }}>✓ Worth applying</Typography></Stack></>)}
+                      {dScore != null && dScore < 0.5 && (<><Divider /><Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Recommendation</Typography><Typography variant="body2" fontWeight={600} sx={{ color: '#D13212' }}>✗ Below threshold</Typography></Stack></>)}
+                    </Stack>
+                  </Box>
+
+                  {detailJob.notes && (<><Typography variant="h4" sx={{ mb: 1 }}>📝 Notes</Typography><Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>{detailJob.notes}</Typography></>)}
+                </Box>
+
+                {/* Right Panel — Timeline */}
+                <Box sx={{ width: 260, minWidth: 260, p: 2.5, bgcolor: '#FAFBFC', borderLeft: '1px solid', borderColor: 'divider' }}>
+                  <Typography variant="h4" sx={{ mb: 2 }}>📅 Timeline</Typography>
+                  <Stack spacing={2}>
+                    <TimelineItem color="#0073BB" title="Discovered" sub={detailJob.date_added ? dayjs(detailJob.date_added).format('MMM D, HH:mm') : '—'} detail={`Found via ${detailJob.source || 'agent'} scan`} />
+                    {dScore != null && <TimelineItem color="#6B40B2" title="Scored" sub={`Match: ${Math.round(dScore * 100)}%`} />}
+                    {(detailJob.stage === 'reached_out') && <TimelineItem color="#6B40B2" title="InMail Sent" sub="Warm outreach to recruiter" />}
+                    {(['applied', 'interviewing', 'offered'].includes(detailJob.stage)) && <TimelineItem color="#067D68" title="Applied" sub="Application submitted" />}
+                    {detailJob.stage === 'interviewing' && <TimelineItem color="#EC7211" title="Interviewing" sub="In progress" />}
+                    {detailJob.stage === 'offered' && <TimelineItem color="#067D68" title="Offered! 🎉" sub="Congratulations" />}
+                    {detailJob.stage === 'rejected' && <TimelineItem color="#D13212" title="Rejected" sub="Not selected" isLast />}
+                    <TimelineItem color={STAGE_META[detailJob.stage]?.color || '#545B64'} title={`Current: ${detailJob.stage}`} sub="Now" isLast />
+                  </Stack>
+
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="h6" sx={{ mb: 1 }}>Quick Info</Typography>
+                  <Stack spacing={0.75}>
+                    {detailJob.location && <Stack direction="row" justifyContent="space-between"><Typography variant="caption" color="text.secondary">Location</Typography><Typography variant="body2">{detailJob.location}</Typography></Stack>}
+                    <Stack direction="row" justifyContent="space-between"><Typography variant="caption" color="text.secondary">ID</Typography><Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{detailJob.id?.slice(0, 8)}</Typography></Stack>
+                  </Stack>
+                </Box>
+              </Stack>
+            </DialogContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', px: 3, py: 1.5, borderTop: '1px solid', borderColor: 'divider', bgcolor: '#FAFBFC' }}>
+              <Button color="error" size="small" startIcon={<DeleteOutlineIcon />} onClick={() => { handleDelete(); setDetailJob(null); }}>Delete</Button>
+              <Box sx={{ flex: 1 }} />
+              {(detailJob.posting_url || detailJob.url) && <Button variant="contained" size="small" startIcon={<OpenInNewIcon />} href={detailJob.posting_url || detailJob.url} target="_blank">Apply Manually</Button>}
+            </Box>
+          </>
+          );
+        })()}
+      </Dialog>
+
+      {/* Add Dialog */}
       <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ pb: 0.5, fontSize: '0.95rem' }}>Add Job</DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          <Stack spacing={1.5} sx={{ mt: 0.5 }}>
-            <TextField size="small" label="Job Title" value={newJob.title} onChange={(e) => setNewJob((p) => ({ ...p, title: e.target.value }))} fullWidth required />
-            <TextField size="small" label="Company" value={newJob.company} onChange={(e) => setNewJob((p) => ({ ...p, company: e.target.value }))} fullWidth />
-            <TextField size="small" label="Location" value={newJob.location} onChange={(e) => setNewJob((p) => ({ ...p, location: e.target.value }))} fullWidth />
-            <TextField size="small" label="URL" value={newJob.url} onChange={(e) => setNewJob((p) => ({ ...p, url: e.target.value }))} fullWidth />
-            <FormControl size="small" fullWidth>
-              <InputLabel>Stage</InputLabel>
-              <Select value={newJob.stage} label="Stage" onChange={(e) => setNewJob((p) => ({ ...p, stage: e.target.value }))}>
-                {COLUMNS.map((col) => (<MenuItem key={col.id} value={col.id}>{col.label}</MenuItem>))}
-              </Select>
-            </FormControl>
-            <TextField size="small" label="Notes" value={newJob.notes} onChange={(e) => setNewJob((p) => ({ ...p, notes: e.target.value }))} fullWidth multiline rows={2} />
+        <DialogTitle>Add Job to {COLUMNS.find(c => c.id === addStage)?.label || 'Board'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField label="Job Title" value={newJob.title} onChange={(e) => setNewJob(p => ({ ...p, title: e.target.value }))} fullWidth required autoFocus />
+            <TextField label="Company" value={newJob.company} onChange={(e) => setNewJob(p => ({ ...p, company: e.target.value }))} fullWidth />
+            <TextField label="Location" value={newJob.location} onChange={(e) => setNewJob(p => ({ ...p, location: e.target.value }))} fullWidth />
+            <TextField label="Job URL" value={newJob.posting_url} onChange={(e) => setNewJob(p => ({ ...p, posting_url: e.target.value }))} fullWidth placeholder="https://linkedin.com/jobs/view/..." />
+            <TextField label="Notes" value={newJob.notes} onChange={(e) => setNewJob(p => ({ ...p, notes: e.target.value }))} fullWidth multiline rows={2} />
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ px: 2, pb: 1.5 }}>
-          <Button size="small" onClick={() => setAddOpen(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
-          <Button size="small" variant="contained" onClick={handleAddJob} disabled={!newJob.title} sx={{ textTransform: 'none' }}>Add</Button>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleAdd} disabled={!newJob.title}>Add Job</Button>
         </DialogActions>
       </Dialog>
     </Box>
