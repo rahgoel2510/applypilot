@@ -184,10 +184,10 @@ export default function AppLayout({ mode, toggleMode }) {
                   bgcolor: 'rgba(52, 211, 153, 0.1)',
                   color: '#34d399',
                   border: '1px solid rgba(52, 211, 153, 0.2)',
-                  fontSize: '0.65rem',
+                  fontSize: '11px',
                 }}
               />
-              <Typography variant="caption" sx={{ color: '#a78bfa', display: 'block', textAlign: 'center' }}>
+              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', display: 'block', textAlign: 'center' }}>
                 v1.0.0
               </Typography>
             </>
@@ -262,7 +262,7 @@ export default function AppLayout({ mode, toggleMode }) {
           component="main"
           sx={{
             flex: 1,
-            p: 1.5,
+            p: 0,
             height: 'calc(100vh - 40px)',
             overflowY: 'auto',
             overflowX: 'hidden',

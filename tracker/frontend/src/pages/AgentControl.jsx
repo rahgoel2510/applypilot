@@ -131,16 +131,18 @@ export default function AgentControl() {
   const dedupRate = totalSeen > 0 ? Math.round((dedupHits / totalSeen) * 100) : 0;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', p: 2 }}>
       {/* ═══ CONTROL PANEL ═══ */}
-      <Box sx={{ m: 1.5, mb: 0 }}>
+      <Typography variant="h3" sx={{ mb: 2 }}>Agent Control</Typography>
+      <Box sx={{ mb: 0 }}>
         {/* Status Row */}
         <Box sx={{ 
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          p: 1.5, mb: 1, borderRadius: 1.5,
+          p: 2.5, mb: 2, borderRadius: '12px',
           bgcolor: isRunning ? '#E6F5F2' : 'background.paper',
           border: '1px solid',
-          borderColor: isRunning ? '#067D68' : 'divider',
+          borderColor: isRunning ? '#067D68' : '#D5DBDB',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
         }}>
           <Stack direction="row" alignItems="center" spacing={1.5}>
             <Box sx={{
@@ -170,8 +172,9 @@ export default function AgentControl() {
 
         {/* Config Row */}
         <Box sx={{
-          display: 'flex', alignItems: 'center', gap: 3, p: 1.5,
-          borderRadius: 1.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper',
+          display: 'flex', alignItems: 'center', gap: 3, p: 2.5,
+          borderRadius: '12px', border: '1px solid', borderColor: '#D5DBDB', bgcolor: 'background.paper',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
         }}>
           <Stack direction="row" alignItems="center" spacing={1}>
             <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mode</Typography>
@@ -207,9 +210,9 @@ export default function AgentControl() {
       </Box>
 
       {/* ═══ MAIN CONTENT ═══ */}
-      <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', m: 1.5, mt: 1.5, gap: 1.5 }}>
+      <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', mt: 2, gap: 2 }}>
         {/* LEFT — Tabs + Content */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, border: '1px solid', borderColor: 'divider', borderRadius: 3, overflow: 'hidden', bgcolor: 'background.paper' }}>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, border: '1px solid', borderColor: 'divider', borderRadius: '12px', overflow: 'hidden', bgcolor: 'background.paper', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           {/* Tab bar */}
           <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
             <Stack direction="row" spacing={1}>
@@ -335,7 +338,7 @@ export default function AgentControl() {
               </Typography>
               <Stack spacing={2}>
                 {[
-                  { label: 'Scanned', value: status.jobs_scanned ?? 0, color: '#7c3aed' },
+                  { label: 'Scanned', value: status.jobs_scanned ?? 0, color: '#6B40B2' },
                   { label: 'Applied', value: status.jobs_applied ?? 0, color: '#10b981' },
                   { label: 'Skipped', value: status.jobs_skipped ?? 0, color: '#f59e0b' },
                   { label: 'Errors', value: status.errors ?? 0, color: '#f43f5e' },
@@ -377,9 +380,9 @@ export default function AgentControl() {
               </Typography>
               <Stack direction="row" alignItems="center" spacing={2}>
                 <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-                  <CircularProgress variant="determinate" value={dedupRate} size={60} thickness={5} sx={{ color: '#7c3aed' }} />
+                  <CircularProgress variant="determinate" value={dedupRate} size={60} thickness={5} sx={{ color: '#6B40B2' }} />
                   <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 800, color: '#7c3aed' }}>{dedupRate}%</Typography>
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 800, color: '#6B40B2' }}>{dedupRate}%</Typography>
                   </Box>
                 </Box>
                 <Box>

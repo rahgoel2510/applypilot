@@ -186,15 +186,16 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <Box sx={{ p: 1.5 }}>
+      <Box sx={{ p: 2 }}>
         <LinearProgress />
       </Box>
     );
   }
 
   return (
-    <Box>
-      <Grid container spacing={1.5}>
+    <Box sx={{ height: '100%', p: 2 }}>
+      <Typography variant="h3" sx={{ mb: 2 }}>Dashboard</Typography>
+      <Grid container spacing={2}>
         {/* ═══════════════ ROW 1: Stat Cards ═══════════════ */}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ ...cardSx, borderTop: `4px solid ${METRIC_COLORS[0]}` }}>
@@ -409,7 +410,7 @@ export default function Dashboard() {
                             size="small"
                             sx={{
                               height: 20,
-                              fontSize: '0.65rem',
+                              fontSize: '11px',
                               fontWeight: 500,
                               bgcolor: STAGE_COLORS[job.stage] ? `${STAGE_COLORS[job.stage]}18` : 'action.hover',
                               color: STAGE_COLORS[job.stage] || 'text.secondary',

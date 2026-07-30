@@ -53,49 +53,49 @@ export default function Agents() {
   if (error) return <Alert severity="error" sx={{ fontSize: 12 }}>{error}</Alert>;
 
   return (
-    <Box>
+    <Box sx={{ height: '100%', p: 2 }}>
       {/* Top bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1, borderBottom: 1, borderColor: 'divider', mb: 1.5 }}>
-        <Typography sx={{ fontSize: 14, fontWeight: 700 }}>Agents</Typography>
-        <Chip label={`${agents.filter((a) => a.enabled).length} active`} size="small" color="success" variant="outlined" sx={{ fontSize: 10, height: 18 }} />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <Typography variant="h3">Agents</Typography>
+        <Chip label={`${agents.filter((a) => a.enabled).length} active`} size="small" color="success" variant="outlined" />
       </Box>
 
-      <Grid container spacing={1.5}>
+      <Grid container spacing={2}>
         {agents.map((agent) => {
           const iconCfg = AGENT_ICONS[agent.id] || { Icon: SmartToyIcon, color: '#607d8b', bg: '#eceff1' };
           const { Icon } = iconCfg;
           return (
             <Grid size={{ xs: 12, sm: 6, md: 3 }} key={agent.id}>
-              <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+              <Box sx={{ border: '1px solid', borderColor: '#D5DBDB', borderRadius: '12px', p: 2.5, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
                 {/* Icon + toggle row */}
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                   <Box sx={{ width: 48, height: 48, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: iconCfg.bg }}>
                     <Icon sx={{ fontSize: 22, color: iconCfg.color }} />
                   </Box>
                   <Switch size="small" checked={agent.enabled} onChange={(e) => handleToggle(agent.id, e.target.checked)} />
                 </Box>
                 {/* Name */}
-                <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.25 }}>{agent.name}</Typography>
+                <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5 }}>{agent.name}</Typography>
                 {/* Description */}
-                <Typography sx={{ fontSize: 11, color: 'text.secondary', lineHeight: 1.3, mb: 1, minHeight: 28 }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.4, mb: 1.5, minHeight: 36 }}>
                   {AGENT_DESC[agent.id] || agent.description || '—'}
                 </Typography>
                 {/* Stats row */}
-                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                   {agent.last_run && (
-                    <Typography sx={{ fontSize: 10, color: 'text.secondary' }}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                       Last: {new Date(agent.last_run).toLocaleDateString()}
                     </Typography>
                   )}
                   {agent.success_rate !== undefined && (
-                    <Typography sx={{ fontSize: 10, color: agent.success_rate >= 0.8 ? 'success.main' : 'warning.main', fontWeight: 600 }}>
+                    <Typography variant="caption" sx={{ color: agent.success_rate >= 0.8 ? 'success.main' : 'warning.main', fontWeight: 600 }}>
                       {Math.round(agent.success_rate * 100)}% success
                     </Typography>
                   )}
                 </Box>
                 {/* Inline config hints */}
                 {agent.config && Object.keys(agent.config).length > 0 && (
-                  <Typography sx={{ fontSize: 9, color: 'text.disabled', mt: 0.5, fontFamily: 'monospace' }}>
+                  <Typography variant="caption" sx={{ color: 'text.disabled', mt: 0.5, fontFamily: 'monospace', display: 'block' }}>
                     {Object.entries(agent.config).slice(0, 2).map(([k, v]) => `${k}: ${typeof v === 'object' ? '…' : v}`).join(' | ')}
                   </Typography>
                 )}
@@ -106,12 +106,12 @@ export default function Agents() {
 
         {/* Add Agent */}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Box sx={{ border: '1.5px dashed', borderColor: 'divider', borderRadius: 1, p: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 160, cursor: 'pointer', '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' } }}>
-            <IconButton size="small" color="primary" sx={{ bgcolor: 'primary.50', mb: 0.5 }}>
+          <Box sx={{ border: '1.5px dashed', borderColor: '#D5DBDB', borderRadius: '12px', p: 2.5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 200, cursor: 'pointer', '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' } }}>
+            <IconButton size="small" color="primary" sx={{ bgcolor: 'primary.50', mb: 1 }}>
               <AddIcon sx={{ fontSize: 18 }} />
             </IconButton>
-            <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>Add Agent</Typography>
-            <Typography sx={{ fontSize: 9, color: 'text.disabled' }}>Coming soon</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>Add Agent</Typography>
+            <Typography variant="caption" sx={{ color: 'text.disabled' }}>Coming soon</Typography>
           </Box>
         </Grid>
       </Grid>

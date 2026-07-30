@@ -79,14 +79,14 @@ export default function Scheduler() {
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8 }}><CircularProgress /></Box>;
 
   return (
-    <Box sx={{ p: 2, maxWidth: 1100, mx: 'auto' }}>
+    <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
         <Stack direction="row" alignItems="center" spacing={2}>
           <ScheduleIcon sx={{ fontSize: 28, color: 'primary.main' }} />
           <Box>
-            <Typography variant="h5" fontWeight={700}>Agent Scheduler</Typography>
-            <Typography color="text.secondary">Configure when the agent runs automatically</Typography>
+            <Typography variant="h3">Agent Scheduler</Typography>
+            <Typography variant="body2" color="text.secondary">Configure when the agent runs automatically</Typography>
           </Box>
         </Stack>
         <Stack direction="row" alignItems="center" spacing={2}>
@@ -105,11 +105,11 @@ export default function Scheduler() {
         </Stack>
       </Stack>
 
-      <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
+      <Stack direction="row" spacing={2} sx={{ flex: 1, alignItems: 'flex-start' }}>
         {/* LEFT: Configuration */}
         <Box sx={{ flex: 1 }}>
           {/* Schedule Mode */}
-          <Card sx={{ mb: 2 }}>
+          <Card sx={{ mb: 2, borderRadius: '12px', border: '1px solid', borderColor: '#D5DBDB', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
               <Typography fontWeight={700} sx={{ mb: 1.5 }}>Schedule Mode</Typography>
               <ToggleButtonGroup
@@ -227,7 +227,7 @@ export default function Scheduler() {
                     </Box>
 
                     {/* Summary */}
-                    <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'rgba(124,58,237,0.05)', border: '1px solid', borderColor: 'rgba(124,58,237,0.15)' }}>
+                    <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'rgba(107,64,178,0.05)', border: '1px solid', borderColor: 'rgba(107,64,178,0.15)' }}>
                       <Typography sx={{ fontSize: '0.9rem', color: 'primary.main', fontWeight: 500 }}>
                         📅 {config.cron_frequency === 'every_15_min' ? 'Every 15 minutes'
                           : config.cron_frequency === 'every_30_min' ? 'Every 30 minutes'
@@ -244,7 +244,7 @@ export default function Scheduler() {
           </Card>
 
           {/* Active Hours */}
-          <Card sx={{ mb: 2 }}>
+          <Card sx={{ mb: 2, borderRadius: '12px', border: '1px solid', borderColor: '#D5DBDB', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
                 <AccessTimeIcon sx={{ color: 'text.secondary' }} />
@@ -273,7 +273,7 @@ export default function Scheduler() {
           </Card>
 
           {/* Days of Week */}
-          <Card>
+          <Card sx={{ borderRadius: '12px', border: '1px solid', borderColor: '#D5DBDB', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
                 <CalendarTodayIcon sx={{ color: 'text.secondary' }} />
@@ -300,7 +300,7 @@ export default function Scheduler() {
         {/* RIGHT: Preview */}
         <Box sx={{ width: 320, minWidth: 320 }}>
           {/* Summary */}
-          <Card sx={{ mb: 2, background: 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)', color: '#fff', border: 'none' }}>
+          <Card sx={{ mb: 2, bgcolor: '#232F3E', color: '#fff', border: 'none', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
               <Typography sx={{ fontWeight: 700, fontSize: '1rem', mb: 1 }}>Current Schedule</Typography>
               <Typography sx={{ opacity: 0.9 }}>
@@ -315,7 +315,7 @@ export default function Scheduler() {
           </Card>
 
           {/* Next Runs */}
-          <Card>
+          <Card sx={{ borderRadius: '12px', border: '1px solid', borderColor: '#D5DBDB', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
               <Typography fontWeight={700} sx={{ mb: 1.5 }}>Upcoming Runs</Typography>
               {!config.enabled ? (
@@ -326,7 +326,7 @@ export default function Scheduler() {
                 <Stack spacing={1}>
                   {nextRuns.slice(0, 5).map((run, idx) => (
                     <Stack key={idx} direction="row" alignItems="center" spacing={1.5}
-                      sx={{ p: 1, borderRadius: 1.5, bgcolor: idx === 0 ? 'rgba(124,58,237,0.06)' : 'transparent', border: idx === 0 ? '1px solid rgba(124,58,237,0.15)' : 'none' }}
+                      sx={{ p: 1, borderRadius: 1.5, bgcolor: idx === 0 ? 'rgba(107,64,178,0.06)' : 'transparent', border: idx === 0 ? '1px solid rgba(107,64,178,0.15)' : 'none' }}
                     >
                       <PlayArrowIcon sx={{ fontSize: 16, color: idx === 0 ? 'primary.main' : 'text.disabled' }} />
                       <Typography sx={{ fontFamily: 'monospace', fontWeight: idx === 0 ? 700 : 400, color: idx === 0 ? 'primary.main' : 'text.secondary' }}>

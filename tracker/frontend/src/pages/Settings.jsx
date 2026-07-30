@@ -26,9 +26,9 @@ const GROUPS = [
 
 function StatusBadge({ configured }) {
   return configured ? (
-    <Chip icon={<CheckCircleIcon />} label="Set" size="small" color="success" variant="outlined" sx={{ height: 18, fontSize: '0.6rem', '& .MuiChip-icon': { fontSize: 12 } }} />
+    <Chip icon={<CheckCircleIcon />} label="Set" size="small" color="success" variant="outlined" sx={{ height: 20, fontSize: '11px', '& .MuiChip-icon': { fontSize: 12 } }} />
   ) : (
-    <Chip icon={<CancelIcon />} label="—" size="small" color="default" variant="outlined" sx={{ height: 18, fontSize: '0.6rem', '& .MuiChip-icon': { fontSize: 12 } }} />
+    <Chip icon={<CancelIcon />} label="—" size="small" color="default" variant="outlined" sx={{ height: 20, fontSize: '11px', '& .MuiChip-icon': { fontSize: 12 } }} />
   );
 }
 
@@ -78,7 +78,7 @@ function ChipInput({ label, value, onChange, placeholder }) {
       <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>{label}</Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.5 }}>
         {value.map((item) => (
-          <Chip key={item} label={item} size="small" onDelete={() => onChange(value.filter((v) => v !== item))} sx={{ height: 20, fontSize: '0.65rem' }} />
+          <Chip key={item} label={item} size="small" onDelete={() => onChange(value.filter((v) => v !== item))} sx={{ height: 22, fontSize: '11px' }} />
         ))}
       </Box>
       <TextField
@@ -295,7 +295,7 @@ export default function Settings() {
           <Box sx={{ mt: 1.5 }}>
             <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Template</Typography>
             <TextField fullWidth size="small" multiline rows={4} value={settings.inmail_template} onChange={(e) => update('inmail_template', e.target.value)} placeholder={"Hi {name},\n\nI noticed your team..."} disabled={!settings.inmail_enabled} sx={{ '& .MuiInputBase-input': { fontSize: 12 } }} />
-            <Typography sx={{ fontSize: 10, color: 'text.secondary', mt: 0.5 }}>Variables: {'{name}'}, {'{role}'}, {'{company}'}, {'{skills}'}</Typography>
+            <Typography sx={{ fontSize: 11, color: 'text.secondary', mt: 0.5 }}>Variables: {'{name}'}, {'{role}'}, {'{company}'}, {'{skills}'}</Typography>
           </Box>
         </>
       );
@@ -307,7 +307,7 @@ export default function Settings() {
             <TextField fullWidth size="small" value={settings.data_dir} onChange={(e) => update('data_dir', e.target.value)} placeholder="./data" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
           </Box>
           <FormControlLabel sx={{ mt: 1.5, display: 'block' }} control={<Switch size="small" checked={settings.debug_mode} onChange={(e) => update('debug_mode', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Debug mode (verbose logging)</Typography>} />
-          <Typography sx={{ fontSize: 10, color: 'warning.main', mt: 0.5 }}>⚠ Debug generates large logs.</Typography>
+          <Typography sx={{ fontSize: 11, color: 'warning.main', mt: 0.5 }}>⚠ Debug generates large logs.</Typography>
         </>
       );
       default: return null;
@@ -315,31 +315,31 @@ export default function Settings() {
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
       {/* Sticky top bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75, px: 0.5, borderBottom: 1, borderColor: 'divider', position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 10 }}>
-        <Typography sx={{ fontSize: 14, fontWeight: 700 }}>Settings</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1.5, mb: 2, borderBottom: '1px solid', borderColor: '#D5DBDB' }}>
+        <Typography variant="h3">Settings</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button size="small" startIcon={<RestartAltIcon sx={{ fontSize: 14 }} />} onClick={handleReset} sx={{ fontSize: 11, color: 'text.secondary', textTransform: 'none', py: 0.25 }}>Reset</Button>
-          <Button variant="contained" size="small" startIcon={saving ? <CircularProgress size={12} color="inherit" /> : <SaveIcon sx={{ fontSize: 14 }} />} onClick={handleSave} disabled={saving} sx={{ fontSize: 11, py: 0.25, px: 1.5 }}>Save</Button>
+          <Button size="small" startIcon={<RestartAltIcon sx={{ fontSize: 14 }} />} onClick={handleReset} sx={{ color: 'text.secondary', textTransform: 'none' }}>Reset</Button>
+          <Button variant="contained" size="small" startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon sx={{ fontSize: 14 }} />} onClick={handleSave} disabled={saving}>Save</Button>
         </Box>
       </Box>
 
       {/* 2-column layout */}
-      <Grid container sx={{ flex: 1, overflow: 'hidden' }}>
+      <Grid container sx={{ flex: 1, overflow: 'hidden', border: '1px solid', borderColor: '#D5DBDB', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
         {/* Sidebar */}
-        <Grid size={{ xs: 12, md: 2.5 }} sx={{ borderRight: 1, borderColor: 'divider' }}>
-          <List dense disablePadding sx={{ pt: 0.5 }}>
+        <Grid size={{ xs: 12, md: 2.5 }} sx={{ borderRight: '1px solid', borderColor: '#D5DBDB' }}>
+          <List dense disablePadding sx={{ pt: 1 }}>
             {GROUPS.map((g) => (
-              <ListItemButton key={g.key} selected={group === g.key} onClick={() => setGroup(g.key)} sx={{ py: 0.5, px: 1.5, minHeight: 32, '&.Mui-selected': { bgcolor: 'action.selected' } }}>
-                <ListItemText primary={g.label} primaryTypographyProps={{ fontSize: 12, fontWeight: group === g.key ? 600 : 400 }} />
+              <ListItemButton key={g.key} selected={group === g.key} onClick={() => setGroup(g.key)} sx={{ py: 0.75, px: 2, minHeight: 36, '&.Mui-selected': { bgcolor: 'action.selected' } }}>
+                <ListItemText primary={g.label} primaryTypographyProps={{ fontSize: '13px', fontWeight: group === g.key ? 600 : 400 }} />
               </ListItemButton>
             ))}
           </List>
         </Grid>
 
         {/* Content */}
-        <Grid size={{ xs: 12, md: 9.5 }} sx={{ p: 1.5, overflow: 'auto' }}>
+        <Grid size={{ xs: 12, md: 9.5 }} sx={{ p: 2.5, overflow: 'auto' }}>
           {renderGroup()}
         </Grid>
       </Grid>

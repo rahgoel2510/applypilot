@@ -99,60 +99,60 @@ export default function ServiceManager() {
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}><CircularProgress size={24} /></Box>;
 
   return (
-    <Box sx={{ height: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2 }}>
       {/* Top bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.75, borderBottom: 1, borderColor: 'divider', mb: 1.5 }}>
-        <Typography sx={{ fontSize: 14, fontWeight: 700 }}>Service Manager</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Typography variant="h3">Service Manager</Typography>
       </Box>
 
-      <Grid container spacing={1.5} sx={{ flex: 1, overflow: 'auto' }}>
+      <Grid container spacing={2} sx={{ flex: 1, overflow: 'auto' }}>
         {/* Left column */}
         <Grid size={{ xs: 12, md: 8 }}>
           {/* Status row */}
-          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5, mb: 1.5 }}>
+          <Box sx={{ border: '1px solid', borderColor: '#D5DBDB', borderRadius: '12px', p: 2.5, mb: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
               <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: status.running ? 'success.main' : 'grey.400', boxShadow: status.running ? '0 0 6px rgba(76,175,80,0.5)' : 'none' }} />
-              <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{status.running ? 'Running' : 'Stopped'}</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>{status.running ? 'Running' : 'Stopped'}</Typography>
               {status.running && (
                 <>
-                  <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>Uptime: {formatUptime(status.uptime_seconds)}</Typography>
-                  {status.pid && <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>PID: {status.pid}</Typography>}
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>Uptime: {formatUptime(status.uptime_seconds)}</Typography>
+                  {status.pid && <Typography variant="body2" sx={{ color: 'text.secondary' }}>PID: {status.pid}</Typography>}
                 </>
               )}
               <Box sx={{ flex: 1 }} />
               {/* Action buttons */}
-              <Stack direction="row" spacing={0.5}>
-                <Button size="small" variant="contained" color="success" startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />} onClick={handleStart} disabled={status.running || actionLoading} sx={{ fontSize: 11, py: 0.25, px: 1 }}>Start</Button>
-                <Button size="small" variant="contained" color="error" startIcon={<StopIcon sx={{ fontSize: 14 }} />} onClick={handleStop} disabled={!status.running || actionLoading} sx={{ fontSize: 11, py: 0.25, px: 1 }}>Stop</Button>
-                <Button size="small" variant="outlined" startIcon={<RestartAltIcon sx={{ fontSize: 14 }} />} onClick={handleRestart} disabled={!status.running || actionLoading} sx={{ fontSize: 11, py: 0.25, px: 1 }}>Restart</Button>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" variant="contained" color="success" startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />} onClick={handleStart} disabled={status.running || actionLoading}>Start</Button>
+                <Button size="small" variant="contained" color="error" startIcon={<StopIcon sx={{ fontSize: 14 }} />} onClick={handleStop} disabled={!status.running || actionLoading}>Stop</Button>
+                <Button size="small" variant="outlined" startIcon={<RestartAltIcon sx={{ fontSize: 14 }} />} onClick={handleRestart} disabled={!status.running || actionLoading}>Restart</Button>
               </Stack>
             </Box>
-            {actionLoading && <LinearProgress sx={{ mt: 1, borderRadius: 1 }} />}
+            {actionLoading && <LinearProgress sx={{ mt: 1.5, borderRadius: 1 }} />}
           </Box>
 
           {/* Config */}
-          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 1 }}>Configuration</Typography>
-            <Grid container spacing={1.5}>
+          <Box sx={{ border: '1px solid', borderColor: '#D5DBDB', borderRadius: '12px', p: 2.5, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <Typography variant="body1" sx={{ fontWeight: 600, mb: 1.5 }}>Configuration</Typography>
+            <Grid container spacing={2}>
               <Grid size={{ xs: 6 }}>
                 <FormControlLabel
                   control={<Switch size="small" checked={status.auto_start} onChange={(e) => handleAutoStartToggle(e.target.checked)} />}
-                  label={<Typography sx={{ fontSize: 11 }}>Auto-start on boot</Typography>}
+                  label={<Typography variant="body2">Auto-start on boot</Typography>}
                 />
               </Grid>
               <Grid size={{ xs: 6 }}>
                 <FormControlLabel
                   control={<Switch size="small" checked={status.daemon_mode !== false} onChange={(e) => setStatus({ ...status, daemon_mode: e.target.checked })} />}
-                  label={<Typography sx={{ fontSize: 11 }}>Daemon mode</Typography>}
+                  label={<Typography variant="body2">Daemon mode</Typography>}
                 />
               </Grid>
               <Grid size={{ xs: 6 }}>
-                <Typography sx={{ fontSize: 10, color: 'text.secondary', mb: 0.25 }}>Working Directory</Typography>
-                <TextField fullWidth size="small" value={status.working_dir || './data'} onChange={(e) => setStatus({ ...status, working_dir: e.target.value })} sx={{ '& .MuiInputBase-input': { fontSize: 11, py: 0.5 } }} />
+                <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block' }}>Working Directory</Typography>
+                <TextField fullWidth size="small" value={status.working_dir || './data'} onChange={(e) => setStatus({ ...status, working_dir: e.target.value })} />
               </Grid>
               <Grid size={{ xs: 6 }}>
-                <Typography sx={{ fontSize: 10, color: 'text.secondary', mb: 0.25 }}>Log File</Typography>
-                <TextField fullWidth size="small" value={status.log_file || './data/applypilot.log'} InputProps={{ readOnly: true }} sx={{ '& .MuiInputBase-input': { fontSize: 11, py: 0.5 } }} />
+                <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block' }}>Log File</Typography>
+                <TextField fullWidth size="small" value={status.log_file || './data/applypilot.log'} InputProps={{ readOnly: true }} />
               </Grid>
             </Grid>
           </Box>
@@ -161,17 +161,17 @@ export default function ServiceManager() {
         {/* Right column */}
         <Grid size={{ xs: 12, md: 4 }}>
           {/* Uptime chart */}
-          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5, mb: 1.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.5 }}>24h Uptime</Typography>
+          <Box sx={{ border: '1px solid', borderColor: '#D5DBDB', borderRadius: '12px', p: 2.5, mb: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>24h Uptime</Typography>
             <Box sx={{ height: 150, width: '100%' }}>
               <ResponsiveContainer>
                 <BarChart data={uptimeData} margin={{ top: 4, right: 4, bottom: 4, left: -20 }}>
-                  <XAxis dataKey="hour" tick={{ fontSize: 8 }} interval={5} />
-                  <YAxis tick={{ fontSize: 8 }} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                  <Tooltip formatter={(v) => [`${v.toFixed(1)}%`, 'Uptime']} contentStyle={{ fontSize: 10 }} />
+                  <XAxis dataKey="hour" tick={{ fontSize: 11 }} interval={5} />
+                  <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip formatter={(v) => [`${v.toFixed(1)}%`, 'Uptime']} contentStyle={{ fontSize: 12 }} />
                   <Bar dataKey="uptime" radius={[2, 2, 0, 0]}>
                     {uptimeData.map((entry, idx) => (
-                      <Cell key={idx} fill={entry.uptime >= 90 ? '#4caf50' : entry.uptime >= 50 ? '#ff9800' : '#f44336'} />
+                      <Cell key={idx} fill={entry.uptime >= 90 ? '#067D68' : entry.uptime >= 50 ? '#EC7211' : '#D13212'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -180,22 +180,22 @@ export default function ServiceManager() {
           </Box>
 
           {/* Recent events */}
-          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.75 }}>Recent Events</Typography>
+          <Box sx={{ border: '1px solid', borderColor: '#D5DBDB', borderRadius: '12px', p: 2.5, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>Recent Events</Typography>
             {recentEvents.length === 0 ? (
-              <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>No events</Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>No events</Typography>
             ) : (
               <List dense disablePadding>
                 {recentEvents.slice(0, 5).map((event, idx) => (
-                  <ListItem key={idx} disablePadding sx={{ py: 0.25 }}>
-                    <ListItemIcon sx={{ minWidth: 16 }}>
+                  <ListItem key={idx} disablePadding sx={{ py: 0.5 }}>
+                    <ListItemIcon sx={{ minWidth: 20 }}>
                       <FiberManualRecordIcon sx={{ fontSize: 8, color: event.severity === 'error' ? 'error.main' : event.severity === 'success' ? 'success.main' : 'info.main' }} />
                     </ListItemIcon>
                     <ListItemText
                       primary={event.message || event.event_type}
                       secondary={event.timestamp || event.created_at ? new Date(event.timestamp || event.created_at).toLocaleTimeString() : ''}
-                      primaryTypographyProps={{ fontSize: 11 }}
-                      secondaryTypographyProps={{ fontSize: 9 }}
+                      primaryTypographyProps={{ fontSize: '13px' }}
+                      secondaryTypographyProps={{ fontSize: '12px' }}
                     />
                   </ListItem>
                 ))}
