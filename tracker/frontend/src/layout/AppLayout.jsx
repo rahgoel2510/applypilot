@@ -39,7 +39,6 @@ const DRAWER_COLLAPSED = 56;
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: DashboardIcon },
   { path: '/agent', label: 'Agent Control', icon: SmartToyIcon },
-  { path: '/pipeline', label: 'Pipeline', icon: AccountTreeIcon },
   { path: '/board', label: 'Board', icon: ViewKanbanIcon },
   { path: '/scheduler', label: 'Scheduler', icon: ScheduleIcon },
   { path: '/agents', label: 'Agents', icon: HubIcon },

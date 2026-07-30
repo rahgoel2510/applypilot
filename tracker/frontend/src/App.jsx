@@ -7,7 +7,6 @@ import { ThemeContext } from './main';
 // Lazy-loaded page components
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const AgentControl = lazy(() => import('./pages/AgentControl'));
-const PipelineView = lazy(() => import('./components/AgentPipelineView'));
 const Board = lazy(() => import('./pages/Board'));
 const Scheduler = lazy(() => import('./pages/Scheduler'));
 const Agents = lazy(() => import('./pages/Agents'));
@@ -44,7 +43,6 @@ export default function App() {
       <Route element={<AppLayout mode={mode} toggleMode={toggleMode} />}>
         <Route path="/" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Dashboard /></PageTransition></Suspense>} />
         <Route path="/agent" element={<Suspense fallback={<MinimalFallback />}><PageTransition><AgentControl /></PageTransition></Suspense>} />
-        <Route path="/pipeline" element={<Suspense fallback={<MinimalFallback />}><PageTransition><PipelineView /></PageTransition></Suspense>} />
         <Route path="/board" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Board /></PageTransition></Suspense>} />
         <Route path="/scheduler" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Scheduler /></PageTransition></Suspense>} />
         <Route path="/agents" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Agents /></PageTransition></Suspense>} />
