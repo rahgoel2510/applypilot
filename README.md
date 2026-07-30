@@ -25,133 +25,222 @@
 
 ---
 
-**ApplyPilot** is a fully autonomous agent that scans LinkedIn for jobs matching your profile, scores them for relevance, and applies on your behalf using Easy Apply — all while keeping you in the loop for sensitive decisions. It runs as a self-hosted daemon with a beautiful Kanban tracker UI, so you never lose sight of your pipeline.
+**ApplyPilot** is a fully autonomous agent that scans LinkedIn for jobs matching your profile, scores them for relevance, and applies on your behalf using Easy Apply — all while keeping you in the loop for sensitive decisions. It ships with a professional admin dashboard, self-learning scoring, and runs as a background service on any platform.
 
 ## 🚀 Features
 
-- 🔍 **Auto-Scan** — Continuously monitors LinkedIn for new job postings matching your saved searches and keywords.
-- 📊 **Match Scoring** — AI-powered relevance scoring ranks jobs by fit against your resume, skills, and preferences.
-- ⚡ **Easy Apply Automation** — Fills and submits LinkedIn Easy Apply forms end-to-end, handling multi-step flows.
-- 🧑‍💼 **Human-in-the-Loop** — Pauses and asks you before answering sensitive fields (CTC, notice period, visa status).
-- 📬 **Telegram Notifications** — Real-time alerts for new matches, successful applications, and fields needing your input.
-- ✉️ **InMail Drafting** — Generates personalized cold outreach messages to hiring managers and recruiters.
-- 📋 **Kanban Tracker** — Built-in web dashboard with drag-and-drop board, activity logs, and per-application timeline.
-- 🧪 **Dry-Run Mode** — Preview what the agent would do without actually submitting any applications.
-- 🖥️ **Cross-Platform Daemon** — Runs as a background service on macOS, Linux, and Windows (via Docker or native).
-- 🐳 **Docker One-Line Deploy** — Get up and running in seconds with a single `curl` command.
+### Agent Intelligence
+- 🔍 **Auto-Scan** — Monitors LinkedIn for jobs matching your keywords, locations, and saved searches.
+- 📊 **Match Scoring** — Uses LinkedIn Premium match percentage to rank jobs by fit.
+- ⚡ **Easy Apply Automation** — Fills and submits multi-step Easy Apply forms end-to-end.
+- 🧑‍💼 **Human-in-the-Loop** — Pauses for sensitive fields (CTC, notice period, visa) and asks you via Telegram.
+- 🧠 **Self-Learning** — Learns from your actions (promoting/rejecting jobs on the board) to improve future scoring.
+- 🗂️ **Cloud Dedup** — Tracks every job ever seen across all your machines via Turso cloud DB.
+- ✉️ **InMail Drafting** — AI-generated personalized cold outreach stored per-job for review.
+
+### Dashboard (Material UI Admin)
+- 📈 **D3.js Charts** — Animated funnel chart, interactive score donut, sparkline trends.
+- 📋 **Kanban Board** — Drag-and-drop columns (Discovered → Applied → Interview → Offer). Click any card for detailed modal with timeline, score analysis, and LinkedIn link.
+- 🤖 **Agent Control** — Start/stop, dry-run toggle, match threshold slider, live terminal output, run history.
+- ⏰ **Visual Scheduler** — Configure run frequency (interval or specific times), active hours, days of week. No cron expressions needed.
+- 🔧 **Settings** — All config editable in the UI (LinkedIn, Telegram, AI model, search keywords, thresholds).
+- 🌓 **Dark/Light Mode** — System preference detection with manual toggle.
+
+### Notifications
+- 📬 **Rich Telegram Alerts** — Per-job notifications with clickable LinkedIn URL, score %, company, location.
+- 📊 **Full Funnel Report** — After each scan: total found → deduped → discovered → applied → skipped → errors.
+- ⏸️ **Human Input Requests** — Telegram prompts when the agent needs your input on sensitive fields.
+
+### Infrastructure
+- 🖥️ **Background Service** — Runs persistently via launchd (macOS), systemd (Linux), or Task Scheduler (Windows).
+- 🐳 **Docker Deploy** — Single `docker compose up` with health checks and auto-restart.
+- 🔒 **Environment Isolation** — Each machine gets its own tracker DB + cloud dedup DB (Turso).
+- 🧪 **Dry-Run Mode** — Preview what the agent would do without submitting any applications.
 
 ## 📦 Quick Start
 
-### One-liner install
+### Local Setup (Recommended)
+
+**macOS / Linux:**
+```bash
+git clone https://github.com/rahgoel2510/applypilot.git
+cd applypilot
+bash setup.sh        # Installs Python, Node, Chromium, all deps
+bash start.sh        # Starts backend + frontend
+```
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/rahgoel2510/applypilot.git
+cd applypilot
+pwsh ./setup.ps1     # Installs Python venv, deps, Playwright, Node
+pwsh ./start.ps1     # Starts backend + frontend, opens browser
+```
+
+Dashboard opens at **http://localhost:5173**
+
+### Docker Setup
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rahgoel2510/applypilot/main/install.sh | bash
+bash docker-setup.sh       # macOS/Linux
+pwsh ./docker-setup.ps1    # Windows
 ```
 
-### Or with docker-compose
+This builds the image, starts the container, runs health checks, and opens **http://localhost:80**.
 
-```yaml
-# docker-compose.yml
-version: "3.8"
-services:
-  applypilot:
-    image: rahgoel2510/applypilot:latest
-    container_name: applypilot
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./config.yaml:/app/config.yaml
-      - ./data:/app/data
-    environment:
-      - TZ=Asia/Kolkata
-```
+### Run as Background Service
 
 ```bash
-docker-compose up -d
+# macOS/Linux
+bash service.sh install    # Auto-starts on login, restarts on crash
+
+# Windows
+pwsh ./service.ps1 install # Same — uses Task Scheduler
 ```
 
-Open **http://localhost:8000** to access the tracker dashboard.
+Service commands: `install | start | stop | status | logs | uninstall`
 
-## 🖥️ Tracker Dashboard
+## 🖥️ Dashboard Pages
 
-ApplyPilot ships with a built-in web UI at `http://localhost:8000` featuring four tabs:
+| Page | Description |
+|------|-------------|
+| **Dashboard** | KPI cards (Total Jobs, Applied, Match Rate, Pipeline), D3 funnel chart, score distribution donut, recent activity, jobs table, top companies. |
+| **Agent Control** | Status indicator, Start/Stop buttons, mode toggle (Single/Daemon), dry-run switch, threshold/limit config. Tabs: Pipeline visualization, Live terminal output, Run history with expandable details. |
+| **Board** | Kanban with 7 columns. Drag cards between stages. Hover for tooltip (score, stage, date). Click for detailed modal (score gauge, agent analysis, timeline, LinkedIn link, notes). |
+| **Scheduler** | Fixed interval or custom schedule (specific times picker). Active hours, days of week, next runs preview. |
+| **Agents** | Enable/disable individual agent modules (Scanner, Applicant, InMail Drafter, Telegram Notifier). |
+| **Settings** | All configuration in one place: LinkedIn, AI model, Telegram, search keywords, locations, thresholds, candidate info, InMail settings. |
+| **Service** | Background daemon status, start/stop/restart, auto-start on boot toggle, uptime chart. |
 
-| Tab | Description |
-|-----|-------------|
-| **Dashboard** | At-a-glance stats — applications sent today, match rate, pending reviews, weekly trends. |
-| **Agent Control** | Start/stop the agent, toggle dry-run mode, adjust scan frequency, and view live logs. |
-| **Board** | Kanban-style board with columns: Matched → Applied → Interview → Offer → Rejected. Drag cards between stages. |
-| **Activity Log** | Chronological feed of every action the agent took, with timestamps and expandable details. |
+## 🔄 Agent Pipeline
+
+Each scan follows these 5 stages:
+
+```
+1. STARTUP       → Load config → Launch browser → Verify LinkedIn session
+2. DISCOVER      → Scan recommended → Keyword search → Custom URLs
+3. EVALUATE      → Dedup check → External apply? → Get match score → Meets threshold?
+4. ACT           → Draft InMail → Submit Easy Apply → Handle human input → Save to DB
+5. WRAP UP       → Telegram alert → Sync dedup → Generate report
+```
+
+Jobs that don't pass evaluation are tracked with their score for audit.
 
 ## ⚙️ Configuration
 
-Create a `config.yaml` in your project directory:
+All settings are configurable via the dashboard UI (Settings page) or via `config.yaml`:
 
 ```yaml
 linkedin:
   email: your-email@example.com
-  password: ${LINKEDIN_PASSWORD}    # or use env var
-  session_cookie: ""                # optional: paste li_at cookie
+  password: ${LINKEDIN_PASSWORD}
 
 search:
   keywords: ["Software Engineer", "Backend Developer"]
   locations: ["Bengaluru", "Remote"]
-  experience_level: ["Mid-Senior", "Senior"]
   posted_within: "24h"
+  match_threshold: 0.70
+  max_postings_per_run: 25
+  skip_external_apply: true
 
-scoring:
-  min_match_score: 70               # 0-100, skip jobs below this
-  resume_path: ./resume.pdf
-
-apply:
-  dry_run: false
-  max_applications_per_day: 25
-  human_in_loop_fields:
-    - current_ctc
-    - expected_ctc
-    - notice_period
+candidate:
+  name: "Your Name"
+  email: "you@example.com"
+  phone: "+91-XXXXXXXXXX"
+  notice_period: "30 days"
+  willing_to_relocate: true
 
 notifications:
   telegram:
-    enabled: true
     bot_token: ${TELEGRAM_BOT_TOKEN}
     chat_id: ${TELEGRAM_CHAT_ID}
+    notify_on_submit: true
 
-server:
-  port: 8000
-  host: 0.0.0.0
+inmail:
+  enabled: true
+
+scheduler:
+  interval_minutes: 60
+  active_hours_start: 9
+  active_hours_end: 18
 ```
 
 ## 🔒 Safety & Privacy
 
-- **100% Self-Hosted** — Your credentials and data never leave your machine. No third-party servers involved.
-- **Human-in-the-Loop** — The agent will never guess your CTC, notice period, or other sensitive fields. It pauses and asks you via Telegram or the web UI.
-- **No Data Exfiltration** — Zero telemetry, zero analytics, zero outbound calls except to LinkedIn and your configured Telegram bot.
-- **Dry-Run by Default** — First run starts in dry-run mode so you can verify behavior before going live.
-- **Open Source** — Fully auditable. Read every line of code that touches your LinkedIn account.
+- **100% Self-Hosted** — Credentials and data never leave your machine.
+- **Human-in-the-Loop** — Never guesses sensitive fields. Pauses and asks via Telegram.
+- **No Telemetry** — Zero analytics, zero outbound calls except to LinkedIn and your Telegram bot.
+- **Dry-Run by Default** — Verify behavior before going live.
+- **Open Source** — Fully auditable code.
+- **Environment Isolation** — Each machine has its own DB. Cloud dedup uses per-environment Turso tokens.
+
+## 📂 Project Structure
+
+```
+applypilot/
+├── linkedin_agent/          # Agent core
+│   ├── orchestrator.py      # Main pipeline (5 stages)
+│   ├── browser.py           # Playwright browser automation
+│   ├── matcher.py           # Score evaluation + self-learning
+│   ├── applicant.py         # Easy Apply form filler
+│   ├── telegram_bot.py      # Rich notifications + human input
+│   ├── inmail.py            # AI-powered InMail drafting
+│   ├── dedup_db.py          # Cloud dedup (Turso/SQLite)
+│   └── tracker_client.py    # Pushes events to tracker API
+├── tracker/
+│   ├── backend/             # FastAPI + SQLAlchemy
+│   │   ├── main.py          # App entry + routers
+│   │   ├── models.py        # Job, InMailDraft, FeedbackSignal
+│   │   ├── routes.py        # CRUD + webhook + audit
+│   │   ├── scheduler_routes.py
+│   │   ├── service_routes.py
+│   │   └── agents_routes.py
+│   └── frontend/            # React 19 + MUI + D3.js
+│       └── src/
+│           ├── pages/       # Dashboard, AgentControl, Board, etc.
+│           ├── components/  # D3Charts, AgentPipelineView
+│           ├── layout/      # AppLayout (sidebar + topbar)
+│           └── theme.js     # AWS-inspired design system
+├── setup.sh / setup.ps1     # First-time setup
+├── start.sh / start.ps1     # Start app (foreground)
+├── service.sh / service.ps1 # Background service management
+├── docker-setup.sh / .ps1   # Docker build + test
+├── docker-compose.yml       # Container orchestration
+└── config.yaml              # Agent configuration
+```
 
 ## 🛠️ Development
 
 ```bash
-# Clone the repo
+# Clone
 git clone https://github.com/rahgoel2510/applypilot.git
 cd applypilot
 
-# Install dependencies
-pip install -r requirements.txt
+# Setup
+bash setup.sh
 
-# Copy and edit config
-cp config.example.yaml config.yaml
-
-# Run the agent locally
-python -m applypilot serve
+# Run in dev mode
+bash start.sh
 
 # Run tests
+source .venv/bin/activate
 pytest tests/ -v
+
+# Build frontend for production
+cd tracker/frontend && npm run build
 ```
 
-**Requirements:** Python 3.11+, Chrome/Chromium (for browser automation), Docker (optional).
+**Requirements:** Python 3.11+, Node.js 18+, Chrome/Chromium.
+
+## 🧠 Self-Learning
+
+The agent improves over time based on your actions:
+- Move a job to "Interviewing" → positive signal for that company
+- Reject a job → negative signal
+- After enough feedback, the agent boosts/penalizes scores for specific companies by ±10%
+- Calibration warnings if your threshold diverges from actual interview outcomes
+
+View feedback data: `GET /api/feedback/summary`
 
 ## 👨‍💻 Author
 
