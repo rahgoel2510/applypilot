@@ -40,7 +40,6 @@ import {
   getAgentStatus,
   getAgentOutput,
   getAgentRuns,
-  getAgentRunDetail,
 } from '../api';
 import AgentPipelineView from '../components/AgentPipelineView';
 
@@ -69,7 +68,6 @@ export default function AgentControl() {
   const [output, setOutput] = useState([]);
   const [runs, setRuns] = useState([]);
   const [expandedRun, setExpandedRun] = useState(null);
-  const [runDetail, setRunDetail] = useState(null);
   const [loadingAction, setLoadingAction] = useState(false);
   const [uptimeStr, setUptimeStr] = useState('');
 
@@ -117,11 +115,6 @@ export default function AgentControl() {
     try { await stopAgent(); enqueueSnackbar('Agent stopped', { variant: 'warning' }); loadStatus(); }
     catch (err) { enqueueSnackbar(err.message, { variant: 'error' }); }
     finally { setLoadingAction(false); }
-  };
-  const handleExpandRun = async (runId) => {
-    if (expandedRun === runId) { setExpandedRun(null); setRunDetail(null); return; }
-    setExpandedRun(runId);
-    try { setRunDetail(await getAgentRunDetail(runId)); } catch { setRunDetail(null); }
   };
 
   const isRunning = status.state === 'running';
@@ -172,8 +165,8 @@ export default function AgentControl() {
 
         {/* Config Row */}
         <Box sx={{
-          display: 'flex', alignItems: 'center', gap: 3, p: 2.5,
-          borderRadius: '12px', border: '1px solid', borderColor: '#D5DBDB', bgcolor: 'background.paper',
+          display: 'flex', alignItems: 'center', gap: 3, p: 2.5, mb: 2,
+          borderRadius: '12px', border: '1px solid', borderColor: '#D5DBDB', bgcolor: '#FFFFFF',
           boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
         }}>
           <Stack direction="row" alignItems="center" spacing={1}>
@@ -285,30 +278,40 @@ export default function AgentControl() {
                     {runs.map((run, idx) => {
                       const runId = run.id || run.run_id || idx;
                       const isExpanded = expandedRun === runId;
-                      const secs = run.duration || run.duration_seconds;
+                      const secs = parseInt(run.duration_seconds) || parseInt(run.duration) || 0;
                       const dur = secs ? (secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`) : '—';
+                      const processed = parseInt(run.jobs_processed) || 0;
+                      const applied = parseInt(run.jobs_applied) || 0;
+                      const skipped = parseInt(run.jobs_skipped) || 0;
+                      const paused = parseInt(run.jobs_paused) || 0;
+                      const errored = parseInt(run.jobs_errored) || 0;
                       return (
-                        <TableRow key={runId} hover onClick={() => handleExpandRun(runId)} sx={{ cursor: 'pointer' }}>
+                        <TableRow key={runId} hover onClick={() => setExpandedRun(isExpanded ? null : runId)} sx={{ cursor: 'pointer', '& td': { borderBottom: isExpanded ? 'none' : undefined } }}>
                           <TableCell>
                             <Stack direction="row" alignItems="center" spacing={0.5}>
                               <ExpandMoreIcon sx={{ fontSize: 16, transform: isExpanded ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
                               <span>{run.started_at ? dayjs(run.started_at).format('MMM D, HH:mm') : '—'}</span>
                             </Stack>
-                            {isExpanded && runDetail && (
+                            {isExpanded && (
                               <Collapse in={isExpanded}>
-                                <Box sx={{ mt: 1.5, p: 1.5, bgcolor: '#0d1117', borderRadius: 1.5, fontFamily: 'monospace', fontSize: '0.8rem', color: '#e2e8f0' }}>
-                                  <div>Discovered: {runDetail.discovered ?? '—'}</div>
-                                  <div>Scored: {runDetail.scored ?? '—'}</div>
-                                  <div>Applied: {runDetail.applied ?? '—'}</div>
-                                  <div>Skipped: {runDetail.skipped ?? '—'}</div>
-                                  <div>Errors: {runDetail.errored ?? '—'}</div>
+                                <Box sx={{ mt: 1.5, p: 2, bgcolor: '#F7F8F9', borderRadius: '8px', border: '1px solid #EAEDED' }}>
+                                  <Stack spacing={1}>
+                                    <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Mode</Typography><Typography variant="body2" fontWeight={600}>{run.mode || '—'} {run.dry_run === 'True' || run.dry_run === true ? '(Dry Run)' : ''}</Typography></Stack>
+                                    <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Collection</Typography><Typography variant="body2" fontWeight={600}>{run.collection || '—'}</Typography></Stack>
+                                    <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Processed</Typography><Typography variant="body2" fontWeight={600}>{processed}</Typography></Stack>
+                                    <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Applied</Typography><Typography variant="body2" fontWeight={600} sx={{ color: '#067D68' }}>{applied}</Typography></Stack>
+                                    <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Skipped</Typography><Typography variant="body2" fontWeight={600}>{skipped}</Typography></Stack>
+                                    <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Paused</Typography><Typography variant="body2" fontWeight={600}>{paused}</Typography></Stack>
+                                    <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Errors</Typography><Typography variant="body2" fontWeight={600} sx={{ color: errored > 0 ? '#D13212' : 'inherit' }}>{errored}</Typography></Stack>
+                                    {run.error_message && <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Error</Typography><Typography variant="body2" color="error">{run.error_message}</Typography></Stack>}
+                                  </Stack>
                                 </Box>
                               </Collapse>
                             )}
                           </TableCell>
                           <TableCell sx={{ fontFamily: 'monospace' }}>{dur}</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 700 }}>{run.jobs_scanned ?? run.jobs_processed ?? 0}</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>{run.jobs_applied ?? 0}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>{processed}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700, color: '#067D68' }}>{applied}</TableCell>
                           <TableCell>
                             <Chip
                               label={run.status || 'unknown'}
