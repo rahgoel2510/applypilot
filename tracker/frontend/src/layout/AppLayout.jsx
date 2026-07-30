@@ -141,6 +141,7 @@ export default function AppLayout({ mode, toggleMode }) {
                 sx={{
                   justifyContent: collapsed ? 'center' : 'flex-start',
                   px: collapsed ? 1.5 : undefined,
+                  transition: 'all 0.2s ease',
                   '&.Mui-selected': {
                     color: '#f5f3ff',
                   },

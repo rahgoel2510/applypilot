@@ -42,6 +42,8 @@ import {
   getAgentRuns,
 } from '../api';
 import AgentPipelineView from '../components/AgentPipelineView';
+import { motion } from 'framer-motion';
+import { AnimatedNumber } from '../components/Animated';
 
 dayjs.extend(duration);
 dayjs.extend(relativeTime);
@@ -129,6 +131,7 @@ export default function AgentControl() {
       <Typography variant="h3" sx={{ mb: 2 }}>Agent Control</Typography>
       <Box sx={{ mb: 0 }}>
         {/* Status Row */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
         <Box sx={{ 
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           p: 2.5, mb: 2, borderRadius: '12px',
@@ -162,8 +165,10 @@ export default function AgentControl() {
             >Stop</Button>
           </Stack>
         </Box>
+        </motion.div>
 
         {/* Config Row */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
         <Box sx={{
           display: 'flex', alignItems: 'center', gap: 3, p: 2.5, mb: 2,
           borderRadius: '12px', border: '1px solid', borderColor: '#D5DBDB', bgcolor: '#FFFFFF',
@@ -200,6 +205,7 @@ export default function AgentControl() {
             <Chip label={`${limit}`} size="small" variant="outlined" sx={{ fontWeight: 700, fontFamily: 'monospace' }} />
           </Stack>
         </Box>
+        </motion.div>
       </Box>
 
       {/* ═══ MAIN CONTENT ═══ */}
@@ -348,7 +354,7 @@ export default function AgentControl() {
                 ].map((stat) => (
                   <Box key={stat.label} sx={{ display: 'flex', alignItems: 'center', borderLeft: `4px solid ${stat.color}`, pl: 1.5 }}>
                     <Typography sx={{ fontSize: '0.9rem', color: 'text.secondary', flex: 1 }}>{stat.label}</Typography>
-                    <Typography sx={{ fontWeight: 800, fontSize: '1.5rem', lineHeight: 1, color: stat.color }}>{stat.value}</Typography>
+                    <Typography sx={{ fontWeight: 800, fontSize: '1.5rem', lineHeight: 1, color: stat.color }}><AnimatedNumber value={stat.value} /></Typography>
                   </Box>
                 ))}
               </Stack>

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useContext } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box } from '@mui/material';
+import { motion } from 'framer-motion';
 import AppLayout from './layout/AppLayout';
 import { ThemeContext } from './main';
 
@@ -15,19 +16,15 @@ const ServiceManager = lazy(() => import('./pages/ServiceManager'));
 
 function PageTransition({ children }) {
   return (
-    <Box
-      sx={{
-        animation: 'fadeSlideIn 0.2s ease-out',
-        '@keyframes fadeSlideIn': {
-          from: { opacity: 0, transform: 'translateY(4px)' },
-          to: { opacity: 1, transform: 'translateY(0)' },
-        },
-        height: '100%',
-        overflow: 'auto',
-      }}
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      style={{ height: '100%', overflow: 'auto' }}
     >
       {children}
-    </Box>
+    </motion.div>
   );
 }
 
