@@ -129,6 +129,14 @@ log "Installing Python packages..."
 pip install --upgrade pip -q
 pip install -r requirements.txt -q
 pip install -r tracker/backend/requirements.txt -q 2>/dev/null || true
+
+# Optional: Turso cloud dedup
+log "Trying optional libsql-experimental (cloud dedup)..."
+if pip install libsql-experimental -q 2>/dev/null; then
+  ok "libsql-experimental installed (Turso cloud dedup enabled)"
+else
+  warn "libsql-experimental skipped (dedup will use local SQLite)"
+fi
 ok "Python packages installed"
 
 # Playwright browsers

@@ -7,4 +7,3 @@ apscheduler
 platformdirs
 rich
 httpx
-libsql-experimental

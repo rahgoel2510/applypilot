@@ -72,6 +72,18 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# Optional: Turso cloud dedup (requires Rust + VS Build Tools on Windows)
+Write-Host "        Trying optional libsql (cloud dedup)..." -ForegroundColor DarkGray
+pip install libsql-experimental --quiet 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "        ⚠ libsql-experimental skipped (needs Rust + VS Build Tools)" -ForegroundColor Yellow
+    Write-Host "          Dedup will use local SQLite instead of Turso cloud." -ForegroundColor DarkGray
+    Write-Host "          To enable: Install Visual Studio Build Tools + Rust, then:" -ForegroundColor DarkGray
+    Write-Host "            pip install libsql-experimental" -ForegroundColor DarkGray
+} else {
+    Write-Host "        libsql-experimental installed (Turso cloud dedup enabled)" -ForegroundColor Green
+}
+
 # Backend deps
 if (Test-Path "tracker/backend/requirements.txt") {
     pip install -r tracker/backend/requirements.txt --quiet 2>$null
