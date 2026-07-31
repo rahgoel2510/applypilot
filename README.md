@@ -333,6 +333,40 @@ If ApplyPilot saved you time or landed you a job, consider buying me a coffee!
   </a>
 </p>
 
+## 🏗️ Architecture: Event-Driven Pipeline
+
+ApplyPilot uses a Kafka-inspired event bus for scalability and multi-platform support:
+
+```
+┌─────────────────┐     ┌────────────────────────────────┐     ┌─────────────┐
+│  LinkedIn       │────▶│                                │────▶│  Evaluator  │
+│  Adapter        │     │  Event Bus                     │     │  (scoring)  │
+├─────────────────┤     │  ─────────────────────────     │     └──────┬──────┘
+│  Indeed         │────▶│  Topics:                       │            │
+│  Adapter (TBD)  │     │  • job.discovered              │     ┌──────▼──────┐
+├─────────────────┤     │  • job.evaluated               │────▶│  Applicant  │
+│  Naukri         │────▶│  • job.qualified               │     │  (submit)   │
+│  Adapter (TBD)  │     │  • job.applied                 │     └──────┬──────┘
+└─────────────────┘     │  • job.failed                  │            │
+                        │  • job.external                │     ┌──────▼──────┐
+                        │                                │────▶│  Notifier   │
+                        │  Features:                     │     │  (Telegram) │
+                        │  • Stage markers (audit trail) │     └─────────────┘
+                        │  • Dead-letter queue (retry)   │
+                        │  • Middleware (logging, dedup)  │
+                        │  • Event persistence           │
+                        └────────────────────────────────┘
+```
+
+**Key concepts:**
+- **Events** carry all context + accumulate stage markers as they flow through the pipeline
+- **Stages** are independent processors that subscribe to topics and produce new events
+- **Platform Adapters** are discovery stages that produce `job.discovered` events
+- **Dead-letter queue** captures failed events for retry (like Kafka DLQ)
+- **Stage markers** = append-only log showing what happened at each stage (like consumer offsets)
+
+Adding a new platform (e.g., Indeed) requires only implementing a `DiscoveryStage` subclass.
+
 ## 📄 License
 
 [MIT](LICENSE) © Rahul
