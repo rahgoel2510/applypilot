@@ -29,7 +29,7 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { fetchStats, fetchLogs, fetchJobs, getAgentStatus, triggerAgent } from '../api';
 import { FunnelChart, ScoreDonut, RadialGauge, Sparkline } from '../components/D3Charts';
-import { FadeInUp, StaggerContainer, StaggerItem, AnimatedNumber } from '../components/Animated';
+import { AnimatedNumber } from '../components/Animated';
 
 dayjs.extend(relativeTime);
 
@@ -196,11 +196,8 @@ export default function Dashboard() {
   return (
     <Box sx={{ height: '100%', p: 2 }}>
       <Typography variant="h3" sx={{ mb: 2 }}>Dashboard</Typography>
-      <StaggerContainer>
       <Grid container spacing={2}>
         {/* ═══════════════ ROW 1: Stat Cards ═══════════════ */}
-        <StaggerItem>
-        <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card sx={{ ...cardSx, borderTop: `4px solid ${METRIC_COLORS[0]}` }}>
             <CardContent sx={cardContentSx}>
@@ -288,12 +285,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Grid>
-        </Grid>
-        </StaggerItem>
-
         {/* ═══════════════ ROW 2: Funnel + Score Distribution ═══════════════ */}
-        <StaggerItem>
-        <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 8 }}>
           <Card sx={cardSx}>
             <CardContent sx={cardContentSx}>
@@ -315,12 +307,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Grid>
-        </Grid>
-        </StaggerItem>
-
         {/* ═══════════════ ROW 3: Activity + Jobs Table ═══════════════ */}
-        <StaggerItem>
-        <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 5 }}>
           <Card sx={cardSx}>
             <CardContent sx={cardContentSx}>
@@ -450,12 +437,7 @@ export default function Dashboard() {
           </Card>
         </Grid>
 
-        </Grid>
-        </StaggerItem>
-
         {/* ═══════════════ ROW 4: Quick Stats + Agent Status + Top Companies ═══════════════ */}
-        <StaggerItem>
-        <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 4 }}>
           <Card sx={cardSx}>
             <CardContent sx={cardContentSx}>
@@ -558,10 +540,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Grid>
-        </Grid>
-        </StaggerItem>
       </Grid>
-      </StaggerContainer>
     </Box>
   );
 }
