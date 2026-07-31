@@ -206,10 +206,30 @@ export default function Dashboard() {
       {/* ═══════════════ Real-time Pipeline Widgets ═══════════════ */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid size={{ xs: 12, md: 4 }}>
-          <PipelineStatus events={wsEvents} isConnected={wsConnected} liveStats={wsLiveStats} />
+          <PipelineStatus
+            events={wsEvents}
+            isConnected={wsConnected}
+            liveStats={wsLiveStats || {
+              daily_cap: { today_count: appliedCount, daily_limit: 80 },
+              retry_pending: 0,
+            }}
+          />
         </Grid>
         <Grid size={{ xs: 12, md: 8 }}>
-          <LiveEventFeed events={wsEvents} maxItems={12} />
+          <LiveEventFeed events={wsEvents.length > 0 ? wsEvents : logs.map(l => ({
+            type: 'pipeline_event',
+            event_type: l.event_type || 'info',
+            timestamp: l.created_at || l.timestamp,
+            data: {
+              title: l.title || '',
+              company: l.company || '',
+              location: '',
+              match_score: null,
+              stage: l.stage || l.event_type || '',
+              status: l.severity || 'info',
+              message: l.message || '',
+            },
+          }))} maxItems={12} />
         </Grid>
       </Grid>
 

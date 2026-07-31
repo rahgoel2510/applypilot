@@ -9,10 +9,19 @@ dayjs.extend(relativeTime);
 const EVENT_CONFIG = {
   discovered: { color: 'info', icon: '🔍', label: 'Discovered' },
   submitted: { color: 'success', icon: '✅', label: 'Applied' },
+  job_submitted: { color: 'success', icon: '✅', label: 'Applied' },
   skipped: { color: 'warning', icon: '⏭️', label: 'Skipped' },
   paused: { color: 'warning', icon: '⏸️', label: 'Paused' },
   reached_out: { color: 'secondary', icon: '✉️', label: 'InMail' },
+  inmail_drafted: { color: 'secondary', icon: '✉️', label: 'InMail' },
   error: { color: 'error', icon: '❌', label: 'Error' },
+  job_error: { color: 'error', icon: '❌', label: 'Error' },
+  cycle_start: { color: 'info', icon: '🚀', label: 'Cycle Start' },
+  cycle_end: { color: 'success', icon: '📊', label: 'Cycle End' },
+  agent_start: { color: 'success', icon: '🤖', label: 'Started' },
+  agent_stop: { color: 'default', icon: '👋', label: 'Stopped' },
+  info: { color: 'info', icon: 'ℹ️', label: 'Info' },
+  warning: { color: 'warning', icon: '⚠️', label: 'Warning' },
 };
 
 export default function LiveEventFeed({ events = [], maxItems = 15 }) {
@@ -56,11 +65,12 @@ export default function LiveEventFeed({ events = [], maxItems = 15 }) {
                   <Typography fontSize={14}>{config.icon}</Typography>
                   <Box flex={1} minWidth={0}>
                     <Typography variant="body2" noWrap fontWeight={500}>
-                      {data.title || 'Event'}
+                      {data.title || data.message || 'Event'}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" noWrap>
                       {data.company}{data.location ? ` · ${data.location}` : ''}
                       {data.match_score != null ? ` · ${Math.round(data.match_score * 100)}%` : ''}
+                      {!data.company && data.message && data.title ? data.message : ''}
                     </Typography>
                   </Box>
                   <Chip label={config.label} size="small" color={config.color} variant="outlined" />
