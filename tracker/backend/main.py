@@ -14,6 +14,7 @@ from settings_routes import router as settings_router
 from scheduler_routes import router as scheduler_router
 from service_routes import router as service_router
 from agents_routes import router as agents_router
+from websocket_routes import router as ws_router
 from models import Job, ActivityLog, AppSetting, AgentRun, FeedbackSignal, InMailDraft  # noqa: F401 — ensure models are registered before create_all
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -48,6 +49,7 @@ app.include_router(settings_router)
 app.include_router(scheduler_router)
 app.include_router(service_router)
 app.include_router(agents_router)
+app.include_router(ws_router)
 
 
 # Serve static frontend (when running in Docker with built assets)

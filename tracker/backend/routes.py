@@ -1,5 +1,6 @@
 """API routes for Job Application Tracker."""
 
+import asyncio
 import json
 import uuid
 from datetime import datetime
@@ -36,6 +37,7 @@ from models import (
     StatsResponse,
     WebhookPayload,
 )
+from websocket_routes import push_event as ws_push_event, push_stats_update
 
 router = APIRouter(prefix="/api")
 
@@ -314,6 +316,22 @@ def webhook_agent(payload: WebhookPayload, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(job)
+
+    # Push real-time WebSocket update
+    try:
+        loop = asyncio.get_event_loop()
+        loop.create_task(ws_push_event(
+            event_type=payload.event.value,
+            title=payload.title or "",
+            company=payload.company or "",
+            location=payload.location or "",
+            match_score=payload.match_score,
+            stage=payload.event.value,
+            status="completed",
+        ))
+    except Exception:
+        pass  # WebSocket errors should never break the API
+
     return job
 
 

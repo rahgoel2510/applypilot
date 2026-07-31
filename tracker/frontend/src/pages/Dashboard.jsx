@@ -30,6 +30,9 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { fetchStats, fetchLogs, fetchJobs, getAgentStatus, triggerAgent } from '../api';
 import { FunnelChart, ScoreDonut, RadialGauge, Sparkline } from '../components/D3Charts';
 import { AnimatedNumber } from '../components/Animated';
+import { useWebSocket } from '../hooks/useWebSocket';
+import LiveEventFeed from '../components/LiveEventFeed';
+import PipelineStatus from '../components/PipelineStatus';
 
 dayjs.extend(relativeTime);
 
@@ -86,6 +89,9 @@ export default function Dashboard() {
   const [jobs, setJobs] = useState([]);
   const [agentStatus, setAgentStatus] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Real-time WebSocket connection
+  const { events: wsEvents, isConnected: wsConnected, liveStats: wsLiveStats } = useWebSocket();
 
   const loadData = useCallback(async () => {
     try {
@@ -196,6 +202,17 @@ export default function Dashboard() {
   return (
     <Box sx={{ height: '100%', p: 2 }}>
       <Typography variant="h3" sx={{ mb: 2 }}>Dashboard</Typography>
+
+      {/* ═══════════════ Real-time Pipeline Widgets ═══════════════ */}
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <PipelineStatus events={wsEvents} isConnected={wsConnected} liveStats={wsLiveStats} />
+        </Grid>
+        <Grid size={{ xs: 12, md: 8 }}>
+          <LiveEventFeed events={wsEvents} maxItems={12} />
+        </Grid>
+      </Grid>
+
       <Grid container spacing={2}>
         {/* ═══════════════ ROW 1: Stat Cards ═══════════════ */}
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
