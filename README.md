@@ -367,6 +367,32 @@ ApplyPilot uses a Kafka-inspired event bus for scalability and multi-platform su
 
 Adding a new platform (e.g., Indeed) requires only implementing a `DiscoveryStage` subclass.
 
+### Pipeline Runner (New)
+
+```python
+from linkedin_agent.pipeline import PipelineRunner
+
+runner = PipelineRunner(dry_run=True)
+await runner.setup()        # Browser, stages, middleware
+await runner.run_cycle()    # CYCLE_STARTED → full pipeline flow
+await runner.shutdown()     # Cleanup
+```
+
+### Adding a New Platform
+
+```python
+from linkedin_agent.pipeline import DiscoveryStage, JobEvent, EventType, Platform
+
+class IndeedDiscoveryStage(DiscoveryStage):
+    name = "indeed_discovery"
+
+    async def discover_jobs(self, config) -> list[JobEvent]:
+        # Your Indeed scraping logic here
+        return [JobEvent(platform=Platform.INDEED, title="...", ...)]
+```
+
+Register it with the bus and it works — evaluation, application, and notifications are platform-agnostic.
+
 ## 📄 License
 
 [MIT](LICENSE) © Rahul
