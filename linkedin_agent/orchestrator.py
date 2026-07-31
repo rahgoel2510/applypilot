@@ -453,6 +453,7 @@ class JobAgent:
             seen_job_ids: set[str] = set()
 
             self.log.info(f"LinkedIn scanning started")
+            await self.tracker.log("info", "info", "LinkedIn scanning started — searching across keywords and locations")
 
             # Source 1: Recommended jobs (LinkedIn's best matches for your profile)
             self.log.info("Checking Recommended jobs...")
@@ -555,6 +556,11 @@ class JobAgent:
                     self.log.info(f"  Custom URL → {new_count} new jobs")
 
             self.log.info(f"Found {len(all_jobs)} unique jobs to evaluate")
+            await self.tracker.log(
+                "info", "info",
+                f"Discovery complete: {len(all_jobs)} unique jobs to evaluate",
+                metadata={"total_found": len(all_jobs)},
+            )
 
             # d. Process each job: open → score → decide → apply/skip
             total_jobs = len(all_jobs)
@@ -581,6 +587,14 @@ class JobAgent:
                         continue
 
                     self.log.info(f"Scanning {idx}/{total_jobs}: {job_title} @ {company}")
+
+                    # Push real-time progress to dashboard
+                    await self.tracker.log(
+                        "info", "info",
+                        f"Evaluating {idx}/{total_jobs}: {job_title} @ {company}",
+                        title=job_title, company=company,
+                        metadata={"progress": idx, "total": total_jobs},
+                    )
 
                     # Skip duplicates (old local check)
                     if self.matcher.is_duplicate(company, job_title):

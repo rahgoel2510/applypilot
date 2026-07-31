@@ -167,6 +167,18 @@ def _env(key: str, default: str = "") -> str:
     return os.environ.get(key, default)
 
 
+def _normalize_threshold(value: float) -> float:
+    """Normalize match threshold to 0.0-1.0 range.
+
+    The UI slider may send integer percentages (e.g. 70, 80) while the agent
+    expects a float (0.70, 0.80). If the value is > 1.0, treat it as a
+    percentage and divide by 100.
+    """
+    if value > 1.0:
+        return value / 100.0
+    return value
+
+
 def _validate_env() -> None:
     """Ensure all required environment variables are set.
 
@@ -206,7 +218,7 @@ def _build_settings(yaml_data: dict[str, Any]) -> Settings:
         keywords=js.get("keywords", ["Software Engineer"]),
         custom_urls=js.get("custom_urls", []),
         locations=js.get("locations", ["India"]),
-        match_threshold=float(_env("MATCH_THRESHOLD", str(js.get("match_threshold", 0.80)))),
+        match_threshold=_normalize_threshold(float(_env("MATCH_THRESHOLD", str(js.get("match_threshold", 0.80))))),
         max_postings_per_run=int(_env("MAX_POSTINGS_PER_RUN", str(js.get("max_postings_per_run", 50)))),
         collection=js.get("collection", "Recommended"),
         skip_external_apply=js.get("skip_external_apply", False),

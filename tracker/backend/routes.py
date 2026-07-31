@@ -398,6 +398,22 @@ def create_log(log_data: LogCreate, db: Session = Depends(get_db)):
     db.add(log_entry)
     db.commit()
     db.refresh(log_entry)
+
+    # Push real-time WebSocket update for live dashboard
+    try:
+        import asyncio as _asyncio
+        loop = _asyncio.get_event_loop()
+        loop.create_task(ws_push_event(
+            event_type=log_data.event_type or "info",
+            title=log_data.title or "",
+            company=log_data.company or "",
+            stage=log_data.stage or "",
+            status=log_data.severity or "info",
+            message=log_data.message or "",
+        ))
+    except Exception:
+        pass  # WebSocket errors should never break the API
+
     return log_entry
 
 
