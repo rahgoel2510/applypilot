@@ -6,6 +6,7 @@ import {
   Stack,
   Chip,
   Switch,
+  Slider,
   ToggleButton,
   ToggleButtonGroup,
   CircularProgress,
@@ -108,7 +109,7 @@ export default function AgentControl() {
 
   const handleStart = async () => {
     setLoadingAction(true);
-    try { await triggerAgent({ mode, dryRun, limit, matchThreshold: threshold }); enqueueSnackbar('Agent started', { variant: 'success' }); loadStatus(); }
+    try { await triggerAgent({ mode, dryRun, limit: limit === 0 ? null : limit, matchThreshold: threshold }); enqueueSnackbar('Agent started', { variant: 'success' }); loadStatus(); }
     catch (err) { enqueueSnackbar(err.message, { variant: 'error' }); }
     finally { setLoadingAction(false); }
   };
@@ -172,8 +173,9 @@ export default function AgentControl() {
         <Box sx={{
           display: 'flex', alignItems: 'center', gap: 3, p: 2.5, mb: 2,
           borderRadius: '12px', border: '1px solid', borderColor: '#D5DBDB', bgcolor: '#FFFFFF',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)', flexWrap: 'wrap',
         }}>
+          {/* Mode Toggle */}
           <Stack direction="row" alignItems="center" spacing={1}>
             <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mode</Typography>
             <ToggleButtonGroup value={mode} exclusive onChange={(_, v) => v && setMode(v)} size="small"
@@ -186,6 +188,7 @@ export default function AgentControl() {
 
           <Box sx={{ width: 1, height: 24, bgcolor: 'divider' }} />
 
+          {/* Dry Run Switch */}
           <Stack direction="row" alignItems="center" spacing={1}>
             <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dry Run</Typography>
             <Switch size="small" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
@@ -193,32 +196,66 @@ export default function AgentControl() {
 
           <Box sx={{ width: 1, height: 24, bgcolor: 'divider' }} />
 
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Threshold</Typography>
-            <Chip
-              label={`${threshold}%`}
+          {/* Threshold Slider */}
+          <Stack spacing={0.5} sx={{ minWidth: 180, flex: 1 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Threshold</Typography>
+              <Chip
+                label={`${threshold}%`}
+                size="small"
+                color={threshold >= 80 ? 'success' : threshold >= 60 ? 'warning' : 'error'}
+                sx={{ fontWeight: 700, fontFamily: 'monospace', minWidth: 48 }}
+              />
+            </Stack>
+            <Slider
+              value={threshold}
+              onChange={(_, v) => setThreshold(v)}
+              min={30}
+              max={100}
+              step={5}
+              marks={[
+                { value: 50, label: '50' },
+                { value: 70, label: '70' },
+                { value: 80, label: '80' },
+                { value: 100, label: '100' },
+              ]}
               size="small"
-              variant="outlined"
-              sx={{ fontWeight: 700, fontFamily: 'monospace', cursor: 'pointer' }}
-              onClick={() => {
-                const val = prompt('Match threshold (1-100):', threshold);
-                if (val && !isNaN(val) && val >= 1 && val <= 100) setThreshold(Number(val));
+              sx={{
+                '& .MuiSlider-markLabel': { fontSize: '0.65rem', color: 'text.secondary' },
+                '& .MuiSlider-thumb': { width: 14, height: 14 },
               }}
             />
           </Stack>
 
           <Box sx={{ width: 1, height: 24, bgcolor: 'divider' }} />
 
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Limit</Typography>
-            <Chip
-              label={`${limit}`}
+          {/* Limit Slider */}
+          <Stack spacing={0.5} sx={{ minWidth: 180, flex: 1 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Limit</Typography>
+              <Chip
+                label={limit === 0 ? '∞ No limit' : `${limit} jobs`}
+                size="small"
+                variant="outlined"
+                sx={{ fontWeight: 700, fontFamily: 'monospace', minWidth: 64 }}
+              />
+            </Stack>
+            <Slider
+              value={limit}
+              onChange={(_, v) => setLimit(v)}
+              min={0}
+              max={100}
+              step={5}
+              marks={[
+                { value: 0, label: '∞' },
+                { value: 25, label: '25' },
+                { value: 50, label: '50' },
+                { value: 100, label: '100' },
+              ]}
               size="small"
-              variant="outlined"
-              sx={{ fontWeight: 700, fontFamily: 'monospace', cursor: 'pointer' }}
-              onClick={() => {
-                const val = prompt('Max jobs per run:', limit);
-                if (val && !isNaN(val) && val >= 1 && val <= 200) setLimit(Number(val));
+              sx={{
+                '& .MuiSlider-markLabel': { fontSize: '0.65rem', color: 'text.secondary' },
+                '& .MuiSlider-thumb': { width: 14, height: 14 },
               }}
             />
           </Stack>
