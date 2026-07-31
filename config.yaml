@@ -2,6 +2,12 @@ candidate:
   name: "Rahul Goel"
   email: ""
   phone: ""
+  resume_mapping:
+    - keywords: ["Engineering Manager", "Senior Engineering Manager", "Director of Engineering"]
+      resume: "RAHUL_GOEL_EM_Resume.pdf"
+    - keywords: ["Technical Program Manager", "TPM", "Program Manager"]
+      resume: "RAHUL_GOEL_TPM_Resume.pdf"
+  # Default resume used when no keyword matches
   resume_filename: "RAHUL_GOEL_Resume_Final.pdf"
   notice_period: "30 days"
   willing_to_relocate: true
@@ -11,6 +17,27 @@ candidate:
     - "Hyderabad"
     - "Mumbai"
     - "Delhi NCR"
+  skills:
+    - "engineering management"
+    - "technical program management"
+    - "system design"
+    - "agile"
+    - "cross-functional leadership"
+    - "stakeholder management"
+    - "OKRs"
+    - "microservices"
+    - "cloud infrastructure"
+    - "team building"
+  sensitive_field_answers:
+    salary_expectation: "As per company standards"
+    current_ctc: "Confidential - happy to discuss"
+    expected_ctc: "Negotiable based on role"
+    years_of_experience: "12"
+    gender: "Male"
+    veteran_status: "No"
+    disability: "No"
+    race_ethnicity: "Prefer not to say"
+  human_input_timeout: 300  # seconds (5 minutes)
 
 job_search:
   keywords:
@@ -27,13 +54,21 @@ job_search:
   match_threshold: 0.80
   max_postings_per_run: 50
   collection: "Recommended"
-  skip_external_apply: true
+  skip_external_apply: false
+  track_external_apply: true
   posted_within: "24h"  # 24h, week, month, any
+  fallback_scoring: true
+  initial_scan_window: "week"  # Used on first-ever run to backfill pipeline
+  daily_application_limit: 80  # Conservative daily cap (LinkedIn soft limit ~100)
 
 scheduler:
   interval_minutes: 60
   active_hours_start: 9
   active_hours_end: 22
+  urgent_mode: true  # First-week sprint: higher throughput
+  urgent_interval_minutes: 30  # Run every 30min in urgent mode
+  urgent_max_postings: 100  # Process more jobs per run
+  urgent_duration_days: 7  # Auto-disable after 7 days
 
 telegram:
   notify_on_submit: true
@@ -45,3 +80,22 @@ inmail:
   enabled: true
   tone: "professional"
   max_length: 300
+
+self_learning:
+  target_companies:
+    - "Google"
+    - "Microsoft"
+    - "Amazon"
+    - "Flipkart"
+    - "Razorpay"
+    - "Swiggy"
+    - "PhonePe"
+    - "Zerodha"
+  blocklist_companies:
+    - "Wipro"
+    - "Infosys"
+    - "TCS"
+    - "HCL"
+    - "Cognizant"
+  target_boost: 0.15
+  blocklist_penalty: 0.20

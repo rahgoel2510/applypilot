@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from linkedin_agent.answer_generator import AnswerGenerator, get_answer_generator
+
 if TYPE_CHECKING:
     from playwright.async_api import Page
 
@@ -99,9 +101,6 @@ class ApplicationExecutor:
         "gender",
         "ethnicity",
         "race",
-        "cover letter",
-        "why do you want",
-        "describe your experience",
     ]
 
     def __init__(
@@ -118,6 +117,12 @@ class ApplicationExecutor:
         self.candidate = config.get("candidate", {})
         self.job_search = config.get("job_search", {})
         self._applied_jobs: set[str] = set()  # track duplicates within session
+        self._current_job_title: str = ""  # set per-job for resume selection
+        self._current_company: str = ""  # set per-job for AI answer context
+        self._answer_gen = get_answer_generator({
+            **self.candidate,
+            'keywords': self.config.get('job_search', {}).get('keywords', []),
+        })
 
     @property
     def page(self) -> Page:
@@ -139,6 +144,9 @@ class ApplicationExecutor:
         title = job.get("title", "Unknown")
         company = job.get("company", "Unknown")
         location = job.get("location", "Unknown")
+
+        self._current_job_title = title
+        self._current_company = company
 
         logger.info(f"Processing job: {title} at {company} ({job_id})")
 
@@ -248,9 +256,10 @@ class ApplicationExecutor:
 
             # Notify on successful submission
             if self.config.get("telegram", {}).get("notify_on_submit", True):
-                await self.notifier.send_message(
+                score_pct = f"{match_score:.2f}" if match_score else "N/A"
+                await self.notifier.send_notification(
                     f"✅ Applied: {title} at {company}\n"
-                    f"📍 {location} | Score: {match_score:.2f}"
+                    f"📍 {location} | Score: {score_pct}"
                 )
 
             return ApplicationResult(
@@ -278,6 +287,20 @@ class ApplicationExecutor:
             )
 
     # ─── Screen Handlers ──────────────────────────────────────────────────
+
+    def _select_resume_for_job(self, job_title: str) -> str:
+        """Select the best resume file based on job title keyword matching.
+
+        Checks resume_mapping entries in order. First match wins.
+        Falls back to default resume_filename if no match.
+        """
+        title_lower = job_title.lower()
+        for mapping in self.candidate.get('resume_mapping', []):
+            keywords = mapping.get('keywords', [])
+            for kw in keywords:
+                if kw.lower() in title_lower or title_lower in kw.lower():
+                    return mapping.get('resume', self.candidate.get('resume_filename', ''))
+        return self.candidate.get('resume_filename', '')
 
     async def handle_contact_screen(self) -> bool:
         """Verify pre-filled contact info and fill city via autocomplete click.
@@ -332,7 +355,10 @@ class ApplicationExecutor:
         return True
 
     async def handle_resume_screen(self) -> bool:
-        """Verify the correct resume file is selected.
+        """Verify the correct resume file is selected based on job title.
+
+        Uses resume_mapping to pick the best resume for the current job.
+        Falls back to default resume_filename if no keyword match.
 
         Returns:
             True if the correct resume is active, False otherwise.
@@ -341,7 +367,8 @@ class ApplicationExecutor:
 
         await self._wait_for_form_load()
 
-        expected_resume = self.candidate.get("resume_filename", "")
+        expected_resume = self._select_resume_for_job(self._current_job_title)
+        logger.info(f"Selected resume '{expected_resume}' for job '{self._current_job_title}'")
 
         # Check if any resume card is already selected
         selected = await self.page.query_selector(self.SELECTORS["resume_selected"])
@@ -399,6 +426,40 @@ class ApplicationExecutor:
                     blocking_fields.append(label_text)
                     logger.info(f"Sensitive field detected (pause): {label_text}")
                     continue
+
+                # Try pre-configured answer for fields that match sensitive patterns
+                # (fields where _is_sensitive_field returned False because a preconfigured answer exists)
+                preconfigured = self._get_preconfigured_answer(label_text)
+                if preconfigured is not None:
+                    filled = await self._try_fill_value(group, label_text, preconfigured)
+                    if filled:
+                        logger.info(f"Auto-filled sensitive field '{label_text}' with pre-configured answer")
+                        continue
+                    else:
+                        # Could not fill even with preconfigured answer
+                        blocking_fields.append(label_text)
+                        logger.warning(f"Had pre-configured answer for '{label_text}' but could not fill")
+                        continue
+
+                # Try AI-generated answer for common application questions
+                if AnswerGenerator.is_ai_answerable(label_text):
+                    ai_answer = await self._answer_gen.generate_answer(
+                        label_text, self._current_job_title, self._current_company
+                    )
+                    if ai_answer:
+                        filled = await self._try_fill_value(group, label_text, ai_answer)
+                        if filled:
+                            logger.info(f"AI-filled field '{label_text}'")
+                            continue
+                        else:
+                            blocking_fields.append(label_text)
+                            logger.warning(f"AI generated answer for '{label_text}' but could not fill")
+                            continue
+                    else:
+                        # AI not configured or failed — treat as blocking
+                        blocking_fields.append(label_text)
+                        logger.info(f"AI answerable field '{label_text}' but no AI response; pausing")
+                        continue
 
                 # Try to auto-fill the field
                 filled = await self._try_auto_fill(group, label_text)
@@ -566,11 +627,54 @@ class ApplicationExecutor:
         return bool(value.strip())
 
     def _is_sensitive_field(self, label: str) -> bool:
-        """Determine if a field label matches known sensitive patterns."""
+        """Determine if a field label matches known sensitive patterns.
+
+        Returns False if a pre-configured answer exists for the field,
+        allowing it to be auto-filled instead of blocking.
+        """
         label_lower = label.lower()
-        return any(
+        is_sensitive = any(
             pattern in label_lower for pattern in self.SENSITIVE_FIELD_PATTERNS
         )
+        if is_sensitive:
+            # If there's a pre-configured answer, don't treat as blocking
+            if self._get_preconfigured_answer(label) is not None:
+                return False
+        return is_sensitive
+
+    def _get_preconfigured_answer(self, label: str) -> str | None:
+        """Fuzzy-match a field label against sensitive_field_answers keys.
+
+        Matching logic:
+        - Normalize both the label and the keys (lowercase, strip)
+        - Replace underscores in keys with spaces for comparison
+        - Check if any key token appears as a substring of the label, or vice versa
+        - E.g., key 'salary_expectation' matches labels containing 'salary' or 'expectation'
+        - Key 'current_ctc' matches labels containing 'current ctc' or 'current CTC'
+
+        Returns:
+            The pre-configured answer string if matched, None otherwise.
+        """
+        answers = self.candidate.get("sensitive_field_answers", {})
+        if not answers:
+            return None
+
+        label_normalized = label.lower().strip()
+
+        for key, value in answers.items():
+            key_normalized = key.lower().strip().replace("_", " ")
+            # Check if key (with spaces) is a substring of the label
+            if key_normalized in label_normalized:
+                return str(value)
+            # Check if label is a substring of the key
+            if label_normalized in key_normalized:
+                return str(value)
+            # Check individual words from the key against the label
+            key_parts = key_normalized.split()
+            if any(part in label_normalized for part in key_parts if len(part) > 2):
+                return str(value)
+
+        return None
 
     def _get_auto_fill_value(self, label: str) -> str | None:
         """Get auto-fill value from candidate config based on label text."""
@@ -659,6 +763,67 @@ class ApplicationExecutor:
 
         return False
 
+    async def _try_fill_value(self, group, label_text: str, value: str) -> bool:
+        """Fill a form group with a specific value.
+
+        Similar to _try_auto_fill but takes an explicit value parameter.
+
+        Returns:
+            True if filled successfully, False otherwise.
+        """
+        # Try text input
+        text_input = await group.query_selector(self.SELECTORS["text_input"])
+        if text_input:
+            current = await text_input.input_value()
+            if not current.strip():
+                await text_input.fill(value)
+                logger.debug(f"Filled '{label_text}' with pre-configured: '{value}'")
+                return True
+            return True  # already has a value
+
+        # Try select dropdown
+        select_input = await group.query_selector(self.SELECTORS["select_input"])
+        if select_input:
+            try:
+                await select_input.select_option(label=value)
+                logger.debug(f"Selected '{value}' for '{label_text}'")
+                return True
+            except Exception:
+                # Try partial match
+                options = await select_input.query_selector_all("option")
+                for option in options:
+                    option_text = await option.inner_text()
+                    if value.lower() in option_text.lower():
+                        option_value = await option.get_attribute("value")
+                        if option_value:
+                            await select_input.select_option(value=option_value)
+                            return True
+                return False
+
+        # Try textarea
+        textarea = await group.query_selector(self.SELECTORS["textarea_input"])
+        if textarea:
+            current = await textarea.input_value()
+            if not current.strip():
+                await textarea.fill(value)
+                logger.debug(f"Filled textarea '{label_text}' with pre-configured answer")
+                return True
+            return True
+
+        # Try radio buttons
+        radio_group = await group.query_selector(self.SELECTORS["radio_group"])
+        if radio_group:
+            target_label = value.lower()
+            labels = await radio_group.query_selector_all("label")
+            for lbl in labels:
+                lbl_text = (await lbl.inner_text()).strip().lower()
+                if lbl_text == target_label or target_label in lbl_text:
+                    await lbl.click()
+                    logger.debug(f"Selected radio '{lbl_text}' for '{label_text}'")
+                    return True
+
+        return False
+
     async def _group_has_value(self, group) -> bool:
         """Check if any input within a form group already has a value."""
         # Check text inputs
@@ -698,28 +863,161 @@ class ApplicationExecutor:
         match_score: float | None,
         blocking_fields: list[str],
     ) -> ApplicationResult:
-        """Save draft, notify, and return a paused result."""
-        # Try to save draft before closing
-        await self._save_draft()
-        await self._take_screenshot("paused", job_id)
+        """Ask human for input on sensitive fields. If they respond, fill and continue."""
+        await self._take_screenshot("needs_human_input", job_id)
 
-        # Notify about pause
-        if self.config.get("telegram", {}).get("notify_on_pause", True):
-            fields_str = ", ".join(blocking_fields[:5])
-            await self.notifier.send_message(
-                f"⏸️ Paused: {title} at {company}\n"
-                f"🚫 Needs review: {fields_str}"
+        # Ask human via Telegram and wait for response
+        human_response = await self.notifier.ask_human_input(
+            job_title=title,
+            company=company,
+            fields=blocking_fields,
+            timeout=self.candidate.get("human_input_timeout", 300),
+        )
+
+        if not human_response:
+            # Human didn't respond — save draft and skip
+            await self._save_draft()
+            return ApplicationResult(
+                status="paused",
+                job_id=job_id,
+                title=title,
+                company=company,
+                location=location,
+                match_score=match_score,
+                blocking_fields=blocking_fields,
             )
 
-        return ApplicationResult(
-            status="paused",
-            job_id=job_id,
-            title=title,
-            company=company,
-            location=location,
-            match_score=match_score,
-            blocking_fields=blocking_fields,
-        )
+        # Human responded! Parse their answers and fill the fields
+        answers = [a.strip() for a in human_response.strip().split('\n') if a.strip()]
+
+        # Fill each blocking field with the corresponding answer
+        await self._fill_human_answers(blocking_fields, answers)
+
+        # Continue the application flow
+        try:
+            await self._click_next()
+            await asyncio.sleep(1.0)
+
+            # Check if we're now at review screen or more questions
+            review_btn = await self.page.query_selector(self.SELECTORS["review_btn"])
+            if review_btn:
+                await review_btn.click()
+                await asyncio.sleep(1.0)
+
+            # Handle review screen
+            if not await self.handle_review_screen():
+                await self._save_draft()
+                return ApplicationResult(
+                    status="paused",
+                    job_id=job_id,
+                    title=title,
+                    company=company,
+                    location=location,
+                    match_score=match_score,
+                    blocking_fields=["review_after_human_input"],
+                )
+
+            # Submit!
+            if not await self.submit():
+                return ApplicationResult(
+                    status="error",
+                    job_id=job_id,
+                    title=title,
+                    company=company,
+                    location=location,
+                    match_score=match_score,
+                    error_message="Submit failed after human input",
+                )
+
+            await self._dismiss_post_submit()
+            self._applied_jobs.add(job_id)
+
+            logger.info(f"Successfully applied with human input: {title} at {company}")
+
+            if self.config.get("telegram", {}).get("notify_on_submit", True):
+                score_pct = f"{match_score:.2f}" if match_score else "N/A"
+                await self.notifier.send_notification(
+                    f"✅ Applied (with your input!): {title} at {company}\n"
+                    f"📍 {location} | Score: {score_pct}"
+                )
+
+            return ApplicationResult(
+                status="submitted",
+                job_id=job_id,
+                title=title,
+                company=company,
+                location=location,
+                match_score=match_score,
+            )
+
+        except Exception as exc:
+            logger.error(f"Error continuing after human input: {exc}")
+            await self._save_draft()
+            return ApplicationResult(
+                status="error",
+                job_id=job_id,
+                title=title,
+                company=company,
+                location=location,
+                match_score=match_score,
+                error_message=f"Post-human-input error: {str(exc)[:100]}",
+            )
+
+    async def _fill_human_answers(self, fields: list[str], answers: list[str]) -> None:
+        """Fill form fields with human-provided answers."""
+        groups = await self.page.query_selector_all(self.SELECTORS["form_fields"])
+
+        answer_idx = 0
+        for group in groups:
+            if answer_idx >= len(answers):
+                break
+
+            label_el = await group.query_selector(self.SELECTORS["field_label"])
+            label_text = (await label_el.inner_text()).strip() if label_el else ""
+
+            # Check if this is one of the blocking fields
+            if label_text and label_text in fields:
+                answer = answers[answer_idx] if answer_idx < len(answers) else ""
+                answer_idx += 1
+
+                # Fill the field
+                text_input = await group.query_selector(self.SELECTORS["text_input"])
+                if text_input:
+                    await text_input.fill(answer)
+                    continue
+
+                textarea = await group.query_selector(self.SELECTORS["textarea_input"])
+                if textarea:
+                    await textarea.fill(answer)
+                    continue
+
+                select_input = await group.query_selector(self.SELECTORS["select_input"])
+                if select_input:
+                    try:
+                        await select_input.select_option(label=answer)
+                    except Exception:
+                        # Try by value or partial match
+                        options = await select_input.query_selector_all("option")
+                        for option in options:
+                            option_text = await option.inner_text()
+                            if answer.lower() in option_text.lower():
+                                option_value = await option.get_attribute("value")
+                                if option_value:
+                                    await select_input.select_option(value=option_value)
+                                    break
+                    continue
+
+                # Radio buttons
+                radio_group = await group.query_selector(self.SELECTORS["radio_group"])
+                if radio_group:
+                    labels = await radio_group.query_selector_all("label")
+                    for lbl in labels:
+                        lbl_text = (await lbl.inner_text()).strip().lower()
+                        if answer.lower() in lbl_text or lbl_text in answer.lower():
+                            await lbl.click()
+                            break
+
+        logger.info(f"Filled {answer_idx} field(s) with human answers")
 
     async def _save_draft(self) -> None:
         """Attempt to save the current application as a draft."""

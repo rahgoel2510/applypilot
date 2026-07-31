@@ -118,7 +118,15 @@ class JobMatcher:
                      Defaults to http://localhost:8000.
     """
 
-    def __init__(self, threshold: float = 0.80, tracker_url: str = "http://localhost:8000") -> None:
+    def __init__(
+        self,
+        threshold: float = 0.80,
+        tracker_url: str = "http://localhost:8000",
+        target_companies: list[str] | None = None,
+        blocklist_companies: list[str] | None = None,
+        target_boost: float = 0.15,
+        blocklist_penalty: float = 0.20,
+    ) -> None:
         self._threshold = threshold
         self._tracker_url = tracker_url.rstrip("/")
         self._lock = threading.Lock()
@@ -128,6 +136,15 @@ class JobMatcher:
         self._promoted_companies: list[str] = []
         self._rejected_companies: list[str] = []
         self._feedback_loaded: bool = False
+        # Seed lists from config
+        self._target_companies: list[str] = [
+            c.strip().lower() for c in (target_companies or [])
+        ]
+        self._blocklist_companies: list[str] = [
+            c.strip().lower() for c in (blocklist_companies or [])
+        ]
+        self._target_boost: float = target_boost
+        self._blocklist_penalty: float = blocklist_penalty
 
     # ------------------------------------------------------------------
     # Score & threshold
@@ -308,10 +325,17 @@ class JobMatcher:
             logger.warning("Could not load feedback from tracker (%s): %s", url, exc)
 
     def adjust_score(self, score: float, company: str) -> float:
-        """Adjust a raw match score based on learned feedback signals.
+        """Adjust a raw match score based on learned feedback and seed lists.
+
+        Priority order:
+        1. Learned feedback (promoted/rejected from tracker API) — ±10%
+        2. Seed target/blocklist (from config) — applied only if not already
+           covered by learned feedback.
 
         - Companies in the 'promoted' list get a +10% boost.
         - Companies in the 'rejected' list get a -10% penalty.
+        - Companies in the target list (and NOT in promoted) get +target_boost.
+        - Companies in the blocklist (and NOT in rejected) get -blocklist_penalty.
         - Score is clamped to [0.0, 1.0].
 
         Args:
@@ -328,5 +352,9 @@ class JobMatcher:
                 score *= 1.10  # +10% boost
             elif company_lower in self._rejected_companies:
                 score *= 0.90  # -10% penalty
+            elif company_lower in self._target_companies:
+                score += self._target_boost
+            elif company_lower in self._blocklist_companies:
+                score -= self._blocklist_penalty
 
         return max(0.0, min(score, 1.0))

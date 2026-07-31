@@ -160,7 +160,23 @@ candidate:
   notice_period: "30 days"
   willing_to_relocate: true
   work_authorization: "Authorized to work"
-  preferred_cities: ["Bangalore", "Hyderabad", "Mumbai"]
+  preferred_cities: ["Bangalore", "Hyderabad", "Mumbai", "Delhi NCR"]
+  skills:
+    - "engineering management"
+    - "technical program management"
+    - "system design"
+    - "agile"
+    - "cross-functional leadership"
+  resume_mapping:
+    - keywords: ["Engineering Manager", "Director of Engineering"]
+      resume: "RAHUL_GOEL_EM_Resume.pdf"
+    - keywords: ["Technical Program Manager", "TPM"]
+      resume: "RAHUL_GOEL_TPM_Resume.pdf"
+  sensitive_field_answers:
+    salary_expectation: "As per company standards"
+    current_ctc: "Confidential - happy to discuss"
+    years_of_experience: "12"
+  human_input_timeout: 300     # 5 min wait for Telegram reply
 
 job_search:
   keywords:
@@ -174,12 +190,20 @@ job_search:
   match_threshold: 0.80        # Only apply if ≥ 80% match
   max_postings_per_run: 50
   posted_within: "24h"         # 24h, week, month, any
-  skip_external_apply: true
+  initial_scan_window: "week"  # First-ever run scans past week
+  skip_external_apply: false   # Track external jobs (notify via Telegram)
+  track_external_apply: true
+  fallback_scoring: true       # Keyword scoring when no Premium
+  daily_application_limit: 80  # Stop at 80/day to avoid rate limits
 
 scheduler:
   interval_minutes: 60         # Run every hour
   active_hours_start: 9        # Start at 9 AM
   active_hours_end: 22         # Stop at 10 PM
+  urgent_mode: true            # First-week sprint mode
+  urgent_interval_minutes: 30  # Every 30 min in urgent
+  urgent_max_postings: 100     # More jobs per run
+  urgent_duration_days: 7      # Auto-disable after 7 days
 
 telegram:
   notify_on_submit: true
@@ -189,6 +213,12 @@ inmail:
   enabled: true
   tone: "professional"
   max_length: 300
+
+self_learning:
+  target_companies: ["Google", "Microsoft", "Amazon"]
+  blocklist_companies: ["Wipro", "Infosys", "TCS"]
+  target_boost: 0.15           # +15% score boost for targets
+  blocklist_penalty: 0.20      # -20% score penalty for blocklist
 ```
 
 ### `.env`
@@ -270,7 +300,7 @@ Discovered → Reached Out → Saved → Applied → Interviewing → Offered �
 
 ## Match Scoring
 
-Uses **LinkedIn Premium's AI Coach**:
+### Primary: LinkedIn Premium AI Coach
 
 1. Agent opens job page
 2. Clicks "Show match details"
@@ -279,19 +309,40 @@ Uses **LinkedIn Premium's AI Coach**:
 5. Agent computes: 6/8 = 75%
 6. If ≥ 80% → apply. If < 80% → skip.
 
-**Fallback**: If LinkedIn AI doesn't respond within 30s, the agent uses an LLM (OpenRouter) to extract match data from the page text.
+### Fallback: Keyword Scoring (No Premium Required)
+
+When LinkedIn AI doesn't return a score:
+1. Agent uses `FallbackScorer` — TF-IDF-like keyword overlap
+2. Matches job title + company against your configured skills + keywords
+3. Gives bonus for exact title matches and location matches
+4. Returns a 0.0–1.0 score, same threshold applies
+
+### Self-Learning Score Adjustments
+
+- Target companies (configured): +15% boost
+- Blocklist companies (configured): -20% penalty
+- Promoted to interview (learned): +10% boost
+- Rejected by you (learned): -10% penalty
 
 ---
 
 ## InMail Strategy
 
-### "Warm Inbound" (default for Easy Apply)
+### Post-Submission Only (Easy Apply)
 
 ```
-Score ≥ 80% → Draft InMail → Send to Telegram → Apply
+Score ≥ 80% → Apply → Success? → Draft InMail → Send to Telegram for review
 ```
 
-Recruiter sees your message first, then your application. Feels intentional.
+InMail is only drafted AFTER confirmed submission. Never message a recruiter about a job you didn't apply to.
+
+### External Apply (High Match)
+
+```
+Score ≥ 80% + External → Draft InMail → Notify user via Telegram with direct link
+```
+
+For external jobs, InMail serves as a warm intro since user applies manually.
 
 ### InMail Prompt
 

@@ -47,10 +47,14 @@ class CandidateConfig:
     email: str = ""
     phone: str = ""
     resume_filename: str = "resume.pdf"
+    resume_mapping: list = field(default_factory=list)  # [{keywords: [...], resume: "..."}]
     notice_period: str = "Immediate"
     willing_to_relocate: bool = True
     work_authorization: str = "Authorized to work"
     preferred_cities: list[str] = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)
+    sensitive_field_answers: dict = field(default_factory=dict)
+    human_input_timeout: int = 300
 
 
 @dataclass(frozen=True)
@@ -63,8 +67,12 @@ class JobSearchConfig:
     match_threshold: float = 0.80
     max_postings_per_run: int = 50
     collection: str = "Recommended"
-    skip_external_apply: bool = True
+    skip_external_apply: bool = False
+    track_external_apply: bool = True
     posted_within: str = "week"  # day, week, month
+    initial_scan_window: str = "week"  # Used on first-ever run (day, week, month)
+    fallback_scoring: bool = True
+    daily_application_limit: int = 80  # Conservative daily cap (LinkedIn soft limit ~100)
 
 
 @dataclass(frozen=True)
@@ -74,6 +82,10 @@ class SchedulerConfig:
     interval_minutes: int = 60
     active_hours_start: int = 9
     active_hours_end: int = 22
+    urgent_mode: bool = False
+    urgent_interval_minutes: int = 30
+    urgent_max_postings: int = 100
+    urgent_duration_days: int = 7
 
 
 @dataclass(frozen=True)
@@ -97,6 +109,16 @@ class InmailConfig:
     max_length: int = 300
 
 
+@dataclass(frozen=True)
+class SelfLearningConfig:
+    """Self-learning seed configuration for target/blocklist companies."""
+
+    target_companies: list[str] = field(default_factory=list)
+    blocklist_companies: list[str] = field(default_factory=list)
+    target_boost: float = 0.15
+    blocklist_penalty: float = 0.20
+
+
 # ---------------------------------------------------------------------------
 # Top-level Settings
 # ---------------------------------------------------------------------------
@@ -111,6 +133,7 @@ class Settings:
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     inmail: InmailConfig = field(default_factory=InmailConfig)
+    self_learning: SelfLearningConfig = field(default_factory=SelfLearningConfig)
 
     # Secrets (loaded from env)
     openai_api_key: str = ""
@@ -167,10 +190,14 @@ def _build_settings(yaml_data: dict[str, Any]) -> Settings:
         email=_env("CANDIDATE_EMAIL", c.get("email", "")),
         phone=_env("CANDIDATE_PHONE", c.get("phone", "")),
         resume_filename=c.get("resume_filename", "resume.pdf"),
+        resume_mapping=c.get("resume_mapping", []),
         notice_period=c.get("notice_period", "Immediate"),
         willing_to_relocate=c.get("willing_to_relocate", True),
         work_authorization=c.get("work_authorization", "Authorized to work"),
         preferred_cities=c.get("preferred_cities", []),
+        skills=c.get("skills", []),
+        sensitive_field_answers=c.get("sensitive_field_answers", {}),
+        human_input_timeout=int(c.get("human_input_timeout", 300)),
     )
 
     # --- Job search ---
@@ -182,8 +209,12 @@ def _build_settings(yaml_data: dict[str, Any]) -> Settings:
         match_threshold=float(_env("MATCH_THRESHOLD", str(js.get("match_threshold", 0.80)))),
         max_postings_per_run=int(_env("MAX_POSTINGS_PER_RUN", str(js.get("max_postings_per_run", 50)))),
         collection=js.get("collection", "Recommended"),
-        skip_external_apply=js.get("skip_external_apply", True),
+        skip_external_apply=js.get("skip_external_apply", False),
+        track_external_apply=js.get("track_external_apply", True),
         posted_within=js.get("posted_within", "week"),
+        initial_scan_window=js.get("initial_scan_window", "week"),
+        fallback_scoring=js.get("fallback_scoring", True),
+        daily_application_limit=int(js.get("daily_application_limit", 80)),
     )
 
     # --- Scheduler ---
@@ -192,6 +223,10 @@ def _build_settings(yaml_data: dict[str, Any]) -> Settings:
         interval_minutes=int(_env("SCHEDULER_INTERVAL", str(sc.get("interval_minutes", 60)))),
         active_hours_start=int(sc.get("active_hours_start", 9)),
         active_hours_end=int(sc.get("active_hours_end", 22)),
+        urgent_mode=sc.get("urgent_mode", False),
+        urgent_interval_minutes=int(sc.get("urgent_interval_minutes", 30)),
+        urgent_max_postings=int(sc.get("urgent_max_postings", 100)),
+        urgent_duration_days=int(sc.get("urgent_duration_days", 7)),
     )
 
     # --- Telegram ---
@@ -213,12 +248,22 @@ def _build_settings(yaml_data: dict[str, Any]) -> Settings:
         max_length=int(im.get("max_length", 300)),
     )
 
+    # --- Self-learning ---
+    sl = yaml_data.get("self_learning", {})
+    self_learning = SelfLearningConfig(
+        target_companies=sl.get("target_companies", []),
+        blocklist_companies=sl.get("blocklist_companies", []),
+        target_boost=float(sl.get("target_boost", 0.15)),
+        blocklist_penalty=float(sl.get("blocklist_penalty", 0.20)),
+    )
+
     return Settings(
         candidate=candidate,
         job_search=job_search,
         scheduler=scheduler,
         telegram=telegram,
         inmail=inmail,
+        self_learning=self_learning,
         openai_api_key=_env("OPENAI_API_KEY"),
         linkedin_email=_env("LINKEDIN_EMAIL"),
         linkedin_password=_env("LINKEDIN_PASSWORD"),

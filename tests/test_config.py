@@ -251,7 +251,8 @@ class TestDataclassDefaults:
         assert js.match_threshold == 0.80
         assert js.max_postings_per_run == 50
         assert js.collection == "Recommended"
-        assert js.skip_external_apply is True
+        assert js.skip_external_apply is False
+        assert js.track_external_apply is True
 
     def test_scheduler_defaults(self):
         sc = SchedulerConfig()

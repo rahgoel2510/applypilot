@@ -26,6 +26,8 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeout,
 )
 
+from linkedin_agent.stealth import STEALTH_ARGS, get_random_ua, get_stealth_scripts
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -189,22 +191,19 @@ class LinkedInBrowser:
 
         self._playwright = await async_playwright().start()
 
+        # Select a rotating user-agent for this session
+        user_agent = get_random_ua()
+        logger.info("Using user-agent: %s", user_agent[:60])
+
         # Use persistent context to retain cookies/session across runs
         self._context = await self._playwright.chromium.launch_persistent_context(
             user_data_dir=str(BROWSER_DATA_DIR),
             headless=headless,
             viewport={"width": 1280, "height": 900},
-            user_agent=(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
+            user_agent=user_agent,
             locale="en-US",
             timezone_id="America/New_York",
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-            ],
+            args=STEALTH_ARGS,
         )
 
         # Use the first page or create one
@@ -212,6 +211,12 @@ class LinkedInBrowser:
             self._page = self._context.pages[0]
         else:
             self._page = await self._context.new_page()
+
+        # Inject stealth scripts on current page and all future pages
+        stealth_js = get_stealth_scripts()
+        await self._context.add_init_script(stealth_js)
+        # Also inject into the already-open page
+        await self._page.add_init_script(stealth_js)
 
         logger.info("Browser launched (headless=%s, data_dir=%s)", headless, BROWSER_DATA_DIR)
 
@@ -225,6 +230,147 @@ class LinkedInBrowser:
             await self._playwright.stop()
             self._playwright = None
         logger.info("Browser closed.")
+
+    # ------------------------------------------------------------------
+    # Session Health & Challenge Handling
+    # ------------------------------------------------------------------
+
+    async def check_session_health(self) -> bool:
+        """Check if the current page indicates a healthy LinkedIn session.
+
+        Detects:
+        - Login page redirects (session expired)
+        - CAPTCHA/challenge pages
+        - Rate limit pages
+        - Security verification pages
+
+        Returns:
+            True if the session is healthy, False if a problem is detected.
+        """
+        page = self.page
+        current_url = page.url.lower()
+
+        # Check for login page redirect (session expired)
+        if "/login" in current_url or "/uas/login" in current_url:
+            if "/feed" not in current_url:
+                logger.warning("Session health: login page detected (session expired). URL: %s", page.url)
+                return False
+
+        # Check for checkpoint/challenge URLs
+        challenge_url_patterns = [
+            "/checkpoint/",
+            "/challenge/",
+            "/security/",
+            "/uas/consumer-email-challenge",
+            "/uas/account-restricted",
+        ]
+        for pattern in challenge_url_patterns:
+            if pattern in current_url:
+                logger.warning("Session health: challenge URL detected: %s", page.url)
+                return False
+
+        # Check page text content for challenge indicators
+        try:
+            body_text = await page.inner_text("body")
+            body_lower = body_text.lower()
+
+            challenge_phrases = [
+                "security verification",
+                "let's do a quick check",
+                "unusual activity",
+                "we need to verify",
+                "verify your identity",
+                "please solve this puzzle",
+                "complete the security check",
+                "your account has been restricted",
+                "temporarily restricted",
+                "rate limit",
+                "too many requests",
+                "please try again later",
+                "we've detected unusual activity",
+            ]
+
+            for phrase in challenge_phrases:
+                if phrase in body_lower:
+                    logger.warning("Session health: challenge text detected: '%s'", phrase)
+                    return False
+
+        except Exception as exc:
+            logger.debug("Session health check could not read page body: %s", exc)
+
+        logger.debug("Session health: OK")
+        return True
+
+    async def handle_challenge(self) -> bool:
+        """Handle a detected CAPTCHA/challenge by alerting the user and waiting.
+
+        Steps:
+        1. Takes a screenshot of the challenge page.
+        2. Sends a Telegram notification with the screenshot info.
+        3. Waits up to 5 minutes, polling every 15 seconds for resolution.
+        4. Returns True if the challenge is resolved, False if timed out.
+
+        Returns:
+            True if the challenge was resolved (session healthy again).
+            False if the timeout was reached without resolution.
+        """
+        page = self.page
+        CHALLENGE_TIMEOUT = 300  # 5 minutes
+        POLL_INTERVAL = 15  # seconds
+
+        # Step 1: Take screenshot
+        import time as _time
+        screenshot_name = f"challenge_{int(_time.time())}"
+        await self.take_screenshot(screenshot_name)
+        screenshot_path = SCREENSHOT_DIR / f"{screenshot_name}.png"
+        logger.warning("Challenge detected! Screenshot saved: %s", screenshot_path)
+
+        # Step 2: Send Telegram notification
+        try:
+            from linkedin_agent.telegram_bot import send_notification
+            await send_notification(
+                f"🚨 *LinkedIn Challenge Detected*\n\n"
+                f"The agent encountered a security challenge/CAPTCHA.\n"
+                f"📸 Screenshot: `{screenshot_name}.png`\n"
+                f"🔗 Current URL: {page.url}\n\n"
+                f"⏳ Waiting up to 5 minutes for manual resolution.\n"
+                f"Please open the browser and solve the challenge."
+            )
+        except Exception as tg_exc:
+            logger.warning("Could not send Telegram notification: %s", tg_exc)
+
+        # Step 3: Poll for resolution
+        elapsed = 0.0
+        while elapsed < CHALLENGE_TIMEOUT:
+            await asyncio.sleep(POLL_INTERVAL)
+            elapsed += POLL_INTERVAL
+
+            # Check if the page has moved past the challenge
+            is_healthy = await self.check_session_health()
+            if is_healthy:
+                logger.info("Challenge resolved after %.0f seconds.", elapsed)
+                try:
+                    from linkedin_agent.telegram_bot import send_notification
+                    await send_notification("✅ Challenge resolved! Agent resuming.")
+                except Exception:
+                    pass
+                return True
+
+            logger.info("Challenge still active... (%.0f/%.0f seconds)", elapsed, CHALLENGE_TIMEOUT)
+
+        # Step 4: Timed out
+        logger.error("Challenge NOT resolved within %d seconds. Agent cannot proceed.", CHALLENGE_TIMEOUT)
+        try:
+            from linkedin_agent.telegram_bot import send_notification
+            await send_notification(
+                "❌ *Challenge timed out*\n\n"
+                "The agent could not proceed because the challenge was not resolved "
+                "within 5 minutes. The current run will be aborted."
+            )
+        except Exception:
+            pass
+
+        return False
 
     # ------------------------------------------------------------------
     # Authentication
@@ -344,6 +490,17 @@ class LinkedInBrowser:
                 current_url,
             )
             await self.take_screenshot("login_challenge")
+
+        # Check session health after login (detect challenges/CAPTCHAs)
+        is_healthy = await self.check_session_health()
+        if not is_healthy:
+            logger.warning("Session health check failed after login. Attempting challenge resolution...")
+            resolved = await self.handle_challenge()
+            if not resolved:
+                raise RuntimeError(
+                    "LinkedIn session challenge detected after login and could not be resolved. "
+                    "Manual intervention required."
+                )
 
     # ------------------------------------------------------------------
     # Navigation
@@ -630,6 +787,74 @@ class LinkedInBrowser:
         except Exception:
             return False
 
+    async def get_external_apply_url(self) -> str | None:
+        """Extract the external application URL from the current job page.
+
+        Looks for anchor elements near the apply button area that link to
+        non-LinkedIn domains (i.e., the company's own career portal).
+
+        Returns:
+            The external URL if found, None otherwise.
+        """
+        page = self.page
+        try:
+            # Strategy 1: Look for the external apply button/link directly
+            # LinkedIn shows an "Apply" button that links externally
+            external_selectors = [
+                'a[data-tracking-control-name*="apply_external"]',
+                'a[data-tracking-control-name*="apply"]',
+                'a.jobs-apply-button',
+                '.jobs-apply-button--top-card a[href]',
+                '.jobs-s-apply a[href]',
+                'a[href*="applyWithLinkedIn=false"]',
+            ]
+
+            for selector in external_selectors:
+                link = await page.query_selector(selector)
+                if link:
+                    href = await link.get_attribute("href")
+                    if href and "linkedin.com" not in href:
+                        logger.info("Found external apply URL: %s", href[:100])
+                        return href
+
+            # Strategy 2: Find any anchor near the apply section with external domain
+            apply_section = await page.query_selector(
+                '.jobs-apply-button, .jobs-s-apply, [class*="apply"]'
+            )
+            if apply_section:
+                parent = await apply_section.evaluate_handle(
+                    "el => el.closest('div') || el.parentElement"
+                )
+                if parent:
+                    parent_el = parent.as_element()
+                    if parent_el:
+                        links = await parent_el.query_selector_all("a[href]")
+                        for link in links:
+                            href = await link.get_attribute("href") or ""
+                            if href and "linkedin.com" not in href and href.startswith("http"):
+                                logger.info("Found external apply URL (section scan): %s", href[:100])
+                                return href
+
+            # Strategy 3: Look in the broader job detail area
+            all_links = await page.query_selector_all(
+                '.jobs-unified-top-card a[href], .job-details-jobs-unified-top-card a[href]'
+            )
+            for link in all_links:
+                href = await link.get_attribute("href") or ""
+                if href and "linkedin.com" not in href and href.startswith("http"):
+                    # Verify it looks like a career/apply URL
+                    apply_keywords = ["career", "apply", "job", "recruit", "talent", "lever", "greenhouse", "workday", "ashby"]
+                    if any(kw in href.lower() for kw in apply_keywords):
+                        logger.info("Found external apply URL (top-card scan): %s", href[:100])
+                        return href
+
+            logger.info("Could not extract external apply URL.")
+            return None
+
+        except Exception as exc:
+            logger.warning("Error extracting external apply URL: %s", exc)
+            return None
+
     async def get_match_score(self) -> tuple[int, int]:
         """Get the qualification match score from LinkedIn's AI coach.
 
@@ -722,6 +947,101 @@ class LinkedInBrowser:
         except Exception as exc:
             logger.warning("Failed to get match score: %s", exc)
             return (0, 0)
+
+    # ------------------------------------------------------------------
+    # Already Applied Detection
+    # ------------------------------------------------------------------
+
+    async def is_already_applied(self) -> bool:
+        """Check if the current job page shows LinkedIn's 'Already Applied' indicator.
+
+        LinkedIn shows various indicators:
+        - 'Applied X days ago' text
+        - 'You applied on ...' text
+        - A green checkmark with 'Applied' status
+        - 'Application submitted' banner
+
+        Returns:
+            True if any 'already applied' indicator is found.
+        """
+        page = self.page
+
+        try:
+            # Scope to the job detail header/action area to avoid matching JD text
+            # LinkedIn wraps job actions in .jobs-s-apply or the top detail section
+            header_selectors = [
+                ".jobs-s-apply",
+                ".jobs-unified-top-card",
+                ".job-details-jobs-unified-top-card__container--two-pane",
+                ".jobs-details-top-card",
+            ]
+
+            # Find the scoped container
+            container = None
+            for sel in header_selectors:
+                container = await page.query_selector(sel)
+                if container:
+                    break
+
+            # If no specific container found, use a narrow scope: top 400px of job detail
+            # This avoids matching "applied" in the job description body
+            if container is None:
+                container = await page.query_selector(
+                    ".jobs-search__job-details, .scaffold-layout__detail"
+                )
+
+            if container is None:
+                # Last resort: cannot scope properly, skip check to avoid false positives
+                logger.debug("Cannot find job header container for applied-badge check.")
+                return False
+
+            # Get text content of the scoped area
+            scoped_text = await container.inner_text()
+
+            # Pattern 1: "Applied X days/hours/weeks ago"
+            if re.search(r"Applied\s+\d+\s+(?:day|hour|week|month)s?\s+ago", scoped_text):
+                logger.info("Already-applied badge detected: 'Applied X ago' pattern")
+                return True
+
+            # Pattern 2: "You applied on ..."
+            if re.search(r"You applied on\s+", scoped_text):
+                logger.info("Already-applied badge detected: 'You applied on' pattern")
+                return True
+
+            # Pattern 3: "Application submitted"
+            if "Application submitted" in scoped_text:
+                logger.info("Already-applied badge detected: 'Application submitted'")
+                return True
+
+            # Pattern 4: LinkedIn's applied status component within .jobs-s-apply
+            applied_feedback = await page.query_selector(
+                ".jobs-s-apply .artdeco-inline-feedback"
+            )
+            if applied_feedback:
+                feedback_text = await applied_feedback.inner_text()
+                # Verify it actually says something about "applied" — not a generic message
+                if re.search(r"(?i)applied|submitted", feedback_text):
+                    logger.info("Already-applied badge detected: artdeco-inline-feedback")
+                    return True
+
+            # Pattern 5: Check for a span with "Applied" in the apply button area
+            # Be careful NOT to match "Easy Apply" button text
+            apply_area = await page.query_selector(".jobs-s-apply")
+            if apply_area:
+                apply_area_text = await apply_area.inner_text()
+                # Remove "Easy Apply" from consideration
+                cleaned = apply_area_text.replace("Easy Apply", "")
+                # Check for standalone "Applied" (with context that it's a status)
+                if re.search(r"\bApplied\b", cleaned):
+                    logger.info("Already-applied badge detected: 'Applied' in apply area")
+                    return True
+
+            return False
+
+        except Exception as exc:
+            # On any error, return False to avoid false positives
+            logger.debug("Error checking already-applied status: %s", exc)
+            return False
 
     # ------------------------------------------------------------------
     # Easy Apply Flow
@@ -1130,6 +1450,73 @@ class LinkedInBrowser:
                 continue
 
         logger.debug("No upsell dialog to dismiss.")
+
+    # ------------------------------------------------------------------
+    # Application Status Tracking
+    # ------------------------------------------------------------------
+
+    async def check_application_statuses(self, max_check: int = 50) -> list[dict]:
+        """Check LinkedIn's 'My Jobs → Applied' page for status updates.
+
+        LinkedIn shows statuses like:
+        - 'Application viewed'
+        - 'Application submitted'
+        - 'Resume downloaded'
+        - 'No longer accepting applications'
+
+        Returns:
+            List of dicts: {job_id, title, company, status, applied_date}
+        """
+        page = self.page
+        results = []
+
+        # Navigate to My Jobs → Applied
+        await page.goto('https://www.linkedin.com/my-items/saved-jobs/?cardType=APPLIED', wait_until='domcontentloaded')
+        await _human_delay(2, 4)
+
+        # Scroll to load cards
+        for _ in range(5):
+            await page.evaluate('window.scrollBy(0, 400)')
+            await asyncio.sleep(0.5)
+
+        # Parse application cards
+        cards = await page.query_selector_all('.reusable-search__result-container, .artdeco-list__item, li.reusable-search__result-container')
+
+        for card in cards[:max_check]:
+            try:
+                # Extract job info
+                title_el = await card.query_selector('a span, .entity-result__title-text a span')
+                title = (await title_el.inner_text()).strip() if title_el else ''
+
+                company_el = await card.query_selector('.entity-result__primary-subtitle, .artdeco-entity-lockup__subtitle')
+                company = (await company_el.inner_text()).strip() if company_el else ''
+
+                # Extract status
+                status_el = await card.query_selector('.entity-result__badge-text, .artdeco-entity-lockup__badge, [class*="status"]')
+                status = (await status_el.inner_text()).strip() if status_el else 'submitted'
+
+                # Extract link for job_id
+                link_el = await card.query_selector('a[href*="/jobs/view/"]')
+                href = await link_el.get_attribute('href') if link_el else ''
+                job_id = ''
+                if href:
+                    import re as _re
+                    m = _re.search(r'/jobs/view/(\d+)', href)
+                    if m:
+                        job_id = m.group(1)
+
+                if title:
+                    results.append({
+                        'job_id': job_id,
+                        'title': title,
+                        'company': company,
+                        'status': status.lower(),
+                    })
+            except Exception:
+                continue
+
+        logger.info('Checked %d application statuses', len(results))
+        return results
 
     # ------------------------------------------------------------------
     # Debugging & Utilities

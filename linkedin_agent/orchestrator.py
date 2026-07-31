@@ -17,6 +17,8 @@ from linkedin_agent.telegram_bot import TelegramNotifier
 from linkedin_agent.inmail import InMailDrafter
 from linkedin_agent.tracker_client import get_tracker
 from linkedin_agent.logger import setup_logging
+from linkedin_agent.retry_queue import RetryQueue
+from linkedin_agent.daily_cap import get_daily_cap
 
 
 class JobStatus(str, Enum):
@@ -85,7 +87,13 @@ class JobAgent:
 
         # Initialize modules
         self.browser = BrowserManager()
-        self.matcher = JobMatcher(threshold=self.config.job_search.match_threshold)
+        self.matcher = JobMatcher(
+            threshold=self.config.job_search.match_threshold,
+            target_companies=self.config.self_learning.target_companies,
+            blocklist_companies=self.config.self_learning.blocklist_companies,
+            target_boost=self.config.self_learning.target_boost,
+            blocklist_penalty=self.config.self_learning.blocklist_penalty,
+        )
         self.notifier = TelegramNotifier(
             bot_token=self.config.telegram.bot_token,
             chat_id=self.config.telegram.chat_id,
@@ -95,6 +103,12 @@ class JobAgent:
 
         # ApplicationExecutor requires browser + matcher + notifier (created per cycle)
         self._applicant: ApplicationExecutor | None = None
+
+        # Retry queue for failed applications (persists across restarts)
+        self.retry_queue = RetryQueue()
+
+        # Daily application cap tracking (avoids LinkedIn rate limiting)
+        self.daily_cap = get_daily_cap(daily_limit=self.config.job_search.daily_application_limit)
 
         # State
         self.tally = CycleTally()
@@ -257,6 +271,38 @@ class JobAgent:
             }
             await self.notifier.send_tally_report(tally_dict)
 
+    async def check_response_statuses(self) -> None:
+        """Check LinkedIn for application response updates and sync to tracker."""
+        self.log.info('Checking application response statuses...')
+        try:
+            statuses = await self.browser.check_application_statuses(max_check=30)
+            updated = 0
+            for item in statuses:
+                status = item.get('status', '')
+                # Map LinkedIn status text to our pipeline stages
+                if 'viewed' in status or 'downloaded' in status:
+                    stage = 'in_review'
+                elif 'no longer' in status or 'closed' in status:
+                    stage = 'rejected'
+                else:
+                    continue  # 'submitted' is default, no update needed
+
+                await self.tracker.push_event(
+                    event=stage,
+                    title=item.get('title', ''),
+                    company=item.get('company', ''),
+                    posting_url=f"https://www.linkedin.com/jobs/view/{item['job_id']}/" if item.get('job_id') else None,
+                )
+                updated += 1
+
+            if updated:
+                self.log.info(f'  Updated {updated} application statuses')
+                await self.notifier.send_notification(
+                    f"📋 Status update: {updated} application(s) have new responses on LinkedIn"
+                )
+        except Exception as exc:
+            self.log.warning(f'Could not check application statuses: {exc}')
+
     # ─── Scan Cycle ─────────────────────────────────────────────────
 
     async def run_scan_cycle(self) -> None:
@@ -272,11 +318,48 @@ class JobAgent:
         g. Close browser
         """
         self.tally = CycleTally()
+
+        # Check daily application cap
+        if self.daily_cap.is_at_limit:
+            self.log.warning(
+                f"Daily application cap reached ({self.daily_cap.today_count}/{self.daily_cap.daily_limit}). "
+                f"Skipping this cycle to avoid LinkedIn rate limiting."
+            )
+            await self.notifier.send_notification(
+                f"⚠️ Daily cap reached ({self.daily_cap.today_count}/{self.daily_cap.daily_limit}).\n"
+                f"Pausing applications until tomorrow to protect your account."
+            )
+            return
+
         collection = self.config.job_search.collection
         max_postings = self.config.job_search.max_postings_per_run
         inmail_enabled = self.config.inmail.enabled
         notify_on_submit = self.config.telegram.notify_on_submit
         notify_on_pause = self.config.telegram.notify_on_pause
+
+        # Check urgent mode
+        urgent = self.config.scheduler.urgent_mode
+        if urgent:
+            # Check if urgent mode has expired
+            from pathlib import Path as _UPath
+            urgent_marker = _UPath.home() / '.linkedin_agent' / '.urgent_start'
+            if not urgent_marker.exists():
+                urgent_marker.parent.mkdir(parents=True, exist_ok=True)
+                urgent_marker.write_text(datetime.now().isoformat())
+            else:
+                start_str = urgent_marker.read_text().strip()
+                try:
+                    start_date = datetime.fromisoformat(start_str)
+                    days_elapsed = (datetime.now() - start_date).days
+                    if days_elapsed >= self.config.scheduler.urgent_duration_days:
+                        urgent = False
+                        self.log.info(f'Urgent mode expired after {days_elapsed} days')
+                except ValueError:
+                    pass
+
+            if urgent:
+                max_postings = self.config.scheduler.urgent_max_postings
+                self.log.info(f'URGENT MODE: max_postings={max_postings}')
 
         # Initialize counters for the finally block (may not reach assignment in try)
         total_jobs = 0
@@ -342,11 +425,30 @@ class JobAgent:
                 },
             )
 
-            # c. Search jobs by keywords
+            # c. Determine if this is the first-ever run
+            from pathlib import Path as _Path
+            marker_file = _Path.home() / ".linkedin_agent" / ".first_run_complete"
+            is_first_run = not marker_file.exists()
+
+            # Also check dedup DB — if we've seen jobs before, it's not the first run
+            if is_first_run:
+                from linkedin_agent.dedup_db import get_dedup_db as _get_dedup_early
+                _dedup_check = _get_dedup_early()
+                if _dedup_check.connected and _dedup_check.total_seen() > 0:
+                    is_first_run = False
+
             keywords = self.config.job_search.keywords
             custom_urls = self.config.job_search.custom_urls
             locations = self.config.job_search.locations
-            posted_within = self.config.job_search.posted_within
+
+            if is_first_run:
+                posted_within = self.config.job_search.initial_scan_window
+                self.log.info(
+                    f"First run detected — scanning past {posted_within} for initial pipeline"
+                )
+            else:
+                posted_within = self.config.job_search.posted_within
+
             all_jobs: list[dict] = []
             seen_job_ids: set[str] = set()
 
@@ -370,54 +472,69 @@ class JobAgent:
             except Exception as rec_exc:
                 self.log.info(f"  Recommended → skipped ({str(rec_exc)[:40]})")
 
-            # Source 2: Keyword search (combined OR + individual)
+            # Source 2: Keyword search across ALL locations
             if len(all_jobs) < max_postings:
                 self.log.info(f"Searching by keywords: {keywords}")
+                self.log.info(f"Across locations: {locations}")
+                search_count = 0
 
-                # First: combined OR search (finds all titles at once — most efficient)
+                # Phase 1: Combined OR search for each location (most efficient)
                 if len(keywords) > 1:
                     combined_query = " OR ".join(f'"{k}"' for k in keywords)
-                    location = locations[0] if locations else ""
-                    await self.browser.search_jobs(
-                        keyword=combined_query,
-                        location=location,
-                        posted_within=posted_within,
-                    )
-                    remaining = max_postings - len(all_jobs)
-                    page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 25))
-                    new_count = 0
-                    for j in page_jobs:
-                        jid = j.get("job_id", "")
-                        if jid and jid not in seen_job_ids:
-                            all_jobs.append(j)
-                            seen_job_ids.add(jid)
-                            new_count += 1
-                    self.log.info(f"  Combined search → {new_count} jobs")
+                    for location in locations:
+                        if self._shutdown_event.is_set() or len(all_jobs) >= max_postings:
+                            break
+                        await self.browser.search_jobs(
+                            keyword=combined_query,
+                            location=location,
+                            posted_within=posted_within,
+                        )
+                        search_count += 1
+                        remaining = max_postings - len(all_jobs)
+                        page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 25))
+                        new_count = 0
+                        for j in page_jobs:
+                            jid = j.get("job_id", "")
+                            if jid and jid not in seen_job_ids:
+                                all_jobs.append(j)
+                                seen_job_ids.add(jid)
+                                new_count += 1
+                        self.log.info(f"  Combined search ({location}) → {new_count} jobs")
 
-                # Then: individual keyword searches (catch anything the OR missed)
-                for keyword in keywords:
-                    if self._shutdown_event.is_set():
-                        break
-                    if len(all_jobs) >= max_postings:
-                        break
+                # Phase 2: Individual keyword × location (only if OR search didn't find enough)
+                or_found_count = len(all_jobs)
+                if len(all_jobs) >= max_postings:
+                    self.log.info(f'OR search already found {or_found_count} jobs (>= max {max_postings}) — skipping individual searches')
+                elif or_found_count >= int(max_postings * 0.8):
+                    self.log.info(f'OR search already found {or_found_count} jobs (>= 80% of {max_postings}) — skipping individual searches')
+                else:
+                    self.log.info(f'OR search found {or_found_count}/{max_postings} — running individual searches...')
+                    or_phase_seen_ids = set(seen_job_ids)  # Snapshot of IDs found during OR phase
+                    for keyword in keywords:
+                        if self._shutdown_event.is_set() or len(all_jobs) >= max_postings:
+                            break
+                        for location in locations:
+                            if self._shutdown_event.is_set() or len(all_jobs) >= max_postings:
+                                break
+                            await self.browser.search_jobs(
+                                keyword=keyword,
+                                location=location,
+                                posted_within=posted_within,
+                            )
+                            search_count += 1
+                            remaining = max_postings - len(all_jobs)
+                            page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 20))
+                            new_count = 0
+                            for j in page_jobs:
+                                jid = j.get("job_id", "")
+                                if jid and jid not in seen_job_ids:
+                                    all_jobs.append(j)
+                                    seen_job_ids.add(jid)
+                                    new_count += 1
+                            if new_count > 0:
+                                self.log.info(f"  '{keyword}' in {location} → {new_count} new jobs")
 
-                    location = locations[0] if locations else ""
-                    await self.browser.search_jobs(
-                        keyword=keyword,
-                        location=location,
-                        posted_within=posted_within,
-                    )
-
-                remaining = max_postings - len(all_jobs)
-                page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 20))
-                new_count = 0
-                for j in page_jobs:
-                    jid = j.get("job_id", "")
-                    if jid and jid not in seen_job_ids:
-                        all_jobs.append(j)
-                        seen_job_ids.add(jid)
-                        new_count += 1
-                self.log.info(f"  '{keyword}' → {new_count} new jobs")
+                self.log.info(f'Search efficiency: {len(all_jobs)} unique from {search_count} searches ({len(all_jobs)/max(search_count,1):.1f} jobs/search)')
 
             # Source 3: Custom search URLs (additional — boolean queries, job alerts)
             if custom_urls and len(all_jobs) < max_postings:
@@ -480,6 +597,14 @@ class JobAgent:
                         continue
                     await self.browser.open_job(job_id)
 
+                    # Check if already applied (manual or previous agent run)
+                    if await self.browser.is_already_applied():
+                        self.log.info(f"  → Already applied (LinkedIn badge detected)")
+                        dedup.mark_seen(job_id, title=job_title, company=company, status="applied", reason="already_applied_badge")
+                        skipped_count += 1
+                        self.tally.record(JobStatus.SKIPPED)
+                        continue
+
                     # Check if external apply
                     is_external = await self.browser.is_external_apply()
 
@@ -487,6 +612,11 @@ class JobAgent:
                     matched, total = await self.browser.get_match_score()
                     score = matched / total if total > 0 else None
                     job["match_score"] = score
+
+                    # Apply self-learning adjustments
+                    if score is not None:
+                        score = self.matcher.adjust_score(score, company)
+                        job['match_score'] = score
 
                     # Log score
                     if score is not None:
@@ -510,33 +640,53 @@ class JobAgent:
                         is_easy_apply=not is_external,
                     )
 
-                    # For high-match jobs: Draft InMail BEFORE applying (Warm Inbound Strategy)
-                    # Recruiter sees your message → then sees your application = intentional
-                    if score is not None and self.matcher.meets_threshold(score) and inmail_enabled:
-                        self.log.info(f"  ✉ Drafting InMail to recruiter (warm inbound)...")
-                        await self.send_inmail_for_job(job)
-                        await self.tracker.push_event(
-                            event="reached_out", title=job_title, company=company,
-                            location=job.get("location"), match_score=score,
-                            posting_url=job.get("url"),
-                        )
-
                     # Decision: Easy Apply vs External
                     if is_external:
-                        self.log.info(f"  → Not Easy Apply. User applies manually from Discovered.")
+                        external_url = await self.browser.get_external_apply_url()
+                        self.log.info(f"  → External apply: {external_url or 'URL not captured'}")
+
+                        # Track as discovered with external flag
                         await self.tracker.push_event(
-                            event="skipped", title=job_title, company=company,
+                            event="discovered", title=job_title, company=company,
                             location=job.get("location"), match_score=score,
-                            posting_url=job.get("url"),
+                            posting_url=external_url or job.get("url"),
                         )
+
+                        # If score meets threshold, draft InMail and notify user
+                        if score is not None and self.matcher.meets_threshold(score) and inmail_enabled:
+                            self.log.info(f"  ✉ High-match external job — drafting InMail + notifying...")
+                            await self.send_inmail_for_job(job)
+
+                        # Send Telegram notification for manual apply
+                        await self.notifier.send_notification(
+                            f"🔗 *External Apply* (manual)\n"
+                            f"📋 {job_title} @ {company}\n"
+                            f"📍 {job.get('location', 'Unknown')}\n"
+                            f"📊 Score: {f'{score:.0%}' if score else 'N/A'}\n"
+                            f"🔗 {external_url or job.get('url', 'N/A')}"
+                        )
+
                         external_count += 1
                         self.tally.record(JobStatus.SKIPPED)
                         continue
 
                     if score is None:
-                        self.log.info(f"  → No score — added to discovered for review")
-                        self.tally.record(JobStatus.SKIPPED)
-                        continue
+                        if self.config.job_search.fallback_scoring:
+                            # Use fallback keyword-based scoring
+                            from linkedin_agent.fallback_scorer import get_fallback_scorer
+                            fallback = get_fallback_scorer(self.config)
+                            score = fallback.score_from_job_card(
+                                title=job_title,
+                                company=company,
+                                location=job.get("location", ""),
+                            )
+                            job["match_score"] = score
+                            job["scoring_method"] = "fallback"
+                            self.log.info(f"  → Fallback score: {score:.0%} (keyword match)")
+                        else:
+                            self.log.info(f"  → No score — added to discovered for review")
+                            self.tally.record(JobStatus.SKIPPED)
+                            continue
 
                     if not self.matcher.meets_threshold(score):
                         self.log.info(f"  → Not worth applying ({score:.0%} < {self.config.job_search.match_threshold:.0%})")
@@ -550,18 +700,30 @@ class JobAgent:
                         continue
 
                     # Worth applying!
+                    scoring_method = job.get("scoring_method", "premium")
+                    score_label = f"{score:.0%}" if scoring_method == "fallback" else f"{matched}/{total}"
                     if self.dry_run:
-                        self.log.info(f"  ✓ Worth applying! ({matched}/{total}) [DRY RUN — not submitting]")
+                        self.log.info(f"  ✓ Worth applying! ({score_label}) [DRY RUN — not submitting]")
                         applied_count += 1
                         self.tally.record(JobStatus.SUBMITTED)
                     else:
-                        self.log.info(f"  ✓ Worth applying! ({matched}/{total}) — submitting...")
+                        # Check daily cap before submitting
+                        if not self.daily_cap.can_apply():
+                            self.log.warning(f"  → Daily cap reached, stopping applications")
+                            break
+
+                        self.log.info(f"  ✓ Worth applying! ({score_label}) — submitting...")
                         job["id"] = job_id
                         result = await self._applicant.apply_to_job(job)
                         status = self._map_result_status(result.status)
                         self.tally.record(status)
 
                         if result.status == "submitted":
+                            self.daily_cap.record_application()
+                            if self.daily_cap.is_near_limit:
+                                self.log.warning(
+                                    f"  ⚠️ Approaching daily cap: {self.daily_cap.today_count}/{self.daily_cap.daily_limit}"
+                                )
                             self.matcher.add_to_applied(company, job_title)
                             await self.tracker.push_event(
                                 event="submitted", title=job_title, company=company,
@@ -580,6 +742,8 @@ class JobAgent:
                                 posting_url=job.get("url", f"https://www.linkedin.com/jobs/view/{job_id}/"),
                                 action="Applied",
                             )
+                            # Post-submission InMail: only draft after confirmed apply
+                            # so we never message a recruiter about a job we didn't apply to
                             if inmail_enabled:
                                 await self.send_inmail_for_job(job)
                         elif result.status == "paused":
@@ -602,6 +766,8 @@ class JobAgent:
                     await self.notifier.send_notification(
                         f"❌ Error: {job.get('title', '?')[:30]} @ {job.get('company', '?')}: {safe_error}"
                     )
+                    # Add to retry queue for later reattempt
+                    self.retry_queue.add(job, error=str(job_exc)[:200])
 
             # Final summary
             self.log.info("─" * 40)
@@ -612,10 +778,78 @@ class JobAgent:
             self.log.info(f"  Applied/would apply: {applied_count}")
             self.log.info(f"  External (manual):   {external_count}")
             self.log.info(f"  Skipped (low score): {skipped_count}")
+            self.log.info(f"  Retry queue pending: {self.retry_queue.pending_count}")
+            self.log.info(f"  Daily cap: {self.daily_cap.today_count}/{self.daily_cap.daily_limit} (remaining: {self.daily_cap.remaining})")
             self.log.info("─" * 40)
 
             # Sync dedup DB to cloud
             dedup.sync()
+
+            # Process retry queue — attempt previously failed jobs
+            self.retry_queue.cleanup_old(max_age_hours=24)
+            retry_jobs = self.retry_queue.get_due()
+            retry_succeeded = 0
+            retry_failed = 0
+            if retry_jobs:
+                self.log.info(f"Retrying {len(retry_jobs)} previously failed jobs...")
+                for rjob in retry_jobs:
+                    if self._shutdown_event.is_set():
+                        break
+                    # Check daily cap before retrying
+                    if not self.daily_cap.can_apply():
+                        self.log.warning(f"  → Daily cap reached, stopping retries")
+                        break
+                    rjob_id = rjob.get("job_id") or rjob.get("id", "")
+                    rjob_title = rjob.get("title", "Unknown")[:60]
+                    rjob_company = rjob.get("company", "Unknown")
+                    self.log.info(f"  Retry: {rjob_title} @ {rjob_company}")
+                    try:
+                        rjob["id"] = rjob_id
+                        result = await self._applicant.apply_to_job(rjob)
+                        if result.status == "submitted":
+                            self.daily_cap.record_application()
+                            if self.daily_cap.is_near_limit:
+                                self.log.warning(
+                                    f"  ⚠️ Approaching daily cap: {self.daily_cap.today_count}/{self.daily_cap.daily_limit}"
+                                )
+                            self.retry_queue.mark_success(rjob_id)
+                            self.matcher.add_to_applied(rjob_company, rjob_title)
+                            await self.tracker.push_event(
+                                event="submitted", title=rjob_title, company=rjob_company,
+                                location=rjob.get("location"), match_score=rjob.get("match_score"),
+                                posting_url=rjob.get("url"),
+                            )
+                            retry_succeeded += 1
+                            applied_count += 1
+                            self.tally.record(JobStatus.SUBMITTED)
+                            self.log.info(f"  ✓ Retry succeeded!")
+                            dedup.mark_applied(rjob_id)
+                        elif result.status == "paused":
+                            self.log.info(f"  ⏸ Retry paused — needs human input")
+                            self.tally.record(JobStatus.PAUSED)
+                        else:
+                            # Non-success, non-error result (e.g. skipped) — remove from queue
+                            self.retry_queue.mark_success(rjob_id)
+                            self.log.info(f"  → Retry result: {result.status}")
+                    except Exception as retry_exc:
+                        retry_failed += 1
+                        self.log.warning(
+                            f"  ✗ Retry failed again: {str(retry_exc)[:60]}"
+                        )
+                        # Re-add to queue (increments attempt count, may mark permanent failure)
+                        self.retry_queue.add(rjob, error=str(retry_exc)[:200])
+
+                self.log.info(
+                    f"Retry results: {retry_succeeded} succeeded, "
+                    f"{retry_failed} failed, "
+                    f"{self.retry_queue.pending_count} still pending"
+                )
+
+            # Mark first run as complete (create marker file for subsequent runs)
+            if is_first_run:
+                marker_file.parent.mkdir(parents=True, exist_ok=True)
+                marker_file.touch()
+                self.log.info("First run complete — marker saved")
 
             # Tally report is sent in the finally block via report_tally()
 
@@ -632,6 +866,12 @@ class JobAgent:
             )
 
         finally:
+            # Check application response statuses before reporting
+            try:
+                await self.check_response_statuses()
+            except Exception as status_exc:
+                self.log.warning(f'Response status check failed: {status_exc}')
+
             # f. Send tally report with full funnel metrics
             await self.report_tally(full_metrics={
                 "total_found": total_jobs,
@@ -642,6 +882,8 @@ class JobAgent:
                 "skipped_low_score": skipped_count,
                 "paused": self.tally.paused,
                 "errors": self.tally.errors,
+                "retry_pending": self.retry_queue.pending_count,
+                "retry_stats": self.retry_queue.get_stats(),
             })
 
             # Log cycle completion
@@ -678,6 +920,9 @@ class JobAgent:
         interval = self.config.scheduler.interval_minutes
         active_start = self.config.scheduler.active_hours_start
         active_end = self.config.scheduler.active_hours_end
+
+        if self.config.scheduler.urgent_mode:
+            interval = self.config.scheduler.urgent_interval_minutes
 
         await self.notifier.send_notification(
             f"🤖 Daemon started — Interval: {interval}m | "
