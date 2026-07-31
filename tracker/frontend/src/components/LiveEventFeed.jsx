@@ -43,7 +43,7 @@ export default function LiveEventFeed({ events = [], maxItems = 15 }) {
         <Chip label={`${events.length}`} size="small" variant="outlined" />
       </Stack>
       <Divider sx={{ mb: 1 }} />
-      <Box sx={{ overflow: 'auto', maxHeight: 400 }}>
+      <Box sx={{ overflow: 'auto', maxHeight: 350 }}>
         <AnimatePresence initial={false}>
           {visibleEvents.map((evt, idx) => {
             const data = evt.data || {};
@@ -65,12 +65,12 @@ export default function LiveEventFeed({ events = [], maxItems = 15 }) {
                   <Typography fontSize={14}>{config.icon}</Typography>
                   <Box flex={1} minWidth={0}>
                     <Typography variant="body2" noWrap fontWeight={500}>
-                      {data.title || data.message || 'Event'}
+                      {(data.title || data.message || 'Event').slice(0, 80)}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" noWrap>
                       {data.company}{data.location ? ` · ${data.location}` : ''}
                       {data.match_score != null ? ` · ${Math.round(data.match_score * 100)}%` : ''}
-                      {!data.company && data.message && data.title ? data.message : ''}
+                      {!data.company && data.message && data.title ? data.message.slice(0, 60) : ''}
                     </Typography>
                   </Box>
                   <Chip label={config.label} size="small" color={config.color} variant="outlined" />

@@ -195,14 +195,32 @@ export default function AgentControl() {
 
           <Stack direction="row" alignItems="center" spacing={1}>
             <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Threshold</Typography>
-            <Chip label={`${threshold}%`} size="small" variant="outlined" sx={{ fontWeight: 700, fontFamily: 'monospace' }} />
+            <Chip
+              label={`${threshold}%`}
+              size="small"
+              variant="outlined"
+              sx={{ fontWeight: 700, fontFamily: 'monospace', cursor: 'pointer' }}
+              onClick={() => {
+                const val = prompt('Match threshold (1-100):', threshold);
+                if (val && !isNaN(val) && val >= 1 && val <= 100) setThreshold(Number(val));
+              }}
+            />
           </Stack>
 
           <Box sx={{ width: 1, height: 24, bgcolor: 'divider' }} />
 
           <Stack direction="row" alignItems="center" spacing={1}>
             <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Limit</Typography>
-            <Chip label={`${limit}`} size="small" variant="outlined" sx={{ fontWeight: 700, fontFamily: 'monospace' }} />
+            <Chip
+              label={`${limit}`}
+              size="small"
+              variant="outlined"
+              sx={{ fontWeight: 700, fontFamily: 'monospace', cursor: 'pointer' }}
+              onClick={() => {
+                const val = prompt('Max jobs per run:', limit);
+                if (val && !isNaN(val) && val >= 1 && val <= 200) setLimit(Number(val));
+              }}
+            />
           </Stack>
         </Box>
         </motion.div>
