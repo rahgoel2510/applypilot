@@ -16,145 +16,153 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> •
-  <a href="https://rahgoel2510.github.io/applypilot">Website</a> •
-  <a href="docs/GUIDE.md">Full Guide</a> •
-  <a href="#features">Features</a> •
+  <a href="#setup-macos">macOS Setup</a> •
+  <a href="#setup-windows">Windows Setup</a> •
+  <a href="#setup-docker">Docker</a> •
+  <a href="#configuration">Configure</a> •
+  <a href="#usage">Usage</a> •
   <a href="https://ko-fi.com/goelrah">Ko-fi</a>
 </p>
 
 ---
 
-**ApplyPilot** is a fully autonomous agent that scans LinkedIn for jobs matching your profile, scores them for relevance, and applies on your behalf using Easy Apply — all while keeping you in the loop for sensitive decisions. It ships with a professional admin dashboard, self-learning scoring, and runs as a background service on any platform.
+**ApplyPilot** scans LinkedIn for jobs matching your profile, scores them, and applies automatically using Easy Apply — while keeping you in the loop for sensitive decisions via Telegram. No LinkedIn Premium required.
 
-## 🚀 Features
+## What It Does
 
-### Agent Intelligence
-- 🔍 **Auto-Scan** — Monitors LinkedIn for jobs matching your keywords, locations, and saved searches.
-- 📊 **Dual Scoring** — Uses LinkedIn Premium match percentage (primary) with automatic **fallback keyword scoring** when Premium is unavailable.
-- ⚡ **Easy Apply Automation** — Fills and submits multi-step Easy Apply forms end-to-end.
-- 🧑‍💼 **Human-in-the-Loop** — Pauses for sensitive fields, asks via Telegram, fills your answers, and **resumes the application automatically**.
-- 🧠 **Self-Learning** — Learns from your actions + seeded target/blocklist companies to boost/penalize scores from day 1.
-- 🗂️ **Cloud Dedup** — Tracks every job ever seen across all your machines via Turso cloud DB.
-- ✉️ **InMail Drafting** — AI-generated personalized cold outreach sent **after** confirmed application.
-- 🤖 **AI Answer Generation** — Uses LLM to write contextual answers for cover letters and "why this company" questions.
-- 🔄 **Retry Queue** — Failed applications are automatically retried with exponential backoff (5→15→45 min).
-- 🛡️ **Anti-Detection** — Stealth browser automation with rotating user-agents, JS injection, and challenge detection.
-- 📄 **Multi-Resume** — Keyword-to-resume mapping: EM roles get one resume, TPM roles get another.
-- ⚡ **Urgent Mode** — First-week sprint: 30-min intervals, 100 jobs/run, auto-disables after 7 days.
+1. **Scans** LinkedIn for jobs matching your keywords across multiple locations
+2. **Scores** each job using LinkedIn's AI (or fallback keyword matching if no Premium)
+3. **Applies** to qualifying jobs with your resume, pre-filled answers, and AI-generated cover letters
+4. **Notifies** you via Telegram for every application, external link, or question it can't answer
+5. **Learns** from your feedback to boost/penalize companies over time
 
-### Dashboard (Material UI Admin)
-- 📈 **D3.js Charts** — Animated funnel chart, interactive score donut, sparkline trends.
-- 📋 **Kanban Board** — Drag-and-drop columns (Discovered → Applied → Interview → Offer). Click any card for detailed modal with timeline, score analysis, and LinkedIn link.
-- 🤖 **Agent Control** — Start/stop, dry-run toggle, match threshold slider, live terminal output, run history.
-- ⏰ **Visual Scheduler** — Configure run frequency (interval or specific times), active hours, days of week. No cron expressions needed.
-- 🔧 **Settings** — All config editable in the UI (LinkedIn, Telegram, AI model, search keywords, thresholds).
-- 🌓 **Dark/Light Mode** — System preference detection with manual toggle.
+Works without LinkedIn Premium. Works without Docker. Runs on macOS and Windows natively.
 
-### Notifications
-- 📬 **Rich Telegram Alerts** — Per-job notifications with clickable LinkedIn URL, score %, company, location.
-- 📊 **Full Funnel Report** — After each scan: total found → deduped → discovered → applied → skipped → errors.
-- ⏸️ **Human Input Requests** — Telegram prompts when the agent needs your input on sensitive fields.
-- 🔗 **External Job Alerts** — External apply jobs sent to Telegram with direct link for manual application.
+---
 
-### Safety & Reliability
-- 🛡️ **Stealth Mode** — 12 rotating user-agents, 28 anti-detection Chromium args, stealth JS injection, session health monitoring.
-- 🚨 **Challenge Recovery** — Detects CAPTCHAs/security checks, takes screenshot, sends Telegram alert, waits 5 min for manual resolution.
-- 📊 **Daily Application Cap** — Tracks daily submissions (default 80/day) to avoid LinkedIn rate limiting. Auto-stops and notifies.
-- ✅ **Already-Applied Detection** — Detects LinkedIn's "Applied" badge to skip re-application attempts.
-- 🔄 **Retry with Backoff** — Failed applications retried automatically (3 attempts, exponential backoff).
-- 📋 **Response Tracking** — Periodically checks LinkedIn's "My Jobs → Applied" for status updates (viewed, downloaded, closed).
+## Prerequisites
 
-### Infrastructure
-- 🖥️ **Background Service** — Runs persistently via launchd (macOS), systemd (Linux), or Task Scheduler (Windows).
-- 🐳 **Docker Deploy** — Single `docker compose up` with health checks and auto-restart.
-- 🔒 **Environment Isolation** — Each machine gets its own tracker DB + cloud dedup DB (Turso).
-- 🧪 **Dry-Run Mode** — Preview what the agent would do without submitting any applications.
+| Requirement | Version | Check |
+|-------------|---------|-------|
+| Python | 3.11+ | `python3 --version` |
+| Node.js | 18+ | `node --version` |
+| Git | Any | `git --version` |
 
-## 📦 Quick Start
+That's it. No Docker needed. The setup script handles everything else (Chromium, pip packages, npm packages).
 
-### Local Setup (Recommended)
+---
 
-**macOS / Linux:**
+<h2 id="setup-macos">🍎 Setup — macOS / Linux</h2>
+
 ```bash
+# 1. Clone
 git clone https://github.com/rahgoel2510/applypilot.git
 cd applypilot
-bash setup.sh        # Installs Python, Node, Chromium, all deps
-bash start.sh        # Starts backend + frontend
+
+# 2. Run setup (installs Python deps, Node deps, Playwright Chromium)
+bash setup.sh
+
+# 3. Configure your credentials
+cp .env.example .env
+nano .env   # Fill in your LinkedIn email/password and Telegram bot token
 ```
 
-**Windows (PowerShell):**
+**`.env` file (required):**
+```
+LINKEDIN_EMAIL=your-email@gmail.com
+LINKEDIN_PASSWORD=your-password
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+TELEGRAM_CHAT_ID=123456789
+OPENAI_API_KEY=sk-or-v1-your-openrouter-key
+```
+
+```bash
+# 4. Start the app
+bash start.sh
+```
+
+Opens **http://localhost:5173** — your dashboard.
+
+**First time?** Go to Settings → configure your candidate info, keywords, and locations. Then go to Agent Control → click Start (with Dry Run ON) to test.
+
+### Run as Background Service (auto-start on login)
+
+```bash
+bash service.sh install   # Installs and starts
+bash service.sh status    # Check if running
+bash service.sh logs      # View logs
+bash service.sh stop      # Stop
+bash service.sh uninstall # Remove completely
+```
+
+---
+
+<h2 id="setup-windows">🪟 Setup — Windows (PowerShell)</h2>
+
+Open PowerShell as Administrator:
+
 ```powershell
+# 1. Clone
 git clone https://github.com/rahgoel2510/applypilot.git
 cd applypilot
-pwsh ./setup.ps1     # Installs Python venv, deps, Playwright, Node
-pwsh ./start.ps1     # Starts backend + frontend, opens browser
+
+# 2. Run setup (creates venv, installs deps, downloads Chromium)
+pwsh ./setup.ps1
+
+# 3. Configure credentials
+Copy-Item .env.example .env
+notepad .env   # Fill in LinkedIn, Telegram, and AI keys
 ```
 
-Dashboard opens at **http://localhost:5173**
+**`.env` file (required):**
+```
+LINKEDIN_EMAIL=your-email@gmail.com
+LINKEDIN_PASSWORD=your-password
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+TELEGRAM_CHAT_ID=123456789
+OPENAI_API_KEY=sk-or-v1-your-openrouter-key
+```
 
-### Docker Setup
+```powershell
+# 4. Start the app
+pwsh ./start.ps1
+```
+
+Opens **http://localhost:5173** — your dashboard.
+
+### Run as Background Service (Task Scheduler)
+
+```powershell
+pwsh ./service.ps1 install   # Auto-starts on login
+pwsh ./service.ps1 status    # Check status
+pwsh ./service.ps1 logs      # View logs
+pwsh ./service.ps1 stop      # Stop
+pwsh ./service.ps1 uninstall # Remove
+```
+
+---
+
+<h2 id="setup-docker">🐳 Setup — Docker (Optional)</h2>
+
+Only use Docker if you prefer containerized deployment. It's **not required**.
 
 ```bash
-bash docker-setup.sh       # macOS/Linux
-pwsh ./docker-setup.ps1    # Windows
+# macOS / Linux
+bash docker-setup.sh
+
+# Windows
+pwsh ./docker-setup.ps1
 ```
 
 This builds the image, starts the container, runs health checks, and opens **http://localhost:80**.
 
-### Run as Background Service
+---
 
-```bash
-# macOS/Linux
-bash service.sh install    # Auto-starts on login, restarts on crash
+<h2 id="configuration">⚙️ Configuration</h2>
 
-# Windows
-pwsh ./service.ps1 install # Same — uses Task Scheduler
-```
+**All settings are configurable from the dashboard UI** — go to http://localhost:5173 → Settings.
 
-Service commands: `install | start | stop | status | logs | uninstall`
-
-## 🖥️ Dashboard Pages
-
-| Page | Description |
-|------|-------------|
-| **Dashboard** | KPI cards (Total Jobs, Applied, Match Rate, Pipeline), D3 funnel chart, score distribution donut, recent activity, jobs table, top companies. |
-| **Agent Control** | Status indicator, Start/Stop buttons, mode toggle (Single/Daemon), dry-run switch, threshold/limit config. Tabs: Pipeline visualization, Live terminal output, Run history with expandable details. |
-| **Board** | Kanban with 7 columns. Drag cards between stages. Hover for tooltip (score, stage, date). Click for detailed modal (score gauge, agent analysis, timeline, LinkedIn link, notes). |
-| **Scheduler** | Fixed interval or custom schedule (specific times picker). Active hours, days of week, next runs preview. |
-| **Agents** | Enable/disable individual agent modules (Scanner, Applicant, InMail Drafter, Telegram Notifier). |
-| **Settings** | All configuration in one place: LinkedIn, AI model, Telegram, search keywords, locations, thresholds, candidate info, InMail settings. |
-| **Service** | Background daemon status, start/stop/restart, auto-start on boot toggle, uptime chart. |
-
-## 🔄 Agent Pipeline
-
-Each scan follows these stages:
-
-```
-1. STARTUP       → Load config → Launch stealth browser → Verify LinkedIn session
-                   ↳ Challenge detected? → Screenshot + Telegram alert → Wait 5 min
-2. DISCOVER      → Scan recommended → Keyword×Location search (OR queries) → Custom URLs
-                   ↳ Urgent mode: 100 jobs/run | Normal: 50 jobs/run
-                   ↳ First run: scans past week | Subsequent: past 24h
-3. EVALUATE      → Dedup check → Already applied? → External apply? → Get match score
-                   ↳ No Premium? → Fallback keyword scoring
-                   ↳ Self-learning: target companies +15%, blocklist -20%
-                   ↳ Daily cap check (80/day default)
-4. ACT           → Select resume (per job title) → Submit Easy Apply → Handle questions
-                   ↳ Pre-configured answers for known sensitive fields
-                   ↳ AI-generated answers for cover letters / "why this company"
-                   ↳ Human-in-the-loop for truly unknown fields (5 min timeout)
-                   ↳ Failed? → Add to retry queue (3 attempts, exponential backoff)
-5. WRAP UP       → Telegram alert → InMail draft (post-submission) → Sync dedup
-                   ↳ Check application response statuses (viewed/rejected)
-                   ↳ Process retry queue → Generate report
-```
-
-Jobs that don't pass evaluation are tracked with their score for audit.
-
-## ⚙️ Configuration
-
-All settings are configurable via the dashboard UI (Settings page) or via `config.yaml`:
+You can also edit `config.yaml` directly:
 
 ```yaml
 candidate:
@@ -179,9 +187,9 @@ candidate:
     years_of_experience: "12"
   human_input_timeout: 300
 
-search:
-  keywords: ["Software Engineer", "Backend Developer"]
-  locations: ["Bengaluru", "Remote", "India"]
+job_search:
+  keywords: ["Engineering Manager", "Technical Program Manager"]
+  locations: ["India", "Bangalore", "Remote"]
   posted_within: "24h"
   initial_scan_window: "week"
   match_threshold: 0.70
@@ -191,19 +199,10 @@ search:
   fallback_scoring: true
   daily_application_limit: 80
 
-notifications:
-  telegram:
-    bot_token: ${TELEGRAM_BOT_TOKEN}
-    chat_id: ${TELEGRAM_CHAT_ID}
-    notify_on_submit: true
-
-inmail:
-  enabled: true
-
 scheduler:
   interval_minutes: 60
   active_hours_start: 9
-  active_hours_end: 18
+  active_hours_end: 22
   urgent_mode: true
   urgent_interval_minutes: 30
   urgent_max_postings: 100
@@ -214,105 +213,169 @@ self_learning:
   blocklist_companies: ["Wipro", "Infosys", "TCS"]
   target_boost: 0.15
   blocklist_penalty: 0.20
+
+inmail:
+  enabled: true
+  tone: "professional"
+  max_length: 300
 ```
+
+### Getting a Telegram Bot
+
+1. Message [@BotFather](https://t.me/BotFather) on Telegram
+2. Send `/newbot` → follow prompts → get your bot token
+3. Message your new bot, then visit `https://api.telegram.org/bot<TOKEN>/getUpdates` to find your chat_id
+4. Add both to `.env`
+
+### Getting an AI API Key (Free)
+
+1. Go to [OpenRouter.ai](https://openrouter.ai/) → Sign up → Create API key
+2. Free models are available (no credit card needed)
+3. Add key to `.env` as `OPENAI_API_KEY`
+
+---
+
+<h2 id="usage">🚀 Usage</h2>
+
+### From the Dashboard (Recommended)
+
+1. Open **http://localhost:5173**
+2. Go to **Agent Control**
+3. Set: Mode = Single, Dry Run = ON, Threshold = 70%, Limit = 10
+4. Click **Start** → watch the agent scan and evaluate jobs
+5. Check results in **Dashboard** (live feed) and **Board** (Kanban)
+6. Happy with results? Turn Dry Run OFF and run again to actually apply
+
+### From Command Line
+
+```bash
+# Dry run — scan 10 jobs, don't apply
+python3 -m linkedin_agent run --dry-run --limit 10
+
+# Apply to matching jobs
+python3 -m linkedin_agent run --limit 25
+
+# Run as daemon (scheduled, repeating)
+python3 -m linkedin_agent daemon
+
+# Check current config
+python3 -m linkedin_agent status
+```
+
+### Telegram Bot Commands
+
+Start the bot: `python3 -m linkedin_agent.bot`
+
+| Command | What it does |
+|---------|-------------|
+| `/ping` | Check if your machine is online |
+| `/run_agent 10` | Trigger a dry-run scan (10 jobs) |
+| `/run_agent 10 --apply` | Scan AND apply |
+| `/status` | Agent state + pipeline summary |
+| `/logs` | Last run output |
+| `/help` | All commands |
+
+---
+
+## 🖥️ Dashboard Pages
+
+| Page | What you do there |
+|------|-------------------|
+| **Dashboard** | See KPIs, live event feed, score charts, recent activity, top companies |
+| **Agent Control** | Start/stop agent, configure threshold + limit (sliders), view live output |
+| **Board** | Drag jobs between stages (Discovered → Applied → Interview → Offer) |
+| **Scheduler** | Set scan frequency, active hours, urgent mode |
+| **Settings** | Configure everything: candidate info, search, Telegram, AI, self-learning |
+| **Service** | Background daemon status, start/stop, auto-start toggle |
+
+---
+
+## 🔄 How the Agent Works
+
+```
+1. STARTUP       → Launch stealth browser → Check LinkedIn session
+                   ↳ Challenge? → Screenshot + Telegram alert → Wait 5 min
+
+2. DISCOVER      → Search keywords × locations → Collect job listings
+                   ↳ Urgent mode: 100 jobs/run | Normal: 50/run
+                   ↳ First run: past week | After: past 24h
+
+3. EVALUATE      → Already applied? → External? → Score match
+                   ↳ Premium AI score OR fallback keyword scoring
+                   ↳ Self-learning adjustments (target +15%, blocklist -20%)
+                   ↳ Daily cap check (stops at 80/day)
+
+4. APPLY         → Pick right resume → Fill form → Handle questions
+                   ↳ Pre-configured answers auto-fill sensitive fields
+                   ↳ AI writes cover letters and "why this company"
+                   ↳ Unknown fields? → Ask you via Telegram → Fill → Submit
+                   ↳ Failed? → Retry queue (3 attempts, backoff)
+
+5. NOTIFY        → Telegram alert per job → InMail draft → Status check
+                   ↳ External jobs: sends you the direct link
+                   ↳ Response tracking: detects "viewed" / "rejected"
+```
+
+---
 
 ## 🔒 Safety & Privacy
 
-- **100% Self-Hosted** — Credentials and data never leave your machine.
-- **Human-in-the-Loop** — Never guesses sensitive fields. Pauses and asks via Telegram.
-- **No Telemetry** — Zero analytics, zero outbound calls except to LinkedIn and your Telegram bot.
-- **Dry-Run by Default** — Verify behavior before going live.
-- **Daily Cap Protection** — Stops at 80 applications/day to prevent LinkedIn account restrictions.
-- **Anti-Detection** — Stealth browser mode with rotating fingerprints to avoid bot detection.
-- **Open Source** — Fully auditable code.
-- **Environment Isolation** — Each machine has its own DB. Cloud dedup uses per-environment Turso tokens.
+- **100% self-hosted** — Credentials never leave your machine
+- **Human-in-the-loop** — Pauses for unknown fields, asks via Telegram, waits for your answer
+- **No telemetry** — Zero analytics, zero outbound calls except LinkedIn + your Telegram bot
+- **Dry-run by default** — Test before going live
+- **Daily cap** — Stops at 80/day to protect your LinkedIn account
+- **Anti-detection** — Stealth browser with rotating fingerprints
+- **Open source** — Fully auditable code
 
-## 📂 Project Structure
-
-```
-applypilot/
-├── linkedin_agent/              # Agent core
-│   ├── orchestrator.py          # Main pipeline (5 stages)
-│   ├── browser.py               # Playwright browser automation + stealth
-│   ├── stealth.py               # Anti-detection: rotating UAs, JS injection, Chromium args
-│   ├── matcher.py               # Score evaluation + self-learning + target/blocklist
-│   ├── fallback_scorer.py       # Keyword-based scoring without Premium
-│   ├── applicant.py             # Easy Apply form filler + human-in-the-loop
-│   ├── answer_generator.py      # AI-generated answers for cover letters/questions
-│   ├── telegram_bot.py          # Rich notifications + human input collection
-│   ├── inmail.py                # AI-powered InMail drafting
-│   ├── dedup_db.py              # Cloud dedup (Turso/SQLite)
-│   ├── tracker_client.py        # Pushes events to tracker API
-│   ├── retry_queue.py           # Exponential backoff retry for failed applications
-│   ├── daily_cap.py             # Daily application limit tracking
-│   ├── config.py                # Typed settings (YAML + env)
-│   ├── scheduler.py             # Background scheduling + service management
-│   ├── smart_parser.py          # LLM-assisted page parsing
-│   ├── logger.py                # Structured logging + CSV export
-│   └── bot.py                   # Telegram command bot (/run, /status, /logs)
-├── tracker/
-│   ├── backend/                 # FastAPI + SQLAlchemy
-│   │   ├── main.py              # App entry + routers
-│   │   ├── models.py            # Job, InMailDraft, FeedbackSignal
-│   │   ├── routes.py            # CRUD + webhook + audit
-│   │   ├── auto_repair.py       # LLM-based error diagnosis
-│   │   ├── scheduler_routes.py
-│   │   ├── service_routes.py
-│   │   └── agents_routes.py
-│   └── frontend/                # React 19 + MUI + D3.js
-│       └── src/
-│           ├── pages/           # Dashboard, AgentControl, Board, etc.
-│           ├── components/      # D3Charts, AgentPipelineView
-│           ├── layout/          # AppLayout (sidebar + topbar)
-│           └── theme.js         # AWS-inspired design system
-├── tests/                       # pytest suite (125+ tests)
-│   ├── test_config.py
-│   ├── test_matcher.py
-│   ├── test_orchestrator.py
-│   ├── test_inmail.py
-│   ├── test_fallback_scorer.py
-│   ├── test_daily_cap.py
-│   └── ...
-├── setup.sh / setup.ps1         # First-time setup
-├── start.sh / start.ps1         # Start app (foreground)
-├── service.sh / service.ps1     # Background service management
-├── docker-setup.sh / .ps1       # Docker build + test
-├── docker-compose.yml           # Container orchestration
-└── config.yaml                  # Agent configuration
-```
-
-## 🛠️ Development
-
-```bash
-# Clone
-git clone https://github.com/rahgoel2510/applypilot.git
-cd applypilot
-
-# Setup
-bash setup.sh
-
-# Run in dev mode
-bash start.sh
-
-# Run tests
-python3 -m pytest tests/ -v
-
-# Build frontend for production
-cd tracker/frontend && npm run build
-```
-
-**Requirements:** Python 3.11+, Node.js 18+, Chrome/Chromium.
+---
 
 ## 🧠 Self-Learning
 
-The agent improves over time based on your actions:
-- Move a job to "Interviewing" → positive signal for that company
-- Reject a job → negative signal
-- After enough feedback, the agent boosts/penalizes scores for specific companies by ±10%
-- **Seeded from day 1**: Target companies get +15% boost, blocklist companies get -20% penalty
-- Calibration warnings if your threshold diverges from actual interview outcomes
+The agent gets smarter over time:
+- Move a job to "Interviewing" → boosts that company's score
+- Reject a job → penalizes that company
+- Target companies (Google, Microsoft) get +15% boost from day 1
+- Blocklist companies (Wipro, TCS) get -20% penalty from day 1
+- All configurable in Settings → Self-Learning
 
-View feedback data: `GET /api/feedback/summary`
+---
+
+## 🏗️ Architecture
+
+Event-driven pipeline designed for multi-platform expansion:
+
+```
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────┐
+│  LinkedIn       │────▶│  Event Bus           │────▶│  Evaluator  │
+│  (active)       │     │  • job.discovered    │     │  (scoring)  │
+├─────────────────┤     │  • job.qualified     │     └──────┬──────┘
+│  Indeed (TBD)   │────▶│  • job.applied       │            │
+├─────────────────┤     │  • job.failed        │     ┌──────▼──────┐
+│  Naukri (TBD)   │────▶│  • Stage markers     │────▶│  Applicant  │
+└─────────────────┘     │  • Dead-letter retry │     └──────┬──────┘
+                        └──────────────────────┘            │
+                                                     ┌──────▼──────┐
+                                                     │  Notifier   │
+                                                     └─────────────┘
+```
+
+Adding Indeed/Naukri requires only implementing a discovery adapter. Evaluation, application, and notifications are platform-agnostic.
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| "Session expired" | Log into LinkedIn manually in the browser once, session is saved |
+| "0 jobs found" | Check if your keywords + locations match real LinkedIn listings |
+| Agent stuck / no output | Check `bash service.sh logs` or terminal output |
+| "Challenge detected" | Open the screenshot in Telegram, solve CAPTCHA manually, agent resumes |
+| Threshold shows wrong % | Dashboard sends integer (70), agent normalizes automatically |
+| WebSocket "OFFLINE" | Restart both servers: `bash start.sh` |
+
+---
 
 ## 👨‍💻 Author
 
@@ -332,66 +395,6 @@ If ApplyPilot saved you time or landed you a job, consider buying me a coffee!
     <img src="https://img.shields.io/badge/Ko--fi-Support%20ApplyPilot-ff5e5b?style=flat-square&logo=ko-fi&labelColor=black" alt="Ko-fi" />
   </a>
 </p>
-
-## 🏗️ Architecture: Event-Driven Pipeline
-
-ApplyPilot uses a Kafka-inspired event bus for scalability and multi-platform support:
-
-```
-┌─────────────────┐     ┌────────────────────────────────┐     ┌─────────────┐
-│  LinkedIn       │────▶│                                │────▶│  Evaluator  │
-│  Adapter        │     │  Event Bus                     │     │  (scoring)  │
-├─────────────────┤     │  ─────────────────────────     │     └──────┬──────┘
-│  Indeed         │────▶│  Topics:                       │            │
-│  Adapter (TBD)  │     │  • job.discovered              │     ┌──────▼──────┐
-├─────────────────┤     │  • job.evaluated               │────▶│  Applicant  │
-│  Naukri         │────▶│  • job.qualified               │     │  (submit)   │
-│  Adapter (TBD)  │     │  • job.applied                 │     └──────┬──────┘
-└─────────────────┘     │  • job.failed                  │            │
-                        │  • job.external                │     ┌──────▼──────┐
-                        │                                │────▶│  Notifier   │
-                        │  Features:                     │     │  (Telegram) │
-                        │  • Stage markers (audit trail) │     └─────────────┘
-                        │  • Dead-letter queue (retry)   │
-                        │  • Middleware (logging, dedup)  │
-                        │  • Event persistence           │
-                        └────────────────────────────────┘
-```
-
-**Key concepts:**
-- **Events** carry all context + accumulate stage markers as they flow through the pipeline
-- **Stages** are independent processors that subscribe to topics and produce new events
-- **Platform Adapters** are discovery stages that produce `job.discovered` events
-- **Dead-letter queue** captures failed events for retry (like Kafka DLQ)
-- **Stage markers** = append-only log showing what happened at each stage (like consumer offsets)
-
-Adding a new platform (e.g., Indeed) requires only implementing a `DiscoveryStage` subclass.
-
-### Pipeline Runner (New)
-
-```python
-from linkedin_agent.pipeline import PipelineRunner
-
-runner = PipelineRunner(dry_run=True)
-await runner.setup()        # Browser, stages, middleware
-await runner.run_cycle()    # CYCLE_STARTED → full pipeline flow
-await runner.shutdown()     # Cleanup
-```
-
-### Adding a New Platform
-
-```python
-from linkedin_agent.pipeline import DiscoveryStage, JobEvent, EventType, Platform
-
-class IndeedDiscoveryStage(DiscoveryStage):
-    name = "indeed_discovery"
-
-    async def discover_jobs(self, config) -> list[JobEvent]:
-        # Your Indeed scraping logic here
-        return [JobEvent(platform=Platform.INDEED, title="...", ...)]
-```
-
-Register it with the bus and it works — evaluation, application, and notifications are platform-agnostic.
 
 ## 📄 License
 
