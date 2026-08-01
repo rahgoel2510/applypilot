@@ -319,6 +319,11 @@ class JobAgent:
         """
         self.tally = CycleTally()
 
+        # Log active search mode
+        active_mode = self.config.job_search.search_mode
+        if active_mode and active_mode != 'custom':
+            self.log.info(f'Search mode: {active_mode.upper()}')
+
         # Check daily application cap
         if self.daily_cap.is_at_limit:
             self.log.warning(
@@ -679,6 +684,34 @@ class JobAgent:
                             f"📊 Score: {f'{score:.0%}' if score else 'N/A'}\n"
                             f"🔗 {external_url or job.get('url', 'N/A')}"
                         )
+
+                        # Auto-apply to external jobs if mode allows it
+                        if self.config.job_search.auto_apply_external:
+                            self.log.info(f'  → Auto-applying to external job...')
+                            from linkedin_agent.external_apply import ExternalApplicant
+                            ext_applicant = ExternalApplicant(
+                                page=self.browser.page,
+                                candidate={
+                                    'name': self.config.candidate.name,
+                                    'email': self.config.candidate.email,
+                                    'phone': self.config.candidate.phone,
+                                    'resume_filename': self.config.candidate.resume_filename,
+                                },
+                            )
+                            ext_url = external_url or job.get('url', '')
+                            if ext_url:
+                                ext_result = await ext_applicant.apply(ext_url)
+                                self.log.info(f'  → External result: {ext_result["status"]} ({ext_result.get("message", "")})')
+                                if ext_result['status'] in ('partial', 'applied'):
+                                    await self.notifier.send_notification(
+                                        f'🌐 External auto-fill: {job_title} @ {company}\n'
+                                        f'Platform: {ext_result.get("platform", "unknown")}\n'
+                                        f'Status: {ext_result["message"]}\n'
+                                        f'⚠️ Please review and submit manually: {ext_url}'
+                                    )
+                                # Navigate back to LinkedIn for next job
+                                await self.browser.page.goto('https://www.linkedin.com/jobs/', wait_until='domcontentloaded')
+                                await asyncio.sleep(2)
 
                         external_count += 1
                         self.tally.record(JobStatus.SKIPPED)

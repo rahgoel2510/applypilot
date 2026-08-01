@@ -54,6 +54,8 @@ job_search:
   fallback_scoring: true
   initial_scan_window: "week"  # Used on first-ever run to backfill pipeline
   daily_application_limit: 80  # Conservative daily cap (LinkedIn soft limit ~100)
+  search_mode: "active"  # aggressive, active, passive, or custom
+  auto_apply_external: false  # Auto-apply to external job links (enabled in aggressive mode)
 
 scheduler:
   interval_minutes: 60

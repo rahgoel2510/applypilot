@@ -73,6 +73,8 @@ class JobSearchConfig:
     initial_scan_window: str = "week"  # Used on first-ever run (day, week, month)
     fallback_scoring: bool = True
     daily_application_limit: int = 80  # Conservative daily cap (LinkedIn soft limit ~100)
+    search_mode: str = "active"  # aggressive, active, passive, or custom
+    auto_apply_external: bool = False  # Auto-apply to external job links
 
 
 @dataclass(frozen=True)
@@ -214,6 +216,36 @@ def _build_settings(yaml_data: dict[str, Any]) -> Settings:
 
     # --- Job search ---
     js = yaml_data.get("job_search", {})
+
+    # Apply search mode preset ONLY for fields not explicitly set in yaml
+    search_mode = js.get("search_mode", "active")
+    if search_mode and search_mode != "custom":
+        from linkedin_agent.search_modes import get_mode_config, SearchMode
+        try:
+            preset = get_mode_config(search_mode)
+            # Only fill in values that the user hasn't explicitly configured
+            if "match_threshold" not in js:
+                js["match_threshold"] = preset.match_threshold
+            if "max_postings_per_run" not in js:
+                js["max_postings_per_run"] = preset.max_postings_per_run
+            if "daily_application_limit" not in js:
+                js["daily_application_limit"] = preset.daily_application_limit
+            if "auto_apply_external" not in js:
+                js["auto_apply_external"] = preset.auto_apply_external
+            if "fallback_scoring" not in js:
+                js["fallback_scoring"] = preset.fallback_scoring
+            # Scheduler overrides (only if scheduler section is empty/missing)
+            sc_section = yaml_data.get("scheduler", {})
+            if "interval_minutes" not in sc_section:
+                sc_section["interval_minutes"] = preset.interval_minutes
+            if "active_hours_start" not in sc_section:
+                sc_section["active_hours_start"] = preset.active_hours_start
+            if "active_hours_end" not in sc_section:
+                sc_section["active_hours_end"] = preset.active_hours_end
+            yaml_data["scheduler"] = sc_section
+        except (ValueError, KeyError):
+            pass  # Invalid mode name — ignore
+
     job_search = JobSearchConfig(
         keywords=js.get("keywords", ["Software Engineer"]),
         custom_urls=js.get("custom_urls", []),
@@ -227,6 +259,8 @@ def _build_settings(yaml_data: dict[str, Any]) -> Settings:
         initial_scan_window=js.get("initial_scan_window", "week"),
         fallback_scoring=js.get("fallback_scoring", True),
         daily_application_limit=int(js.get("daily_application_limit", 80)),
+        search_mode=search_mode,
+        auto_apply_external=js.get("auto_apply_external", False),
     )
 
     # --- Scheduler ---

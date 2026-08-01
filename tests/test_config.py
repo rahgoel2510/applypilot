@@ -162,9 +162,10 @@ class TestBuildSettings:
         settings = _build_settings({})
 
         assert settings.candidate.name == ""
-        assert settings.job_search.match_threshold == 0.80
-        assert settings.job_search.max_postings_per_run == 50
-        assert settings.scheduler.interval_minutes == 60
+        # Active mode defaults: threshold=0.70, max_postings=100, interval=30
+        assert settings.job_search.match_threshold == 0.70
+        assert settings.job_search.max_postings_per_run == 100
+        assert settings.scheduler.interval_minutes == 30
         assert settings.inmail.enabled is True
         assert settings.inmail.max_length == 300
 
