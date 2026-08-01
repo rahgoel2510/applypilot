@@ -162,7 +162,9 @@ This builds the image, starts the container, runs health checks, and opens **htt
 
 **All settings are configurable from the dashboard UI** — go to http://localhost:5173 → Settings.
 
-You can also edit `config.yaml` directly:
+The Settings page has tabs for: Candidate, Job Search, Scheduler, Self-Learning, Telegram, AI Model, InMail, and Advanced. Changes are saved to the database and applied automatically when the agent runs from the dashboard.
+
+**For CLI usage**, the agent reads from `config.yaml` in the project root. Edit this file if you prefer running via command line:
 
 ```yaml
 candidate:
