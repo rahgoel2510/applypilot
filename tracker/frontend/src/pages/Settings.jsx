@@ -88,6 +88,11 @@ export default function Settings() {
     const val = values[s.key] || '';
     const key = s.key;
 
+    // Special: Resume upload
+    if (key === 'RESUME_FILENAME') {
+      return <ResumeUpload key={key} value={val} onChange={v => update(key, v)} />;
+    }
+
     if (s.sensitive) {
       return <MaskedField key={key} label={s.label} value={val} onChange={v => update(key, v)} placeholder={s.placeholder} required={s.required} />;
     }
@@ -230,6 +235,60 @@ function ChipInput({ label, value, onChange, placeholder, required }) {
       </Box>
       <TextField fullWidth size="small" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
         placeholder={placeholder || 'Type and press Enter'} />
+    </Box>
+  );
+}
+
+function ResumeUpload({ value, onChange }) {
+  const [uploading, setUploading] = useState(false);
+  const [resumes, setResumes] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/settings/resumes').then(r => r.json()).then(d => setResumes(d.resumes || [])).catch(() => {});
+  }, [value]);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const resp = await fetch('/api/settings/upload-resume', { method: 'POST', body: formData });
+      const data = await resp.json();
+      if (data.filename) {
+        onChange(data.filename);
+        setResumes(prev => [...prev.filter(r => r.filename !== data.filename), { filename: data.filename, size_kb: data.size_kb }]);
+      } else {
+        alert(data.error || 'Upload failed');
+      }
+    } catch { alert('Upload failed'); }
+    finally { setUploading(false); }
+  };
+
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="body2" fontWeight={600} mb={0.5}>Resume <span style={{color:'red'}}>*</span></Typography>
+      {value && <Chip label={`📄 ${value}`} color="primary" variant="outlined" size="small" sx={{ mb: 1 }} />}
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
+        <Button variant="outlined" size="small" component="label" disabled={uploading}>
+          {uploading ? <CircularProgress size={14} /> : '📎 Upload Resume'}
+          <input type="file" hidden accept=".pdf,.docx,.doc,.txt" onChange={handleUpload} />
+        </Button>
+        <Typography variant="caption" color="text.secondary">PDF, DOCX, DOC, TXT</Typography>
+      </Box>
+      {resumes.length > 0 && (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary" mb={0.5} display="block">Available resumes:</Typography>
+          {resumes.map(r => (
+            <Chip key={r.filename} label={`${r.filename} (${r.size_kb}KB)`} size="small"
+              variant={r.filename === value ? 'filled' : 'outlined'}
+              color={r.filename === value ? 'primary' : 'default'}
+              onClick={() => onChange(r.filename)}
+              sx={{ m: 0.25, cursor: 'pointer' }} />
+          ))}
+        </Box>
+      )}
     </Box>
   );
 }

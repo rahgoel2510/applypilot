@@ -46,10 +46,10 @@ SETTINGS_KEYS = [
     {"key": "CANDIDATE_NAME", "label": "Full Name", "group": "Candidate", "placeholder": "Your Name", "required": True},
     {"key": "CANDIDATE_EMAIL", "label": "Email", "group": "Candidate", "placeholder": "you@example.com", "required": True},
     {"key": "CANDIDATE_PHONE", "label": "Phone", "group": "Candidate", "placeholder": "+91-XXXXXXXXXX", "required": True},
-    {"key": "RESUME_FILENAME", "label": "Default Resume", "group": "Candidate", "placeholder": "resume.pdf", "required": True},
+    {"key": "RESUME_FILENAME", "label": "Default Resume", "group": "Candidate", "placeholder": "Upload below or enter filename", "required": True},
     {"key": "NOTICE_PERIOD", "label": "Notice Period", "group": "Candidate", "placeholder": "30 days", "required": False},
-    {"key": "WORK_AUTHORIZATION", "label": "Work Authorization", "group": "Candidate", "placeholder": "Authorized to work", "required": False},
-    {"key": "WILLING_TO_RELOCATE", "label": "Willing to Relocate", "group": "Candidate", "placeholder": "true", "required": False, "type": "boolean"},
+    {"key": "WORK_AUTHORIZATION", "label": "Work Authorization (form answer)", "group": "Candidate", "placeholder": "e.g. Yes, authorized to work in India", "required": False},
+    {"key": "WILLING_TO_RELOCATE", "label": "Open to relocation? (Yes/No for forms)", "group": "Candidate", "placeholder": "true", "required": False, "type": "boolean"},
     {"key": "SKILLS", "label": "Skills", "group": "Candidate", "placeholder": "engineering management, system design...", "required": True, "type": "list"},
     {"key": "PREFERRED_CITIES", "label": "Preferred Cities", "group": "Candidate", "placeholder": "Bangalore, Hyderabad, Remote...", "required": False, "type": "list"},
     {"key": "HUMAN_INPUT_TIMEOUT", "label": "Human Input Timeout (sec)", "group": "Candidate", "placeholder": "300", "required": False, "type": "number"},
@@ -373,6 +373,62 @@ def update_config_yaml(config: dict):
         return {"message": "Config saved"}
     except Exception as e:
         return {"error": str(e)}
+
+
+# ===========================================================================
+# Resume Upload
+# ===========================================================================
+
+from fastapi import UploadFile, File
+
+RESUME_DIR = Path(__file__).resolve().parent.parent.parent / "resumes"
+
+
+@router.post("/upload-resume")
+async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Upload a resume file. Saves to /resumes/ directory and updates RESUME_FILENAME setting."""
+    if not file.filename:
+        return {"error": "No file provided"}
+
+    # Validate file type
+    allowed_extensions = {".pdf", ".docx", ".doc", ".txt"}
+    ext = Path(file.filename).suffix.lower()
+    if ext not in allowed_extensions:
+        return {"error": f"Unsupported file type: {ext}. Allowed: {', '.join(allowed_extensions)}"}
+
+    # Save file
+    RESUME_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = RESUME_DIR / file.filename
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    # Update DB setting
+    existing = db.query(AppSetting).filter(AppSetting.key == "RESUME_FILENAME").first()
+    if existing:
+        existing.value = file.filename
+    else:
+        db.add(AppSetting(key="RESUME_FILENAME", value=file.filename))
+    db.commit()
+
+    return {
+        "message": f"Resume uploaded: {file.filename}",
+        "filename": file.filename,
+        "size_kb": round(len(content) / 1024, 1),
+        "path": str(file_path),
+    }
+
+
+@router.get("/resumes")
+def list_resumes():
+    """List all uploaded resume files."""
+    if not RESUME_DIR.exists():
+        return {"resumes": []}
+    files = []
+    for f in RESUME_DIR.iterdir():
+        if f.is_file() and f.suffix.lower() in {".pdf", ".docx", ".doc", ".txt"}:
+            files.append({"filename": f.name, "size_kb": round(f.stat().st_size / 1024, 1)})
+    return {"resumes": files}
 
 
 # ===========================================================================
