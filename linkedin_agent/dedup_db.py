@@ -21,8 +21,8 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-TURSO_URL = "libsql://applypilot-goelrah.aws-ap-south-1.turso.io"
-TURSO_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODUyNjI5NjYsImlkIjoiMDE5ZmE5ZjUtMjgwMS03ZmIyLTg2ZTMtYjhjZDY4NmY4ZjljIiwia2lkIjoiTXZfZ2Rqdy11MFE5b29lbnItX1dvaHM0Yk52S29yM1VsSmZadTdkdlZkUSIsInJpZCI6IjUxMTZjMTZkLTY5NDUtNDBjMi05OWVjLTA0MzE0ZGY3NDAyZiJ9.UZp6_AL-c6uKLoC1pXjMudNCPmp6Q72oDpaqAtKa84q406qE5epFwh1104UP21OrR6UF2-QALlFiYk4yzAQVBQ"
+TURSO_URL = os.environ.get("TURSO_URL", "")
+TURSO_TOKEN = os.environ.get("TURSO_TOKEN", "")
 
 
 class DedupDB:
@@ -38,10 +38,14 @@ class DedupDB:
 
     def _connect(self):
         """Connect to Turso cloud DB."""
+        if not TURSO_URL or not TURSO_TOKEN:
+            logger.warning("TURSO_URL or TURSO_TOKEN not set. Dedup DB disabled.")
+            self._connected = False
+            return
         try:
             import libsql_experimental as libsql
-            url = os.environ.get("TURSO_URL", TURSO_URL)
-            token = os.environ.get("TURSO_TOKEN", TURSO_TOKEN)
+            url = TURSO_URL
+            token = TURSO_TOKEN
 
             self._conn = libsql.connect("applypilot_dedup.db", sync_url=url, auth_token=token)
             self._conn.sync()
