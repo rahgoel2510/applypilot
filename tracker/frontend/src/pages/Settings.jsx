@@ -18,8 +18,10 @@ const GROUPS = [
   { key: 'linkedin', label: 'LinkedIn' },
   { key: 'ai', label: 'AI Model' },
   { key: 'telegram', label: 'Telegram' },
+  { key: 'candidate', label: 'Candidate' },
   { key: 'search', label: 'Job Search' },
-  { key: 'application', label: 'Application' },
+  { key: 'scheduler', label: 'Scheduler' },
+  { key: 'selflearning', label: 'Self-Learning' },
   { key: 'inmail', label: 'InMail' },
   { key: 'advanced', label: 'Advanced' },
 ];
@@ -227,66 +229,166 @@ export default function Settings() {
       );
       case 'search': return (
         <>
-          <ChipInput label="Keywords" value={settings.search_keywords || []} onChange={(v) => update('search_keywords', v)} placeholder="e.g. Software Engineer" />
-          <ChipInput label="Locations" value={settings.search_locations || []} onChange={(v) => update('search_locations', v)} placeholder="e.g. Remote, Bengaluru" />
-          <ChipInput label="Experience Levels" value={settings.experience_levels || []} onChange={(v) => update('experience_levels', v)} placeholder="e.g. Mid-Senior" />
+          <ChipInput label="Keywords" value={settings.search_keywords || []} onChange={(v) => update('search_keywords', v)} placeholder="e.g. Engineering Manager" />
+          <ChipInput label="Locations" value={settings.search_locations || []} onChange={(v) => update('search_locations', v)} placeholder="e.g. Remote, Bengaluru, India" />
           <Grid container spacing={1.5}>
-            <Grid size={{ xs: 6 }}>
+            <Grid size={{ xs: 4 }}>
               <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Posted Within</Typography>
               <FormControl fullWidth size="small">
                 <Select value={settings.posted_within} onChange={(e) => update('posted_within', e.target.value)} sx={{ fontSize: 12 }}>
-                  <MenuItem value="1h">Last hour</MenuItem>
                   <MenuItem value="24h">Last 24 hours</MenuItem>
-                  <MenuItem value="7d">Last 7 days</MenuItem>
-                  <MenuItem value="30d">Last 30 days</MenuItem>
+                  <MenuItem value="week">Last 7 days</MenuItem>
+                  <MenuItem value="month">Last 30 days</MenuItem>
+                  <MenuItem value="any">Any time</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
-            <Grid size={{ xs: 6 }}>
+            <Grid size={{ xs: 4 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Initial Scan Window</Typography>
+              <FormControl fullWidth size="small">
+                <Select value={settings.initial_scan_window || 'week'} onChange={(e) => update('initial_scan_window', e.target.value)} sx={{ fontSize: 12 }}>
+                  <MenuItem value="24h">24 hours</MenuItem>
+                  <MenuItem value="week">1 week</MenuItem>
+                  <MenuItem value="month">1 month</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 4 }}>
               <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Max Postings/Run</Typography>
               <TextField fullWidth size="small" type="number" value={settings.max_postings_per_run} onChange={(e) => update('max_postings_per_run', parseInt(e.target.value) || 0)} inputProps={{ min: 1, max: 200 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
             </Grid>
+            <Grid size={{ xs: 4 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Daily Application Limit</Typography>
+              <TextField fullWidth size="small" type="number" value={settings.daily_application_limit || 80} onChange={(e) => update('daily_application_limit', parseInt(e.target.value) || 80)} inputProps={{ min: 10, max: 200 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+            </Grid>
           </Grid>
           <Box sx={{ mt: 1.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600 }}>Match Threshold: {settings.match_threshold}</Typography>
-            <Slider size="small" value={settings.match_threshold} onChange={(_, v) => update('match_threshold', v)} min={0} max={100} valueLabelDisplay="auto" sx={{ py: 1 }} />
+            <Typography sx={{ fontSize: 11, fontWeight: 600 }}>Match Threshold: {settings.match_threshold}%</Typography>
+            <Slider size="small" value={settings.match_threshold} onChange={(_, v) => update('match_threshold', v)} min={30} max={100} step={5} valueLabelDisplay="auto" marks={[{value:50,label:'50'},{value:70,label:'70'},{value:80,label:'80'},{value:100,label:'100'}]} sx={{ py: 1, '& .MuiSlider-markLabel': { fontSize: '0.6rem' } }} />
           </Box>
-          <FormControlLabel control={<Switch size="small" checked={settings.skip_external} onChange={(e) => update('skip_external', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Easy Apply only</Typography>} />
+          <Box sx={{ mt: 1 }}>
+            <FormControlLabel control={<Switch size="small" checked={settings.fallback_scoring !== false} onChange={(e) => update('fallback_scoring', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Fallback keyword scoring (when no Premium)</Typography>} />
+            <FormControlLabel control={<Switch size="small" checked={settings.track_external_apply !== false} onChange={(e) => update('track_external_apply', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Track external apply jobs (notify via Telegram)</Typography>} />
+            <FormControlLabel control={<Switch size="small" checked={settings.skip_external} onChange={(e) => update('skip_external', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Skip external apply entirely (not recommended)</Typography>} />
+          </Box>
         </>
       );
-      case 'application': return (
+      case 'candidate': return (
         <Grid container spacing={1.5}>
           <Grid size={{ xs: 6 }}>
             <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Name</Typography>
-            <TextField fullWidth size="small" value={settings.candidate_name} onChange={(e) => update('candidate_name', e.target.value)} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+            <TextField fullWidth size="small" value={settings.candidate_name} onChange={(e) => update('candidate_name', e.target.value)} placeholder="Your full name" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
           </Grid>
           <Grid size={{ xs: 6 }}>
             <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Email</Typography>
-            <TextField fullWidth size="small" value={settings.candidate_email} onChange={(e) => update('candidate_email', e.target.value)} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+            <TextField fullWidth size="small" value={settings.candidate_email} onChange={(e) => update('candidate_email', e.target.value)} placeholder="you@example.com" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
           </Grid>
           <Grid size={{ xs: 6 }}>
             <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Phone</Typography>
-            <TextField fullWidth size="small" value={settings.candidate_phone} onChange={(e) => update('candidate_phone', e.target.value)} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+            <TextField fullWidth size="small" value={settings.candidate_phone} onChange={(e) => update('candidate_phone', e.target.value)} placeholder="+91-XXXXXXXXXX" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
           </Grid>
           <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Resume Path</Typography>
-            <TextField fullWidth size="small" value={settings.resume_path} onChange={(e) => update('resume_path', e.target.value)} placeholder="./resume.pdf" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Default Resume</Typography>
+            <TextField fullWidth size="small" value={settings.resume_path} onChange={(e) => update('resume_path', e.target.value)} placeholder="resume.pdf" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
           </Grid>
           <Grid size={{ xs: 6 }}>
             <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Notice Period</Typography>
-            <TextField fullWidth size="small" value={settings.notice_period} onChange={(e) => update('notice_period', e.target.value)} placeholder="e.g. 30 days" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+            <TextField fullWidth size="small" value={settings.notice_period} onChange={(e) => update('notice_period', e.target.value)} placeholder="30 days" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
           </Grid>
           <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Work Auth</Typography>
-            <TextField fullWidth size="small" value={settings.work_authorization} onChange={(e) => update('work_authorization', e.target.value)} placeholder="e.g. Citizen" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Work Authorization</Typography>
+            <TextField fullWidth size="small" value={settings.work_authorization} onChange={(e) => update('work_authorization', e.target.value)} placeholder="Authorized to work" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+          </Grid>
+          <Grid size={{ xs: 6 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Human Input Timeout (sec)</Typography>
+            <TextField fullWidth size="small" type="number" value={settings.human_input_timeout || 300} onChange={(e) => update('human_input_timeout', parseInt(e.target.value) || 300)} inputProps={{ min: 60, max: 900 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+          </Grid>
+          <Grid size={{ xs: 6 }}>
+            <FormControlLabel control={<Switch size="small" checked={settings.willing_to_relocate} onChange={(e) => update('willing_to_relocate', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Willing to relocate</Typography>} sx={{ mt: 1 }} />
           </Grid>
           <Grid size={{ xs: 12 }}>
-            <FormControlLabel control={<Switch size="small" checked={settings.willing_to_relocate} onChange={(e) => update('willing_to_relocate', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Willing to relocate</Typography>} />
+            <ChipInput label="Skills" value={settings.skills || []} onChange={(v) => update('skills', v)} placeholder="e.g. engineering management, system design" />
           </Grid>
           <Grid size={{ xs: 12 }}>
-            <ChipInput label="Preferred Cities" value={settings.preferred_cities || []} onChange={(v) => update('preferred_cities', v)} placeholder="e.g. Bengaluru" />
+            <ChipInput label="Preferred Cities" value={settings.preferred_cities || []} onChange={(v) => update('preferred_cities', v)} placeholder="e.g. Bangalore, Remote" />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.5 }}>Resume Mapping (keyword → resume file)</Typography>
+            <Typography sx={{ fontSize: 10, color: 'text.secondary', mb: 1 }}>Format: One per line — "Keywords | resume_file.pdf". E.g: "Engineering Manager, Director | EM_Resume.pdf"</Typography>
+            <TextField
+              fullWidth size="small" multiline rows={3}
+              value={settings.resume_mapping_text || ''}
+              onChange={(e) => update('resume_mapping_text', e.target.value)}
+              placeholder={"Engineering Manager, Director of Engineering | EM_Resume.pdf\nTPM, Technical Program Manager | TPM_Resume.pdf"}
+              sx={{ '& .MuiInputBase-input': { fontSize: 11, fontFamily: 'monospace' } }}
+            />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.5 }}>Pre-configured Sensitive Field Answers</Typography>
+            <Typography sx={{ fontSize: 10, color: 'text.secondary', mb: 1 }}>Format: One per line — "field_name: answer". Agent auto-fills these without pausing.</Typography>
+            <TextField
+              fullWidth size="small" multiline rows={4}
+              value={settings.sensitive_field_answers_text || ''}
+              onChange={(e) => update('sensitive_field_answers_text', e.target.value)}
+              placeholder={"salary_expectation: As per company standards\ncurrent_ctc: Confidential - happy to discuss\nyears_of_experience: 12\ngender: Male\nveteran_status: No"}
+              sx={{ '& .MuiInputBase-input': { fontSize: 11, fontFamily: 'monospace' } }}
+            />
           </Grid>
         </Grid>
+      );
+      case 'scheduler': return (
+        <Grid container spacing={1.5}>
+          <Grid size={{ xs: 6 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Scan Interval (minutes)</Typography>
+            <TextField fullWidth size="small" type="number" value={settings.interval_minutes || 60} onChange={(e) => update('interval_minutes', parseInt(e.target.value) || 60)} inputProps={{ min: 10, max: 480 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+          </Grid>
+          <Grid size={{ xs: 3 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Active From</Typography>
+            <TextField fullWidth size="small" type="number" value={settings.active_hours_start || 9} onChange={(e) => update('active_hours_start', parseInt(e.target.value) || 9)} inputProps={{ min: 0, max: 23 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+          </Grid>
+          <Grid size={{ xs: 3 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Active Until</Typography>
+            <TextField fullWidth size="small" type="number" value={settings.active_hours_end || 22} onChange={(e) => update('active_hours_end', parseInt(e.target.value) || 22)} inputProps={{ min: 0, max: 23 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 2, mb: 1, color: 'primary.main' }}>⚡ Urgent Mode (First-Week Sprint)</Typography>
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <FormControlLabel control={<Switch size="small" checked={settings.urgent_mode || false} onChange={(e) => update('urgent_mode', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Enable Urgent Mode (higher throughput for first week)</Typography>} />
+          </Grid>
+          <Grid size={{ xs: 4 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Urgent Interval (min)</Typography>
+            <TextField fullWidth size="small" type="number" value={settings.urgent_interval_minutes || 30} onChange={(e) => update('urgent_interval_minutes', parseInt(e.target.value) || 30)} inputProps={{ min: 10, max: 120 }} disabled={!settings.urgent_mode} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+          </Grid>
+          <Grid size={{ xs: 4 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Urgent Max Postings</Typography>
+            <TextField fullWidth size="small" type="number" value={settings.urgent_max_postings || 100} onChange={(e) => update('urgent_max_postings', parseInt(e.target.value) || 100)} inputProps={{ min: 25, max: 200 }} disabled={!settings.urgent_mode} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+          </Grid>
+          <Grid size={{ xs: 4 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Urgent Duration (days)</Typography>
+            <TextField fullWidth size="small" type="number" value={settings.urgent_duration_days || 7} onChange={(e) => update('urgent_duration_days', parseInt(e.target.value) || 7)} inputProps={{ min: 1, max: 30 }} disabled={!settings.urgent_mode} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <Typography sx={{ fontSize: 10, color: 'text.secondary', mt: 1 }}>Urgent mode auto-disables after the configured duration. Scans every 30min with 100 jobs/run instead of the normal interval.</Typography>
+          </Grid>
+        </Grid>
+      );
+      case 'selflearning': return (
+        <>
+          <Typography sx={{ fontSize: 12, color: 'text.secondary', mb: 2 }}>Boost scores for target companies and penalize blocklist companies from day 1. The agent also learns from your actions over time.</Typography>
+          <ChipInput label="🎯 Target Companies (+boost)" value={settings.target_companies || []} onChange={(v) => update('target_companies', v)} placeholder="e.g. Google, Microsoft, Amazon" />
+          <ChipInput label="🚫 Blocklist Companies (-penalty)" value={settings.blocklist_companies || []} onChange={(v) => update('blocklist_companies', v)} placeholder="e.g. Wipro, TCS, Infosys" />
+          <Grid container spacing={1.5} sx={{ mt: 1 }}>
+            <Grid size={{ xs: 6 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 600 }}>Target Boost: +{Math.round((settings.target_boost || 0.15) * 100)}%</Typography>
+              <Slider size="small" value={Math.round((settings.target_boost || 0.15) * 100)} onChange={(_, v) => update('target_boost', v / 100)} min={5} max={30} step={5} valueLabelDisplay="auto" valueLabelFormat={(v) => `+${v}%`} sx={{ py: 1 }} />
+            </Grid>
+            <Grid size={{ xs: 6 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 600 }}>Blocklist Penalty: -{Math.round((settings.blocklist_penalty || 0.20) * 100)}%</Typography>
+              <Slider size="small" value={Math.round((settings.blocklist_penalty || 0.20) * 100)} onChange={(_, v) => update('blocklist_penalty', v / 100)} min={5} max={40} step={5} valueLabelDisplay="auto" valueLabelFormat={(v) => `-${v}%`} sx={{ py: 1 }} />
+            </Grid>
+          </Grid>
+        </>
       );
       case 'inmail': return (
         <>
