@@ -2,12 +2,6 @@ candidate:
   name: "Rahul Goel"
   email: ""
   phone: ""
-  resume_mapping:
-    - keywords: ["Engineering Manager", "Senior Engineering Manager", "Director of Engineering"]
-      resume: "RAHUL_GOEL_EM_Resume.pdf"
-    - keywords: ["Technical Program Manager", "TPM", "Program Manager"]
-      resume: "RAHUL_GOEL_TPM_Resume.pdf"
-  # Default resume used when no keyword matches
   resume_filename: "RAHUL_GOEL_Resume_Final.pdf"
   notice_period: "30 days"
   willing_to_relocate: true

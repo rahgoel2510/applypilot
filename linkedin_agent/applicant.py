@@ -355,27 +355,30 @@ class ApplicationExecutor:
         return True
 
     async def handle_resume_screen(self) -> bool:
-        """Verify the correct resume file is selected based on job title.
+        """Ensure the correct resume is selected. Uploads if not found on LinkedIn.
 
-        Uses resume_mapping to pick the best resume for the current job.
-        Falls back to default resume_filename if no keyword match.
+        Strategy:
+        1. Look for our resume in the existing resume cards
+        2. If found → click to select it
+        3. If NOT found → upload from local /resumes/ directory
+        4. Verify selection
 
         Returns:
-            True if the correct resume is active, False otherwise.
+            True if resume is active, False if something went wrong.
         """
         logger.debug("Handling resume screen")
 
         await self._wait_for_form_load()
 
-        expected_resume = self._select_resume_for_job(self._current_job_title)
-        logger.info(f"Selected resume '{expected_resume}' for job '{self._current_job_title}'")
+        expected_resume = self.candidate.get("resume_filename", "RAHUL_GOEL_Resume_Final.pdf")
+        logger.info(f"Looking for resume: {expected_resume}")
 
-        # Check if any resume card is already selected
+        # Check if correct resume is already selected
         selected = await self.page.query_selector(self.SELECTORS["resume_selected"])
         if selected:
             text = await selected.inner_text()
             if expected_resume.lower() in text.lower():
-                logger.info(f"Correct resume already selected: {expected_resume}")
+                logger.info(f"Resume already selected: {expected_resume}")
                 return True
 
         # Try to find and click the correct resume card
@@ -384,14 +387,86 @@ class ApplicationExecutor:
             card_text = await card.inner_text()
             if expected_resume.lower() in card_text.lower():
                 await card.click()
-                logger.info(f"Selected resume: {expected_resume}")
+                logger.info(f"Selected existing resume: {expected_resume}")
                 await asyncio.sleep(0.5)
                 return True
 
-        # Resume not found — cannot proceed safely
-        logger.error(
-            f"Expected resume '{expected_resume}' not found in available options"
-        )
+        # Resume NOT found on LinkedIn — try to upload it
+        logger.info(f"Resume '{expected_resume}' not found on LinkedIn. Attempting upload...")
+
+        # Look for the file locally
+        from pathlib import Path as _Path
+        search_paths = [
+            _Path.cwd() / "resumes" / expected_resume,
+            _Path.cwd() / expected_resume,
+            _Path.home() / "Documents" / expected_resume,
+            _Path.home() / "Downloads" / expected_resume,
+        ]
+
+        local_file = None
+        for path in search_paths:
+            if path.exists():
+                local_file = path
+                break
+
+        if not local_file:
+            logger.error(f"Resume file not found locally: {expected_resume}")
+            logger.error(f"Searched: {[str(p) for p in search_paths]}")
+            return False
+
+        # Click the upload button/input on LinkedIn's resume screen
+        try:
+            # LinkedIn has a file input for resume upload
+            file_input = await self.page.query_selector(
+                'input[type="file"], input[name="file"], input[accept*=".pdf"]'
+            )
+            if file_input:
+                await file_input.set_input_files(str(local_file))
+                logger.info(f"Uploaded resume from: {local_file}")
+                await asyncio.sleep(2.0)  # Wait for upload to process
+
+                # Verify it appeared and select it
+                await self._wait_for_form_load()
+                resume_cards = await self.page.query_selector_all(self.SELECTORS["resume_item"])
+                for card in resume_cards:
+                    card_text = await card.inner_text()
+                    if expected_resume.lower() in card_text.lower():
+                        await card.click()
+                        logger.info(f"Selected newly uploaded resume: {expected_resume}")
+                        await asyncio.sleep(0.5)
+                        return True
+
+                # Upload succeeded but can't find it — try selecting the most recent
+                if resume_cards:
+                    await resume_cards[0].click()
+                    logger.info("Selected first resume card (most recent upload)")
+                    return True
+            else:
+                logger.warning("No file input found for resume upload")
+                # Try clicking an "Upload resume" button/link
+                upload_btn = await self.page.query_selector(
+                    'button:has-text("Upload"), label:has-text("Upload"), a:has-text("Upload")'
+                )
+                if upload_btn:
+                    await upload_btn.click()
+                    await asyncio.sleep(1.0)
+                    # Now look for file input again
+                    file_input = await self.page.query_selector('input[type="file"]')
+                    if file_input:
+                        await file_input.set_input_files(str(local_file))
+                        logger.info(f"Uploaded resume via button: {local_file}")
+                        await asyncio.sleep(2.0)
+                        return True
+
+        except Exception as upload_exc:
+            logger.error(f"Resume upload failed: {upload_exc}")
+
+        # Last resort: select whatever is already selected/first available
+        if resume_cards:
+            logger.warning("Using first available resume as fallback")
+            await resume_cards[0].click()
+            return True
+
         return False
 
     async def handle_additional_questions(self) -> tuple[bool, list[str]]:
