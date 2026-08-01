@@ -159,6 +159,16 @@ _YAML_TO_DB_MAP = {
 def _serialize_value(value) -> str:
     """Convert any Python value to a string for DB storage."""
     if isinstance(value, list):
+        # Check if it's a list of dicts (like resume_mapping)
+        if value and isinstance(value[0], dict):
+            # Serialize as lines: "keywords | resume"
+            lines = []
+            for item in value:
+                kws = item.get("keywords", [])
+                resume = item.get("resume", "")
+                if kws and resume:
+                    lines.append(f"{', '.join(kws)} | {resume}")
+            return "\n".join(lines)
         return ", ".join(str(v) for v in value)
     if isinstance(value, dict):
         return "\n".join(f"{k}: {v}" for k, v in value.items())

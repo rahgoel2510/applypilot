@@ -92,6 +92,14 @@ export default function Settings() {
     if (key === 'RESUME_FILENAME') {
       return <ResumeUpload key={key} value={val} onChange={v => update(key, v)} />;
     }
+    // Special: Resume mapping
+    if (key === 'RESUME_MAPPING') {
+      return <ResumeMappingEditor key={key} value={val} onChange={v => update(key, v)} />;
+    }
+    // Special: Sensitive field answers
+    if (key === 'SENSITIVE_FIELD_ANSWERS') {
+      return <AnswersEditor key={key} value={val} onChange={v => update(key, v)} />;
+    }
 
     if (s.sensitive) {
       return <MaskedField key={key} label={s.label} value={val} onChange={v => update(key, v)} placeholder={s.placeholder} required={s.required} />;
@@ -289,6 +297,92 @@ function ResumeUpload({ value, onChange }) {
           ))}
         </Box>
       )}
+    </Box>
+  );
+}
+
+function ResumeMappingEditor({ value, onChange }) {
+  // value is "Keywords1 | resume1.pdf\nKeywords2 | resume2.pdf"
+  const lines = (value || '').split('\n').filter(l => l.trim());
+  const entries = lines.map(l => {
+    const [kw, resume] = l.split('|').map(s => s.trim());
+    return { keywords: kw || '', resume: resume || '' };
+  });
+
+  const updateEntry = (idx, field, val) => {
+    const updated = [...entries];
+    updated[idx] = { ...updated[idx], [field]: val };
+    onChange(updated.map(e => `${e.keywords} | ${e.resume}`).join('\n'));
+  };
+  const addEntry = () => onChange([...lines, ' | '].join('\n'));
+  const removeEntry = (idx) => onChange(entries.filter((_, i) => i !== idx).map(e => `${e.keywords} | ${e.resume}`).join('\n'));
+
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="body2" fontWeight={600} mb={0.5}>Resume Mapping</Typography>
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        Match different resumes to different job types. When a job title contains any of the keywords, the agent uses that resume.
+      </Typography>
+      {entries.map((entry, idx) => (
+        <Paper key={idx} variant="outlined" sx={{ p: 1.5, mb: 1, display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Box sx={{ flex: 2 }}>
+            <Typography variant="caption" color="text.secondary">When job title contains:</Typography>
+            <TextField fullWidth size="small" value={entry.keywords} onChange={e => updateEntry(idx, 'keywords', e.target.value)}
+              placeholder="Engineering Manager, Director" sx={{ mt: 0.25 }} />
+          </Box>
+          <Typography variant="body2" sx={{ mx: 0.5 }}>→</Typography>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="caption" color="text.secondary">Use resume:</Typography>
+            <TextField fullWidth size="small" value={entry.resume} onChange={e => updateEntry(idx, 'resume', e.target.value)}
+              placeholder="EM_Resume.pdf" sx={{ mt: 0.25 }} />
+          </Box>
+          <IconButton size="small" onClick={() => removeEntry(idx)} sx={{ color: 'error.main' }}>✕</IconButton>
+        </Paper>
+      ))}
+      <Button size="small" onClick={addEntry} sx={{ textTransform: 'none' }}>+ Add mapping</Button>
+    </Box>
+  );
+}
+
+function AnswersEditor({ value, onChange }) {
+  // value is "key1: value1\nkey2: value2"
+  const lines = (value || '').split('\n').filter(l => l.includes(':'));
+  const entries = lines.map(l => {
+    const idx = l.indexOf(':');
+    return { field: l.slice(0, idx).trim(), answer: l.slice(idx + 1).trim() };
+  });
+
+  const updateEntry = (idx, key, val) => {
+    const updated = [...entries];
+    updated[idx] = { ...updated[idx], [key]: val };
+    onChange(updated.map(e => `${e.field}: ${e.answer}`).join('\n'));
+  };
+  const addEntry = () => onChange([...lines, ': '].join('\n'));
+  const removeEntry = (idx) => onChange(entries.filter((_, i) => i !== idx).map(e => `${e.field}: ${e.answer}`).join('\n'));
+
+  const COMMON_FIELDS = ['salary_expectation', 'current_ctc', 'expected_ctc', 'years_of_experience', 'gender', 'veteran_status', 'disability', 'race_ethnicity'];
+
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="body2" fontWeight={600} mb={0.5}>Auto-Fill Answers</Typography>
+      <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+        When LinkedIn asks these questions, the agent fills your answer automatically instead of pausing.
+      </Typography>
+      {entries.map((entry, idx) => (
+        <Box key={idx} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <Select value={entry.field} onChange={e => updateEntry(idx, 'field', e.target.value)} displayEmpty>
+              <MenuItem value="" disabled><em>Select question...</em></MenuItem>
+              {COMMON_FIELDS.map(f => <MenuItem key={f} value={f}>{f.replace(/_/g, ' ')}</MenuItem>)}
+              <MenuItem value={entry.field && !COMMON_FIELDS.includes(entry.field) ? entry.field : '__custom'}>Custom...</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField size="small" sx={{ flex: 1 }} value={entry.answer} onChange={e => updateEntry(idx, 'answer', e.target.value)}
+            placeholder="Your answer" />
+          <IconButton size="small" onClick={() => removeEntry(idx)} sx={{ color: 'error.main' }}>✕</IconButton>
+        </Box>
+      ))}
+      <Button size="small" onClick={addEntry} sx={{ textTransform: 'none' }}>+ Add answer</Button>
     </Box>
   );
 }
