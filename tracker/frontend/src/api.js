@@ -251,3 +251,23 @@ export async function getFeedbackSummary() {
   if (!res.ok) throw new Error('Failed to get feedback summary');
   return res.json();
 }
+
+// ===========================================================================
+// Config YAML API (for Settings page)
+// ===========================================================================
+
+export async function getConfigYaml() {
+  const res = await fetch(`${BASE_URL}/settings/config`);
+  if (!res.ok) throw new Error('Failed to get config');
+  return res.json();
+}
+
+export async function updateConfigYaml(config) {
+  const res = await fetch(`${BASE_URL}/settings/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) throw new Error('Failed to update config');
+  return res.json();
+}

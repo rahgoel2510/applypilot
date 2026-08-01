@@ -209,6 +209,65 @@ class TestResult(BaseModel):
     message: str
 
 
+# ===========================================================================
+# Config YAML API — read/write the full agent configuration
+# ===========================================================================
+
+import yaml
+
+CONFIG_FILE = Path(__file__).resolve().parent.parent.parent / "config.yaml"
+
+
+@router.get("/config")
+def get_config_yaml():
+    """Return the full config.yaml as JSON for the Settings UI."""
+    if not CONFIG_FILE.exists():
+        return {}
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+@router.put("/config")
+def update_config_yaml(config: dict):
+    """Write updated config to config.yaml. Takes effect on next agent run."""
+    try:
+        # Merge with existing to preserve comments structure
+        existing = {}
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                existing = yaml.safe_load(f) or {}
+
+        # Deep merge incoming config into existing
+        for section, values in config.items():
+            if isinstance(values, dict) and section in existing and isinstance(existing[section], dict):
+                existing[section].update(values)
+            else:
+                existing[section] = values
+
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            yaml.dump(existing, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+        return {"message": "Config saved", "sections": list(config.keys())}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ===========================================================================
+# Test Connection Endpoints
+# ===========================================================================
+
+import httpx as httpx_client
+
+
+class TestResult(BaseModel):
+    success: bool
+    message: str
+
+
 @router.post("/test/telegram", response_model=TestResult)
 def test_telegram(db: Session = Depends(get_db)):
     """Test Telegram bot connection."""

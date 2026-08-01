@@ -3,6 +3,7 @@ import {
   Box, Typography, TextField, Button, Switch, FormControlLabel, Chip,
   Slider, Select, MenuItem, FormControl, IconButton, InputAdornment,
   CircularProgress, Alert, Grid, List, ListItemButton, ListItemText,
+  Paper, Divider,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -10,85 +11,72 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import SendIcon from '@mui/icons-material/Send';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { useSnackbar } from 'notistack';
-import { getSettings, updateSettings, testConnection } from '../api';
+import { getSettings, updateSettings, testConnection, getConfigYaml, updateConfigYaml } from '../api';
 
 const GROUPS = [
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'ai', label: 'AI Model' },
-  { key: 'telegram', label: 'Telegram' },
-  { key: 'candidate', label: 'Candidate' },
-  { key: 'search', label: 'Job Search' },
-  { key: 'scheduler', label: 'Scheduler' },
-  { key: 'selflearning', label: 'Self-Learning' },
-  { key: 'inmail', label: 'InMail' },
-  { key: 'advanced', label: 'Advanced' },
+  { key: 'candidate', label: '👤 Candidate', desc: 'Your profile info' },
+  { key: 'search', label: '🔍 Job Search', desc: 'Keywords, locations, scoring' },
+  { key: 'scheduler', label: '⏰ Scheduler', desc: 'Timing & urgent mode' },
+  { key: 'selflearning', label: '🧠 Self-Learning', desc: 'Target & blocklist' },
+  { key: 'telegram', label: '📬 Telegram', desc: 'Notifications' },
+  { key: 'ai', label: '🤖 AI Model', desc: 'OpenRouter / LLM' },
+  { key: 'inmail', label: '✉️ InMail', desc: 'Cold outreach' },
+  { key: 'advanced', label: '⚙️ Advanced', desc: 'Browser, debug' },
 ];
 
-function StatusBadge({ configured }) {
-  return configured ? (
-    <Chip icon={<CheckCircleIcon />} label="Set" size="small" color="success" variant="outlined" sx={{ height: 20, fontSize: '11px', '& .MuiChip-icon': { fontSize: 12 } }} />
-  ) : (
-    <Chip icon={<CancelIcon />} label="—" size="small" color="default" variant="outlined" sx={{ height: 20, fontSize: '11px', '& .MuiChip-icon': { fontSize: 12 } }} />
+function MaskedField({ label, value, onChange, placeholder }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="body2" fontWeight={600} mb={0.5}>{label}</Typography>
+      <TextField fullWidth size="small" type={visible ? 'text' : 'password'}
+        value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        InputProps={{ endAdornment: (
+          <InputAdornment position="end">
+            <IconButton size="small" onClick={() => setVisible(!visible)}>
+              {visible ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+            </IconButton>
+          </InputAdornment>
+        )}} />
+    </Box>
   );
 }
 
-function MaskedField({ label, value, onChange, configured, placeholder, multiline }) {
-  const [visible, setVisible] = useState(false);
+function Field({ label, value, onChange, placeholder, type, multiline, rows, disabled, helperText }) {
   return (
-    <Box sx={{ mb: 1.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
-        <Typography sx={{ fontSize: 11, fontWeight: 600 }}>{label}</Typography>
-        <StatusBadge configured={configured} />
-      </Box>
-      <TextField
-        fullWidth
-        size="small"
-        type={visible ? 'text' : 'password'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        multiline={multiline}
-        rows={multiline ? 3 : undefined}
-        sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }}
-        InputProps={{
-          endAdornment: !multiline && (
-            <InputAdornment position="end">
-              <IconButton size="small" onClick={() => setVisible(!visible)} sx={{ p: 0.25 }}>
-                {visible ? <VisibilityOffIcon sx={{ fontSize: 14 }} /> : <VisibilityIcon sx={{ fontSize: 14 }} />}
-              </IconButton>
-            </InputAdornment>
-          ),
-        }}
-      />
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="body2" fontWeight={600} mb={0.5}>{label}</Typography>
+      <TextField fullWidth size="small" type={type || 'text'} value={value ?? ''}
+        onChange={(e) => onChange(type === 'number' ? Number(e.target.value) : e.target.value)}
+        placeholder={placeholder} multiline={multiline} rows={rows} disabled={disabled}
+        helperText={helperText}
+        sx={multiline ? { '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: 12 } } : {}} />
     </Box>
   );
 }
 
 function ChipInput({ label, value, onChange, placeholder }) {
   const [input, setInput] = useState('');
+  const items = Array.isArray(value) ? value : [];
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && input.trim()) {
       e.preventDefault();
-      if (!value.includes(input.trim())) onChange([...value, input.trim()]);
+      if (!items.includes(input.trim())) onChange([...items, input.trim()]);
       setInput('');
     }
   };
   return (
-    <Box sx={{ mb: 1.5 }}>
-      <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>{label}</Typography>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.5 }}>
-        {value.map((item) => (
-          <Chip key={item} label={item} size="small" onDelete={() => onChange(value.filter((v) => v !== item))} sx={{ height: 22, fontSize: '11px' }} />
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="body2" fontWeight={600} mb={0.5}>{label}</Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.75 }}>
+        {items.map((item) => (
+          <Chip key={item} label={item} size="small" onDelete={() => onChange(items.filter(v => v !== item))} />
         ))}
       </Box>
-      <TextField
-        fullWidth size="small" value={input}
+      <TextField fullWidth size="small" value={input}
         onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
-        placeholder={placeholder || 'Type and press Enter'}
-        sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }}
-      />
+        placeholder={placeholder || 'Type and press Enter'} />
     </Box>
   );
 }
@@ -97,319 +85,207 @@ export default function Settings() {
   const { enqueueSnackbar } = useSnackbar();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [group, setGroup] = useState('linkedin');
-  const [error, setError] = useState(null);
+  const [group, setGroup] = useState('candidate');
   const [testingTelegram, setTestingTelegram] = useState(false);
 
-  const [settings, setSettings] = useState({
-    linkedin_email: '', linkedin_password: '', linkedin_session_cookie: '',
-    ai_provider: 'openrouter', ai_model: '', ai_api_key: '',
-    telegram_bot_token: '', telegram_chat_id: '',
-    search_keywords: [], search_locations: [], experience_levels: [],
-    posted_within: '24h', match_threshold: 70, max_postings_per_run: 50, skip_external: false,
-    candidate_name: '', candidate_email: '', candidate_phone: '', resume_path: '',
-    notice_period: '', willing_to_relocate: false, work_authorization: '', preferred_cities: [],
-    inmail_enabled: false, inmail_auto_send: false, inmail_template: '',
-    browser_headless: true, data_dir: './data', debug_mode: false,
-  });
+  // Config from config.yaml
+  const [config, setConfig] = useState({});
+  // Secrets from DB
+  const [secrets, setSecrets] = useState({});
 
-  const [configuredFields, setConfiguredFields] = useState({});
-
-  const loadSettings = useCallback(async () => {
+  const loadAll = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getSettings();
-      if (data.settings) {
-        const mapped = {}, configured = {};
-        data.settings.forEach((s) => {
-          const key = s.key.toLowerCase();
-          mapped[key] = s.current_value || s.masked_value || '';
-          configured[key] = s.is_set;
-        });
-        setSettings((prev) => ({ ...prev, ...mapped }));
-        setConfiguredFields(configured);
+      const [yamlData, secretsData] = await Promise.all([getConfigYaml(), getSettings()]);
+      setConfig(yamlData || {});
+      if (secretsData.settings) {
+        const mapped = {};
+        secretsData.settings.forEach(s => { mapped[s.key.toLowerCase()] = s.masked_value || ''; });
+        setSecrets(mapped);
       }
-    } catch { setError('Failed to load settings'); }
+    } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { loadSettings(); }, [loadSettings]);
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  const updateField = (section, key, value) => {
+    setConfig(prev => ({
+      ...prev,
+      [section]: { ...(prev[section] || {}), [key]: value },
+    }));
+  };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateSettings(settings);
-      enqueueSnackbar('Settings saved', { variant: 'success' });
-      await loadSettings();
-    } catch { enqueueSnackbar('Failed to save', { variant: 'error' }); }
+      await updateConfigYaml(config);
+      // Also save secrets if changed
+      const secretUpdates = {};
+      if (secrets.telegram_bot_token_new) secretUpdates.TELEGRAM_BOT_TOKEN = secrets.telegram_bot_token_new;
+      if (secrets.telegram_chat_id_new) secretUpdates.TELEGRAM_CHAT_ID = secrets.telegram_chat_id_new;
+      if (secrets.openai_api_key_new) secretUpdates.OPENAI_API_KEY = secrets.openai_api_key_new;
+      if (secrets.linkedin_email_new) secretUpdates.LINKEDIN_EMAIL = secrets.linkedin_email_new;
+      if (secrets.linkedin_password_new) secretUpdates.LINKEDIN_PASSWORD = secrets.linkedin_password_new;
+      if (Object.keys(secretUpdates).length > 0) await updateSettings(secretUpdates);
+      enqueueSnackbar('Settings saved ✓', { variant: 'success' });
+      await loadAll();
+    } catch { enqueueSnackbar('Save failed', { variant: 'error' }); }
     finally { setSaving(false); }
-  };
-
-  const handleReset = () => {
-    if (window.confirm('Reset all settings to defaults?')) {
-      setSettings({
-        linkedin_email: '', linkedin_password: '', linkedin_session_cookie: '',
-        ai_provider: 'openrouter', ai_model: '', ai_api_key: '',
-        telegram_bot_token: '', telegram_chat_id: '',
-        search_keywords: [], search_locations: [], experience_levels: [],
-        posted_within: '24h', match_threshold: 70, max_postings_per_run: 50, skip_external: false,
-        candidate_name: '', candidate_email: '', candidate_phone: '', resume_path: '',
-        notice_period: '', willing_to_relocate: false, work_authorization: '', preferred_cities: [],
-        inmail_enabled: false, inmail_auto_send: false, inmail_template: '',
-        browser_headless: true, data_dir: './data', debug_mode: false,
-      });
-      enqueueSnackbar('Reset (not saved yet)', { variant: 'info' });
-    }
   };
 
   const handleTestTelegram = async () => {
     setTestingTelegram(true);
     try {
-      const result = await testConnection('telegram');
-      enqueueSnackbar(result.success ? 'Telegram OK!' : (result.message || 'Failed'), { variant: result.success ? 'success' : 'error' });
-    } catch { enqueueSnackbar('Telegram test failed', { variant: 'error' }); }
+      const r = await testConnection('telegram');
+      enqueueSnackbar(r.success ? 'Telegram OK! ✓' : (r.message || 'Failed'), { variant: r.success ? 'success' : 'error' });
+    } catch { enqueueSnackbar('Test failed', { variant: 'error' }); }
     finally { setTestingTelegram(false); }
   };
 
-  const update = (key, value) => setSettings((prev) => ({ ...prev, [key]: value }));
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8 }}><CircularProgress /></Box>;
 
-  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}><CircularProgress size={24} /></Box>;
-  if (error) return <Alert severity="error" sx={{ fontSize: 12 }}>{error}</Alert>;
+  const c = (section) => config[section] || {};
 
   const renderGroup = () => {
     switch (group) {
-      case 'linkedin': return (
+      case 'candidate': return (
         <>
-          <MaskedField label="Email" value={settings.linkedin_email} onChange={(v) => update('linkedin_email', v)} configured={configuredFields.linkedin_email} placeholder="your-email@example.com" />
-          <MaskedField label="Password" value={settings.linkedin_password} onChange={(v) => update('linkedin_password', v)} configured={configuredFields.linkedin_password} placeholder="••••••••" />
-          <MaskedField label="Session Cookie (li_at)" value={settings.linkedin_session_cookie} onChange={(v) => update('linkedin_session_cookie', v)} configured={configuredFields.linkedin_session_cookie} placeholder="Paste li_at cookie" />
-          <Typography sx={{ fontSize: 11, color: 'text.secondary', mt: 0.5 }}>Session cookie is preferred over email/password.</Typography>
-        </>
-      );
-      case 'ai': return (
-        <Grid container spacing={1.5}>
-          <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Provider</Typography>
-            <FormControl fullWidth size="small">
-              <Select value={settings.ai_provider} onChange={(e) => update('ai_provider', e.target.value)} sx={{ fontSize: 12 }}>
-                <MenuItem value="openrouter">OpenRouter</MenuItem>
-                <MenuItem value="openai">OpenAI</MenuItem>
-                <MenuItem value="anthropic">Anthropic</MenuItem>
-                <MenuItem value="ollama">Ollama (Local)</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Model Name</Typography>
-            <TextField fullWidth size="small" value={settings.ai_model} onChange={(e) => update('ai_model', e.target.value)} placeholder="e.g. gpt-4o-mini" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 12 }}>
-            <MaskedField label="API Key" value={settings.ai_api_key} onChange={(v) => update('ai_api_key', v)} configured={configuredFields.ai_api_key} placeholder="sk-..." />
-          </Grid>
-        </Grid>
-      );
-      case 'telegram': return (
-        <>
-          <MaskedField label="Bot Token" value={settings.telegram_bot_token} onChange={(v) => update('telegram_bot_token', v)} configured={configuredFields.telegram_bot_token} placeholder="123456:ABC-DEF..." />
-          <Grid container spacing={1.5} alignItems="flex-end">
-            <Grid size={{ xs: 8 }}>
-              <Box sx={{ mb: 1.5 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
-                  <Typography sx={{ fontSize: 11, fontWeight: 600 }}>Chat ID</Typography>
-                  <StatusBadge configured={configuredFields.telegram_chat_id} />
-                </Box>
-                <TextField fullWidth size="small" value={settings.telegram_chat_id} onChange={(e) => update('telegram_chat_id', e.target.value)} placeholder="e.g. 123456789" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-              </Box>
-            </Grid>
-            <Grid size={{ xs: 4 }}>
-              <Button variant="outlined" size="small" fullWidth startIcon={testingTelegram ? <CircularProgress size={12} /> : <SendIcon sx={{ fontSize: 14 }} />} onClick={handleTestTelegram} disabled={testingTelegram} sx={{ fontSize: 11, mb: 1.5, py: 0.75 }}>Test</Button>
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, md: 6 }}><Field label="Full Name" value={c('candidate').name} onChange={v => updateField('candidate', 'name', v)} placeholder="Rahul Goel" /></Grid>
+            <Grid size={{ xs: 12, md: 6 }}><Field label="Email" value={c('candidate').email} onChange={v => updateField('candidate', 'email', v)} placeholder="you@example.com" /></Grid>
+            <Grid size={{ xs: 12, md: 6 }}><Field label="Phone" value={c('candidate').phone} onChange={v => updateField('candidate', 'phone', v)} placeholder="+91-XXXXXXXXXX" /></Grid>
+            <Grid size={{ xs: 12, md: 6 }}><Field label="Default Resume Filename" value={c('candidate').resume_filename} onChange={v => updateField('candidate', 'resume_filename', v)} placeholder="resume.pdf" /></Grid>
+            <Grid size={{ xs: 12, md: 6 }}><Field label="Notice Period" value={c('candidate').notice_period} onChange={v => updateField('candidate', 'notice_period', v)} placeholder="30 days" /></Grid>
+            <Grid size={{ xs: 12, md: 6 }}><Field label="Work Authorization" value={c('candidate').work_authorization} onChange={v => updateField('candidate', 'work_authorization', v)} placeholder="Authorized to work" /></Grid>
+            <Grid size={{ xs: 12, md: 6 }}><Field label="Human Input Timeout (seconds)" value={c('candidate').human_input_timeout} onChange={v => updateField('candidate', 'human_input_timeout', Number(v))} type="number" placeholder="300" /></Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <FormControlLabel sx={{ mt: 3 }} control={<Switch checked={c('candidate').willing_to_relocate ?? true} onChange={e => updateField('candidate', 'willing_to_relocate', e.target.checked)} />} label="Willing to relocate" />
             </Grid>
           </Grid>
+          <Divider sx={{ my: 3 }} />
+          <ChipInput label="Skills" value={c('candidate').skills} onChange={v => updateField('candidate', 'skills', v)} placeholder="engineering management, system design, agile..." />
+          <ChipInput label="Preferred Cities" value={c('candidate').preferred_cities} onChange={v => updateField('candidate', 'preferred_cities', v)} placeholder="Bangalore, Hyderabad, Remote..." />
+          <Divider sx={{ my: 3 }} />
+          <Field label="Resume Mapping" value={(c('candidate').resume_mapping || []).map(m => `${(m.keywords||[]).join(', ')} | ${m.resume}`).join('\n')}
+            onChange={v => updateField('candidate', 'resume_mapping', v.split('\n').filter(l=>l.includes('|')).map(l => { const [kw,r]=l.split('|'); return {keywords: kw.split(',').map(k=>k.trim()), resume: (r||'').trim()}; }))}
+            multiline rows={3} placeholder={"Engineering Manager, Director | EM_Resume.pdf\nTPM, Program Manager | TPM_Resume.pdf"}
+            helperText="One per line: keywords | resume_file.pdf" />
+          <Field label="Pre-configured Sensitive Answers" value={Object.entries(c('candidate').sensitive_field_answers || {}).map(([k,v]) => `${k}: ${v}`).join('\n')}
+            onChange={v => updateField('candidate', 'sensitive_field_answers', Object.fromEntries(v.split('\n').filter(l=>l.includes(':')).map(l => { const i=l.indexOf(':'); return [l.slice(0,i).trim(), l.slice(i+1).trim()]; })))}
+            multiline rows={4} placeholder={"salary_expectation: As per company standards\ncurrent_ctc: Confidential\nyears_of_experience: 12"}
+            helperText="One per line: field_name: answer (auto-fills without pausing)" />
         </>
       );
       case 'search': return (
         <>
-          <ChipInput label="Keywords" value={settings.search_keywords || []} onChange={(v) => update('search_keywords', v)} placeholder="e.g. Engineering Manager" />
-          <ChipInput label="Locations" value={settings.search_locations || []} onChange={(v) => update('search_locations', v)} placeholder="e.g. Remote, Bengaluru, India" />
-          <Grid container spacing={1.5}>
-            <Grid size={{ xs: 4 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Posted Within</Typography>
+          <ChipInput label="Keywords" value={c('job_search').keywords} onChange={v => updateField('job_search', 'keywords', v)} placeholder="Engineering Manager, TPM..." />
+          <ChipInput label="Locations" value={c('job_search').locations} onChange={v => updateField('job_search', 'locations', v)} placeholder="India, Bangalore, Remote..." />
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 6, md: 3 }}>
+              <Typography variant="body2" fontWeight={600} mb={0.5}>Posted Within</Typography>
               <FormControl fullWidth size="small">
-                <Select value={settings.posted_within} onChange={(e) => update('posted_within', e.target.value)} sx={{ fontSize: 12 }}>
+                <Select value={c('job_search').posted_within || '24h'} onChange={e => updateField('job_search', 'posted_within', e.target.value)}>
                   <MenuItem value="24h">Last 24 hours</MenuItem>
-                  <MenuItem value="week">Last 7 days</MenuItem>
-                  <MenuItem value="month">Last 30 days</MenuItem>
-                  <MenuItem value="any">Any time</MenuItem>
+                  <MenuItem value="week">Last week</MenuItem>
+                  <MenuItem value="month">Last month</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
-            <Grid size={{ xs: 4 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Initial Scan Window</Typography>
+            <Grid size={{ xs: 6, md: 3 }}>
+              <Typography variant="body2" fontWeight={600} mb={0.5}>First Run Window</Typography>
               <FormControl fullWidth size="small">
-                <Select value={settings.initial_scan_window || 'week'} onChange={(e) => update('initial_scan_window', e.target.value)} sx={{ fontSize: 12 }}>
+                <Select value={c('job_search').initial_scan_window || 'week'} onChange={e => updateField('job_search', 'initial_scan_window', e.target.value)}>
                   <MenuItem value="24h">24 hours</MenuItem>
                   <MenuItem value="week">1 week</MenuItem>
                   <MenuItem value="month">1 month</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
-            <Grid size={{ xs: 4 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Max Postings/Run</Typography>
-              <TextField fullWidth size="small" type="number" value={settings.max_postings_per_run} onChange={(e) => update('max_postings_per_run', parseInt(e.target.value) || 0)} inputProps={{ min: 1, max: 200 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-            </Grid>
-            <Grid size={{ xs: 4 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Daily Application Limit</Typography>
-              <TextField fullWidth size="small" type="number" value={settings.daily_application_limit || 80} onChange={(e) => update('daily_application_limit', parseInt(e.target.value) || 80)} inputProps={{ min: 10, max: 200 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-            </Grid>
+            <Grid size={{ xs: 6, md: 3 }}><Field label="Max Jobs/Run" value={c('job_search').max_postings_per_run} onChange={v => updateField('job_search', 'max_postings_per_run', Number(v))} type="number" /></Grid>
+            <Grid size={{ xs: 6, md: 3 }}><Field label="Daily Cap" value={c('job_search').daily_application_limit} onChange={v => updateField('job_search', 'daily_application_limit', Number(v))} type="number" /></Grid>
           </Grid>
-          <Box sx={{ mt: 1.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600 }}>Match Threshold: {settings.match_threshold}%</Typography>
-            <Slider size="small" value={settings.match_threshold} onChange={(_, v) => update('match_threshold', v)} min={30} max={100} step={5} valueLabelDisplay="auto" marks={[{value:50,label:'50'},{value:70,label:'70'},{value:80,label:'80'},{value:100,label:'100'}]} sx={{ py: 1, '& .MuiSlider-markLabel': { fontSize: '0.6rem' } }} />
+          <Box sx={{ mt: 2, mb: 3 }}>
+            <Typography variant="body2" fontWeight={600}>Match Threshold: {Math.round((c('job_search').match_threshold || 0.80) * 100)}%</Typography>
+            <Slider value={Math.round((c('job_search').match_threshold || 0.80) * 100)} onChange={(_, v) => updateField('job_search', 'match_threshold', v / 100)}
+              min={30} max={100} step={5} valueLabelDisplay="auto" valueLabelFormat={v => `${v}%`}
+              marks={[{value:50,label:'50%'},{value:70,label:'70%'},{value:80,label:'80%'}]} size="small" sx={{ mt: 1 }} />
           </Box>
-          <Box sx={{ mt: 1 }}>
-            <FormControlLabel control={<Switch size="small" checked={settings.fallback_scoring !== false} onChange={(e) => update('fallback_scoring', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Fallback keyword scoring (when no Premium)</Typography>} />
-            <FormControlLabel control={<Switch size="small" checked={settings.track_external_apply !== false} onChange={(e) => update('track_external_apply', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Track external apply jobs (notify via Telegram)</Typography>} />
-            <FormControlLabel control={<Switch size="small" checked={settings.skip_external} onChange={(e) => update('skip_external', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Skip external apply entirely (not recommended)</Typography>} />
-          </Box>
+          <FormControlLabel control={<Switch checked={c('job_search').fallback_scoring !== false} onChange={e => updateField('job_search', 'fallback_scoring', e.target.checked)} />} label="Fallback keyword scoring (no Premium needed)" />
+          <FormControlLabel control={<Switch checked={c('job_search').track_external_apply !== false} onChange={e => updateField('job_search', 'track_external_apply', e.target.checked)} />} label="Track external apply jobs (Telegram notification)" />
+          <FormControlLabel control={<Switch checked={c('job_search').skip_external_apply === true} onChange={e => updateField('job_search', 'skip_external_apply', e.target.checked)} />} label="Skip external apply entirely" />
         </>
       );
-      case 'candidate': return (
-        <Grid container spacing={1.5}>
-          <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Name</Typography>
-            <TextField fullWidth size="small" value={settings.candidate_name} onChange={(e) => update('candidate_name', e.target.value)} placeholder="Your full name" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Email</Typography>
-            <TextField fullWidth size="small" value={settings.candidate_email} onChange={(e) => update('candidate_email', e.target.value)} placeholder="you@example.com" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Phone</Typography>
-            <TextField fullWidth size="small" value={settings.candidate_phone} onChange={(e) => update('candidate_phone', e.target.value)} placeholder="+91-XXXXXXXXXX" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Default Resume</Typography>
-            <TextField fullWidth size="small" value={settings.resume_path} onChange={(e) => update('resume_path', e.target.value)} placeholder="resume.pdf" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Notice Period</Typography>
-            <TextField fullWidth size="small" value={settings.notice_period} onChange={(e) => update('notice_period', e.target.value)} placeholder="30 days" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Work Authorization</Typography>
-            <TextField fullWidth size="small" value={settings.work_authorization} onChange={(e) => update('work_authorization', e.target.value)} placeholder="Authorized to work" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Human Input Timeout (sec)</Typography>
-            <TextField fullWidth size="small" type="number" value={settings.human_input_timeout || 300} onChange={(e) => update('human_input_timeout', parseInt(e.target.value) || 300)} inputProps={{ min: 60, max: 900 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 6 }}>
-            <FormControlLabel control={<Switch size="small" checked={settings.willing_to_relocate} onChange={(e) => update('willing_to_relocate', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Willing to relocate</Typography>} sx={{ mt: 1 }} />
-          </Grid>
-          <Grid size={{ xs: 12 }}>
-            <ChipInput label="Skills" value={settings.skills || []} onChange={(v) => update('skills', v)} placeholder="e.g. engineering management, system design" />
-          </Grid>
-          <Grid size={{ xs: 12 }}>
-            <ChipInput label="Preferred Cities" value={settings.preferred_cities || []} onChange={(v) => update('preferred_cities', v)} placeholder="e.g. Bangalore, Remote" />
-          </Grid>
-          <Grid size={{ xs: 12 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.5 }}>Resume Mapping (keyword → resume file)</Typography>
-            <Typography sx={{ fontSize: 10, color: 'text.secondary', mb: 1 }}>Format: One per line — "Keywords | resume_file.pdf". E.g: "Engineering Manager, Director | EM_Resume.pdf"</Typography>
-            <TextField
-              fullWidth size="small" multiline rows={3}
-              value={settings.resume_mapping_text || ''}
-              onChange={(e) => update('resume_mapping_text', e.target.value)}
-              placeholder={"Engineering Manager, Director of Engineering | EM_Resume.pdf\nTPM, Technical Program Manager | TPM_Resume.pdf"}
-              sx={{ '& .MuiInputBase-input': { fontSize: 11, fontFamily: 'monospace' } }}
-            />
-          </Grid>
-          <Grid size={{ xs: 12 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.5 }}>Pre-configured Sensitive Field Answers</Typography>
-            <Typography sx={{ fontSize: 10, color: 'text.secondary', mb: 1 }}>Format: One per line — "field_name: answer". Agent auto-fills these without pausing.</Typography>
-            <TextField
-              fullWidth size="small" multiline rows={4}
-              value={settings.sensitive_field_answers_text || ''}
-              onChange={(e) => update('sensitive_field_answers_text', e.target.value)}
-              placeholder={"salary_expectation: As per company standards\ncurrent_ctc: Confidential - happy to discuss\nyears_of_experience: 12\ngender: Male\nveteran_status: No"}
-              sx={{ '& .MuiInputBase-input': { fontSize: 11, fontFamily: 'monospace' } }}
-            />
-          </Grid>
-        </Grid>
-      );
       case 'scheduler': return (
-        <Grid container spacing={1.5}>
-          <Grid size={{ xs: 6 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Scan Interval (minutes)</Typography>
-            <TextField fullWidth size="small" type="number" value={settings.interval_minutes || 60} onChange={(e) => update('interval_minutes', parseInt(e.target.value) || 60)} inputProps={{ min: 10, max: 480 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 3 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Active From</Typography>
-            <TextField fullWidth size="small" type="number" value={settings.active_hours_start || 9} onChange={(e) => update('active_hours_start', parseInt(e.target.value) || 9)} inputProps={{ min: 0, max: 23 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 3 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Active Until</Typography>
-            <TextField fullWidth size="small" type="number" value={settings.active_hours_end || 22} onChange={(e) => update('active_hours_end', parseInt(e.target.value) || 22)} inputProps={{ min: 0, max: 23 }} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 12 }}>
-            <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 2, mb: 1, color: 'primary.main' }}>⚡ Urgent Mode (First-Week Sprint)</Typography>
-          </Grid>
-          <Grid size={{ xs: 12 }}>
-            <FormControlLabel control={<Switch size="small" checked={settings.urgent_mode || false} onChange={(e) => update('urgent_mode', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Enable Urgent Mode (higher throughput for first week)</Typography>} />
-          </Grid>
-          <Grid size={{ xs: 4 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Urgent Interval (min)</Typography>
-            <TextField fullWidth size="small" type="number" value={settings.urgent_interval_minutes || 30} onChange={(e) => update('urgent_interval_minutes', parseInt(e.target.value) || 30)} inputProps={{ min: 10, max: 120 }} disabled={!settings.urgent_mode} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 4 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Urgent Max Postings</Typography>
-            <TextField fullWidth size="small" type="number" value={settings.urgent_max_postings || 100} onChange={(e) => update('urgent_max_postings', parseInt(e.target.value) || 100)} inputProps={{ min: 25, max: 200 }} disabled={!settings.urgent_mode} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 4 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Urgent Duration (days)</Typography>
-            <TextField fullWidth size="small" type="number" value={settings.urgent_duration_days || 7} onChange={(e) => update('urgent_duration_days', parseInt(e.target.value) || 7)} inputProps={{ min: 1, max: 30 }} disabled={!settings.urgent_mode} sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Grid>
-          <Grid size={{ xs: 12 }}>
-            <Typography sx={{ fontSize: 10, color: 'text.secondary', mt: 1 }}>Urgent mode auto-disables after the configured duration. Scans every 30min with 100 jobs/run instead of the normal interval.</Typography>
-          </Grid>
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 4 }}><Field label="Interval (minutes)" value={c('scheduler').interval_minutes} onChange={v => updateField('scheduler', 'interval_minutes', Number(v))} type="number" /></Grid>
+          <Grid size={{ xs: 4 }}><Field label="Active From (hour)" value={c('scheduler').active_hours_start} onChange={v => updateField('scheduler', 'active_hours_start', Number(v))} type="number" /></Grid>
+          <Grid size={{ xs: 4 }}><Field label="Active Until (hour)" value={c('scheduler').active_hours_end} onChange={v => updateField('scheduler', 'active_hours_end', Number(v))} type="number" /></Grid>
+          <Grid size={{ xs: 12 }}><Divider sx={{ my: 1 }} /><Typography variant="subtitle1" fontWeight={700} color="primary">⚡ Urgent Mode</Typography></Grid>
+          <Grid size={{ xs: 12 }}><FormControlLabel control={<Switch checked={c('scheduler').urgent_mode || false} onChange={e => updateField('scheduler', 'urgent_mode', e.target.checked)} />} label="Enable urgent mode (first-week sprint)" /></Grid>
+          <Grid size={{ xs: 4 }}><Field label="Urgent Interval (min)" value={c('scheduler').urgent_interval_minutes} onChange={v => updateField('scheduler', 'urgent_interval_minutes', Number(v))} type="number" disabled={!c('scheduler').urgent_mode} /></Grid>
+          <Grid size={{ xs: 4 }}><Field label="Urgent Max Jobs" value={c('scheduler').urgent_max_postings} onChange={v => updateField('scheduler', 'urgent_max_postings', Number(v))} type="number" disabled={!c('scheduler').urgent_mode} /></Grid>
+          <Grid size={{ xs: 4 }}><Field label="Duration (days)" value={c('scheduler').urgent_duration_days} onChange={v => updateField('scheduler', 'urgent_duration_days', Number(v))} type="number" disabled={!c('scheduler').urgent_mode} /></Grid>
+          <Grid size={{ xs: 12 }}><Typography variant="caption" color="text.secondary">Urgent mode scans more frequently with more jobs. Auto-disables after the set duration.</Typography></Grid>
         </Grid>
       );
       case 'selflearning': return (
         <>
-          <Typography sx={{ fontSize: 12, color: 'text.secondary', mb: 2 }}>Boost scores for target companies and penalize blocklist companies from day 1. The agent also learns from your actions over time.</Typography>
-          <ChipInput label="🎯 Target Companies (+boost)" value={settings.target_companies || []} onChange={(v) => update('target_companies', v)} placeholder="e.g. Google, Microsoft, Amazon" />
-          <ChipInput label="🚫 Blocklist Companies (-penalty)" value={settings.blocklist_companies || []} onChange={(v) => update('blocklist_companies', v)} placeholder="e.g. Wipro, TCS, Infosys" />
-          <Grid container spacing={1.5} sx={{ mt: 1 }}>
+          <Typography variant="body2" color="text.secondary" mb={2}>Boost target companies and penalize blocklist from day 1. The agent also learns from your Kanban actions.</Typography>
+          <ChipInput label="🎯 Target Companies (score boost)" value={c('self_learning').target_companies} onChange={v => updateField('self_learning', 'target_companies', v)} placeholder="Google, Microsoft, Amazon..." />
+          <ChipInput label="🚫 Blocklist Companies (score penalty)" value={c('self_learning').blocklist_companies} onChange={v => updateField('self_learning', 'blocklist_companies', v)} placeholder="Wipro, TCS, Infosys..." />
+          <Grid container spacing={3} sx={{ mt: 1 }}>
             <Grid size={{ xs: 6 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 600 }}>Target Boost: +{Math.round((settings.target_boost || 0.15) * 100)}%</Typography>
-              <Slider size="small" value={Math.round((settings.target_boost || 0.15) * 100)} onChange={(_, v) => update('target_boost', v / 100)} min={5} max={30} step={5} valueLabelDisplay="auto" valueLabelFormat={(v) => `+${v}%`} sx={{ py: 1 }} />
+              <Typography variant="body2" fontWeight={600}>Target Boost: +{Math.round((c('self_learning').target_boost || 0.15) * 100)}%</Typography>
+              <Slider value={Math.round((c('self_learning').target_boost || 0.15) * 100)} onChange={(_, v) => updateField('self_learning', 'target_boost', v / 100)}
+                min={5} max={30} step={5} size="small" valueLabelDisplay="auto" valueLabelFormat={v => `+${v}%`} />
             </Grid>
             <Grid size={{ xs: 6 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 600 }}>Blocklist Penalty: -{Math.round((settings.blocklist_penalty || 0.20) * 100)}%</Typography>
-              <Slider size="small" value={Math.round((settings.blocklist_penalty || 0.20) * 100)} onChange={(_, v) => update('blocklist_penalty', v / 100)} min={5} max={40} step={5} valueLabelDisplay="auto" valueLabelFormat={(v) => `-${v}%`} sx={{ py: 1 }} />
+              <Typography variant="body2" fontWeight={600}>Blocklist Penalty: -{Math.round((c('self_learning').blocklist_penalty || 0.20) * 100)}%</Typography>
+              <Slider value={Math.round((c('self_learning').blocklist_penalty || 0.20) * 100)} onChange={(_, v) => updateField('self_learning', 'blocklist_penalty', v / 100)}
+                min={5} max={40} step={5} size="small" valueLabelDisplay="auto" valueLabelFormat={v => `-${v}%`} />
             </Grid>
           </Grid>
         </>
       );
+      case 'telegram': return (
+        <>
+          <MaskedField label="Bot Token" value={secrets.telegram_bot_token_new || secrets.telegram_bot_token || ''} onChange={v => setSecrets(p => ({...p, telegram_bot_token_new: v}))} placeholder="123456:ABC-DEF1234..." />
+          <Field label="Chat ID" value={secrets.telegram_chat_id_new || secrets.telegram_chat_id || ''} onChange={v => setSecrets(p => ({...p, telegram_chat_id_new: v}))} placeholder="123456789" />
+          <Button variant="outlined" size="small" startIcon={testingTelegram ? <CircularProgress size={14} /> : <SendIcon />} onClick={handleTestTelegram} disabled={testingTelegram} sx={{ mt: 1 }}>
+            Send Test Message
+          </Button>
+        </>
+      );
+      case 'ai': return (
+        <>
+          <MaskedField label="OpenRouter API Key" value={secrets.openai_api_key_new || secrets.openai_api_key || ''} onChange={v => setSecrets(p => ({...p, openai_api_key_new: v}))} placeholder="sk-or-v1-..." />
+          <Typography variant="caption" color="text.secondary">Get a free key at <a href="https://openrouter.ai" target="_blank" rel="noreferrer">openrouter.ai</a></Typography>
+        </>
+      );
       case 'inmail': return (
         <>
-          <FormControlLabel control={<Switch size="small" checked={settings.inmail_enabled} onChange={(e) => update('inmail_enabled', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Enable InMail Drafting</Typography>} />
-          <FormControlLabel sx={{ display: 'block', mt: 1 }} control={<Switch size="small" checked={settings.inmail_auto_send} onChange={(e) => update('inmail_auto_send', e.target.checked)} disabled={!settings.inmail_enabled} />} label={<Typography sx={{ fontSize: 12 }}>Auto-send (without review)</Typography>} />
-          <Box sx={{ mt: 1.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Template</Typography>
-            <TextField fullWidth size="small" multiline rows={4} value={settings.inmail_template} onChange={(e) => update('inmail_template', e.target.value)} placeholder={"Hi {name},\n\nI noticed your team..."} disabled={!settings.inmail_enabled} sx={{ '& .MuiInputBase-input': { fontSize: 12 } }} />
-            <Typography sx={{ fontSize: 11, color: 'text.secondary', mt: 0.5 }}>Variables: {'{name}'}, {'{role}'}, {'{company}'}, {'{skills}'}</Typography>
-          </Box>
+          <FormControlLabel control={<Switch checked={c('inmail').enabled ?? true} onChange={e => updateField('inmail', 'enabled', e.target.checked)} />} label="Enable InMail drafting (post-application)" />
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid size={{ xs: 6 }}>
+              <Typography variant="body2" fontWeight={600} mb={0.5}>Tone</Typography>
+              <FormControl fullWidth size="small">
+                <Select value={c('inmail').tone || 'professional'} onChange={e => updateField('inmail', 'tone', e.target.value)}>
+                  <MenuItem value="professional">Professional</MenuItem>
+                  <MenuItem value="casual">Casual</MenuItem>
+                  <MenuItem value="confident">Confident</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 6 }}><Field label="Max Length (chars)" value={c('inmail').max_length} onChange={v => updateField('inmail', 'max_length', Number(v))} type="number" /></Grid>
+          </Grid>
         </>
       );
       case 'advanced': return (
         <>
-          <FormControlLabel control={<Switch size="small" checked={settings.browser_headless} onChange={(e) => update('browser_headless', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Headless browser</Typography>} />
-          <Box sx={{ mt: 1.5 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, mb: 0.25 }}>Data Directory</Typography>
-            <TextField fullWidth size="small" value={settings.data_dir} onChange={(e) => update('data_dir', e.target.value)} placeholder="./data" sx={{ '& .MuiInputBase-input': { fontSize: 12, py: 0.75 } }} />
-          </Box>
-          <FormControlLabel sx={{ mt: 1.5, display: 'block' }} control={<Switch size="small" checked={settings.debug_mode} onChange={(e) => update('debug_mode', e.target.checked)} />} label={<Typography sx={{ fontSize: 12 }}>Debug mode (verbose logging)</Typography>} />
-          <Typography sx={{ fontSize: 11, color: 'warning.main', mt: 0.5 }}>⚠ Debug generates large logs.</Typography>
+          <MaskedField label="LinkedIn Email" value={secrets.linkedin_email_new || secrets.linkedin_email || ''} onChange={v => setSecrets(p => ({...p, linkedin_email_new: v}))} placeholder="your-email@example.com" />
+          <MaskedField label="LinkedIn Password" value={secrets.linkedin_password_new || secrets.linkedin_password || ''} onChange={v => setSecrets(p => ({...p, linkedin_password_new: v}))} placeholder="••••••••" />
+          <Typography variant="caption" color="text.secondary" mb={2} display="block">Password is optional if you have an active browser session.</Typography>
         </>
       );
       default: return null;
@@ -418,33 +294,33 @@ export default function Settings() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
-      {/* Sticky top bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1.5, mb: 2, borderBottom: '1px solid', borderColor: '#D5DBDB' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Typography variant="h3">Settings</Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button size="small" startIcon={<RestartAltIcon sx={{ fontSize: 14 }} />} onClick={handleReset} sx={{ color: 'text.secondary', textTransform: 'none' }}>Reset</Button>
-          <Button variant="contained" size="small" startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon sx={{ fontSize: 14 }} />} onClick={handleSave} disabled={saving}>Save</Button>
-        </Box>
+        <Button variant="contained" startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />} onClick={handleSave} disabled={saving}>
+          Save All
+        </Button>
       </Box>
 
-      {/* 2-column layout */}
-      <Grid container sx={{ flex: 1, overflow: 'hidden', border: '1px solid', borderColor: '#D5DBDB', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+      <Box sx={{ display: 'flex', flex: 1, gap: 2, overflow: 'hidden' }}>
         {/* Sidebar */}
-        <Grid size={{ xs: 12, md: 2.5 }} sx={{ borderRight: '1px solid', borderColor: '#D5DBDB' }}>
-          <List dense disablePadding sx={{ pt: 1 }}>
-            {GROUPS.map((g) => (
-              <ListItemButton key={g.key} selected={group === g.key} onClick={() => setGroup(g.key)} sx={{ py: 0.75, px: 2, minHeight: 36, '&.Mui-selected': { bgcolor: 'action.selected' } }}>
-                <ListItemText primary={g.label} primaryTypographyProps={{ fontSize: '13px', fontWeight: group === g.key ? 600 : 400 }} />
+        <Paper variant="outlined" sx={{ width: 200, flexShrink: 0, overflow: 'auto', borderRadius: 2 }}>
+          <List dense disablePadding>
+            {GROUPS.map(g => (
+              <ListItemButton key={g.key} selected={group === g.key} onClick={() => setGroup(g.key)}
+                sx={{ py: 1.5, '&.Mui-selected': { bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } } }}>
+                <ListItemText primary={g.label} secondary={group === g.key ? null : g.desc}
+                  primaryTypographyProps={{ fontSize: 13, fontWeight: group === g.key ? 700 : 500 }}
+                  secondaryTypographyProps={{ fontSize: 10 }} />
               </ListItemButton>
             ))}
           </List>
-        </Grid>
+        </Paper>
 
         {/* Content */}
-        <Grid size={{ xs: 12, md: 9.5 }} sx={{ p: 2.5, overflow: 'auto' }}>
+        <Paper variant="outlined" sx={{ flex: 1, p: 3, overflow: 'auto', borderRadius: 2 }}>
           {renderGroup()}
-        </Grid>
-      </Grid>
+        </Paper>
+      </Box>
     </Box>
   );
 }
