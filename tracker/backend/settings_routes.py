@@ -175,23 +175,24 @@ def _seed_from_sources(db: Session) -> None:
 
     seeded = False
     valid_keys = {item["key"] for item in SETTINGS_KEYS}
+    seen_keys = set()
 
     # 1. Seed secrets from .env
     if ENV_FILE.exists():
         env_values = dotenv_values(ENV_FILE)
         for key, value in env_values.items():
-            if key in valid_keys and value and _is_real_value(value):
+            if key in valid_keys and value and _is_real_value(value) and key not in seen_keys:
                 db.add(AppSetting(key=key, value=value))
+                seen_keys.add(key)
                 seeded = True
 
     # Also from os.environ
     for key in valid_keys:
         value = os.environ.get(key, "")
-        if value and _is_real_value(value):
-            exists = db.query(AppSetting).filter(AppSetting.key == key).first()
-            if not exists:
-                db.add(AppSetting(key=key, value=value))
-                seeded = True
+        if value and _is_real_value(value) and key not in seen_keys:
+            db.add(AppSetting(key=key, value=value))
+            seen_keys.add(key)
+            seeded = True
 
     # 2. Seed config from config.yaml
     if CONFIG_FILE.exists():
@@ -200,15 +201,16 @@ def _seed_from_sources(db: Session) -> None:
                 yaml_data = yaml.safe_load(f) or {}
 
             for (section, field), db_key in _YAML_TO_DB_MAP.items():
+                if db_key in seen_keys:
+                    continue
                 section_data = yaml_data.get(section, {})
                 if not isinstance(section_data, dict):
                     continue
                 value = section_data.get(field)
                 if value is not None:
-                    exists = db.query(AppSetting).filter(AppSetting.key == db_key).first()
-                    if not exists:
-                        db.add(AppSetting(key=db_key, value=_serialize_value(value)))
-                        seeded = True
+                    db.add(AppSetting(key=db_key, value=_serialize_value(value)))
+                    seen_keys.add(db_key)
+                    seeded = True
         except Exception:
             pass
 
