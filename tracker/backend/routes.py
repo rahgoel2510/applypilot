@@ -618,6 +618,7 @@ class AgentTriggerRequest(PydanticBaseModel):
     limit: int | None = None
     match_threshold: float | None = None
     collection: str = "Recommended"
+    search_mode: str | None = None  # "aggressive", "active", "passive"
 
 
 @router.post("/agent/trigger")
@@ -630,6 +631,7 @@ def trigger_agent(req: AgentTriggerRequest, db: Session = Depends(get_db)):
         limit=req.limit,
         match_threshold=req.match_threshold,
         collection=req.collection,
+        search_mode=req.search_mode,
     )
 
     # Log the trigger event

@@ -67,6 +67,7 @@ export default function AgentControl() {
   const [dryRun, setDryRun] = useState(true);
   const [threshold, setThreshold] = useState(70);
   const [limit, setLimit] = useState(10);
+  const [searchMode, setSearchMode] = useState('active');
   const [tab, setTab] = useState(0);
   const [output, setOutput] = useState([]);
   const [runs, setRuns] = useState([]);
@@ -109,7 +110,7 @@ export default function AgentControl() {
 
   const handleStart = async () => {
     setLoadingAction(true);
-    try { await triggerAgent({ mode, dryRun, limit: limit === 0 ? null : limit, matchThreshold: threshold }); enqueueSnackbar('Agent started', { variant: 'success' }); loadStatus(); }
+    try { await triggerAgent({ mode, dryRun, limit: limit === 0 ? null : limit, matchThreshold: threshold, searchMode }); enqueueSnackbar('Agent started', { variant: 'success' }); loadStatus(); }
     catch (err) { enqueueSnackbar(err.message, { variant: 'error' }); }
     finally { setLoadingAction(false); }
   };
@@ -165,6 +166,37 @@ export default function AgentControl() {
               onClick={handleStop} disabled={!isRunning || loadingAction}
             >Stop</Button>
           </Stack>
+        </Box>
+        </motion.div>
+
+        {/* Search Mode Selector */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}>
+        <Box sx={{
+          display: 'flex', gap: 1.5, mb: 2,
+        }}>
+          {[
+            { key: 'aggressive', label: '🔥 Aggressive', desc: 'Max throughput, 55% bar, 15min scans', color: '#D13212' },
+            { key: 'active', label: '⚡ Active', desc: 'Balanced, 70% bar, 30min scans', color: '#0073BB' },
+            { key: 'passive', label: '🌊 Passive', desc: 'High bar only, 85%, every 2hrs', color: '#067D68' },
+          ].map(m => (
+            <Box key={m.key} onClick={() => {
+              setSearchMode(m.key);
+              if (m.key === 'aggressive') { setThreshold(55); setLimit(0); }
+              else if (m.key === 'active') { setThreshold(70); setLimit(50); }
+              else { setThreshold(85); setLimit(30); }
+            }}
+              sx={{
+                flex: 1, p: 2, borderRadius: '12px', cursor: 'pointer',
+                border: '2px solid', transition: 'all 0.2s',
+                borderColor: searchMode === m.key ? m.color : '#D5DBDB',
+                bgcolor: searchMode === m.key ? `${m.color}10` : 'background.paper',
+                boxShadow: searchMode === m.key ? `0 0 0 1px ${m.color}` : 'none',
+                '&:hover': { borderColor: m.color, bgcolor: `${m.color}08` },
+              }}>
+              <Typography fontWeight={700} fontSize={14}>{m.label}</Typography>
+              <Typography variant="caption" color="text.secondary">{m.desc}</Typography>
+            </Box>
+          ))}
         </Box>
         </motion.div>
 

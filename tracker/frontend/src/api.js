@@ -67,7 +67,7 @@ export async function fetchLogs({ page = 1, pageSize = 50, eventType, severity, 
 }
 
 // Agent Control API
-export async function triggerAgent({ mode = 'single', dryRun = true, limit = null, matchThreshold = null, collection = 'Recommended' } = {}) {
+export async function triggerAgent({ mode = 'single', dryRun = true, limit = null, matchThreshold = null, collection = 'Recommended', searchMode = null } = {}) {
   const res = await fetch(`${BASE_URL}/agent/trigger`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -77,6 +77,7 @@ export async function triggerAgent({ mode = 'single', dryRun = true, limit = nul
       limit,
       match_threshold: matchThreshold,
       collection,
+      search_mode: searchMode,
     }),
   });
   if (!res.ok) throw new Error('Failed to trigger agent');

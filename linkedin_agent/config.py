@@ -169,6 +169,22 @@ def _env(key: str, default: str = "") -> str:
     return os.environ.get(key, default)
 
 
+def _env_list(key: str, default: list) -> list:
+    """Get a comma-separated env var as a list. Falls back to default if not set."""
+    val = os.environ.get(key, "")
+    if val:
+        return [s.strip() for s in val.split(",") if s.strip()]
+    return default
+
+
+def _env_bool(key: str, default: bool) -> bool:
+    """Get a boolean from env var. Supports 'true'/'false'/'1'/'0'."""
+    val = os.environ.get(key, "")
+    if not val:
+        return default
+    return val.lower() in ("true", "1", "yes")
+
+
 def _normalize_threshold(value: float) -> float:
     """Normalize match threshold to 0.0-1.0 range.
 
@@ -218,7 +234,7 @@ def _build_settings(yaml_data: dict[str, Any]) -> Settings:
     js = yaml_data.get("job_search", {})
 
     # Apply search mode preset ONLY for fields not explicitly set in yaml
-    search_mode = js.get("search_mode", "active")
+    search_mode = _env("SEARCH_MODE", js.get("search_mode", "active"))
     if search_mode and search_mode != "custom":
         from linkedin_agent.search_modes import get_mode_config, SearchMode
         try:
@@ -247,20 +263,20 @@ def _build_settings(yaml_data: dict[str, Any]) -> Settings:
             pass  # Invalid mode name — ignore
 
     job_search = JobSearchConfig(
-        keywords=js.get("keywords", ["Software Engineer"]),
+        keywords=_env_list("SEARCH_KEYWORDS", js.get("keywords", ["Software Engineer"])),
         custom_urls=js.get("custom_urls", []),
-        locations=js.get("locations", ["India"]),
+        locations=_env_list("SEARCH_LOCATIONS", js.get("locations", ["India"])),
         match_threshold=_normalize_threshold(float(_env("MATCH_THRESHOLD", str(js.get("match_threshold", 0.80))))),
         max_postings_per_run=int(_env("MAX_POSTINGS_PER_RUN", str(js.get("max_postings_per_run", 50)))),
         collection=js.get("collection", "Recommended"),
-        skip_external_apply=js.get("skip_external_apply", False),
-        track_external_apply=js.get("track_external_apply", True),
-        posted_within=js.get("posted_within", "week"),
-        initial_scan_window=js.get("initial_scan_window", "week"),
-        fallback_scoring=js.get("fallback_scoring", True),
-        daily_application_limit=int(js.get("daily_application_limit", 80)),
+        skip_external_apply=_env_bool("SKIP_EXTERNAL_APPLY", js.get("skip_external_apply", False)),
+        track_external_apply=_env_bool("TRACK_EXTERNAL_APPLY", js.get("track_external_apply", True)),
+        posted_within=_env("POSTED_WITHIN", js.get("posted_within", "week")) or "week",
+        initial_scan_window=_env("INITIAL_SCAN_WINDOW", js.get("initial_scan_window", "week")) or "week",
+        fallback_scoring=_env_bool("FALLBACK_SCORING", js.get("fallback_scoring", True)),
+        daily_application_limit=int(_env("DAILY_APPLICATION_LIMIT", str(js.get("daily_application_limit", 80)))),
         search_mode=search_mode,
-        auto_apply_external=js.get("auto_apply_external", False),
+        auto_apply_external=_env_bool("AUTO_APPLY_EXTERNAL", js.get("auto_apply_external", False)),
     )
 
     # --- Scheduler ---

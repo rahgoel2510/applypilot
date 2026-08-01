@@ -89,6 +89,7 @@ class AgentController:
         limit: Optional[int] = None,
         match_threshold: Optional[float] = None,
         collection: str = "Recommended",
+        search_mode: Optional[str] = None,
     ) -> dict:
         if self._status.state == AgentState.running:
             return {"error": "Agent is already running", "status": self._status.to_dict()}
@@ -120,6 +121,9 @@ class AgentController:
 
         if match_threshold is not None:
             env["MATCH_THRESHOLD"] = str(match_threshold)
+
+        if search_mode is not None:
+            env["SEARCH_MODE"] = search_mode
 
         # Enable verbose/debug output for full tech logs
         env["LOG_LEVEL"] = "DEBUG"
