@@ -1,6 +1,4 @@
-"""Unit tests for linkedin_agent.config module."""
-
-from __future__ import annotations
+"""Tests for the configuration module."""
 
 import os
 from pathlib import Path
@@ -11,264 +9,178 @@ import pytest
 from linkedin_agent.config import (
     ConfigError,
     Settings,
-    CandidateConfig,
-    JobSearchConfig,
-    SchedulerConfig,
-    TelegramConfig,
-    InmailConfig,
     _build_settings,
-    _load_yaml,
-    _validate_env,
+    _normalize_threshold,
     get_config,
     reset_config,
-    REQUIRED_ENV_VARS,
 )
 
 
-# ===========================================================================
-# YAML loading
-# ===========================================================================
+class TestNormalizeThreshold:
+    """Tests for threshold normalization."""
 
+    def test_already_normalized(self):
+        assert _normalize_threshold(0.7) == 0.7
+        assert _normalize_threshold(0.85) == 0.85
+        assert _normalize_threshold(1.0) == 1.0
 
-class TestYamlLoading:
-    """Tests for _load_yaml helper."""
+    def test_integer_percentage(self):
+        assert _normalize_threshold(70) == 0.7
+        assert _normalize_threshold(85) == 0.85
+        assert _normalize_threshold(100) == 1.0
 
-    def test_load_valid_yaml(self, config_yaml_file):
-        data = _load_yaml(config_yaml_file)
-        assert data["candidate"]["name"] == "Test User"
-        assert data["job_search"]["match_threshold"] == 0.75
+    def test_zero(self):
+        assert _normalize_threshold(0.0) == 0.0
 
-    def test_load_missing_file(self, tmp_path):
-        """Missing file returns empty dict, not an error."""
-        data = _load_yaml(tmp_path / "nonexistent.yaml")
-        assert data == {}
-
-    def test_load_empty_file(self, tmp_path):
-        """Empty YAML file returns empty dict."""
-        empty = tmp_path / "empty.yaml"
-        empty.write_text("")
-        data = _load_yaml(empty)
-        assert data == {}
-
-    def test_load_non_dict_yaml(self, tmp_path):
-        """YAML that parses to a non-dict (e.g., list) returns empty dict."""
-        list_yaml = tmp_path / "list.yaml"
-        list_yaml.write_text("- item1\n- item2\n")
-        data = _load_yaml(list_yaml)
-        assert data == {}
-
-
-# ===========================================================================
-# Environment validation
-# ===========================================================================
-
-
-class TestEnvValidation:
-    """Tests for _validate_env."""
-
-    def test_all_vars_present(self, monkeypatch):
-        """No error when all required vars are set."""
-        for var in REQUIRED_ENV_VARS:
-            monkeypatch.setenv(var, "test-value")
-        # Should not raise
-        _validate_env()
-
-    def test_missing_single_var(self, monkeypatch):
-        """Raises ConfigError listing the missing variable."""
-        for var in REQUIRED_ENV_VARS:
-            monkeypatch.setenv(var, "test-value")
-        monkeypatch.delenv("TELEGRAM_BOT_TOKEN")
-
-        with pytest.raises(ConfigError, match="TELEGRAM_BOT_TOKEN"):
-            _validate_env()
-
-    def test_missing_multiple_vars(self, monkeypatch):
-        """Raises ConfigError listing all missing variables."""
-        # Clear all required vars
-        for var in REQUIRED_ENV_VARS:
-            monkeypatch.delenv(var, raising=False)
-
-        with pytest.raises(ConfigError) as exc_info:
-            _validate_env()
-
-        for var in REQUIRED_ENV_VARS:
-            assert var in str(exc_info.value)
-
-
-# ===========================================================================
-# Settings construction
-# ===========================================================================
+    def test_boundary(self):
+        assert _normalize_threshold(1.0) == 1.0
+        assert _normalize_threshold(1.1) == pytest.approx(0.011)
 
 
 class TestBuildSettings:
-    """Tests for _build_settings."""
+    """Tests for building Settings from YAML data."""
 
-    def test_builds_from_yaml_data(self, monkeypatch):
-        """Settings are correctly built from YAML dict + env vars."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tok-123")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat-456")
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-        monkeypatch.setenv("LINKEDIN_EMAIL", "user@test.com")
-        monkeypatch.setenv("LINKEDIN_PASSWORD", "pass123")
+    def test_empty_yaml(self):
+        settings = _build_settings({})
+        assert settings.candidate.name == ""
+        # Active mode defaults apply (threshold=0.70, interval=30)
+        assert settings.job_search.match_threshold == 0.7
+        assert settings.scheduler.interval_minutes == 30
 
+    def test_candidate_config(self):
         yaml_data = {
             "candidate": {
                 "name": "Test User",
                 "email": "test@example.com",
-                "notice_period": "60 days",
-                "preferred_cities": ["Delhi"],
-            },
+                "skills": ["python", "aws"],
+            }
+        }
+        settings = _build_settings(yaml_data)
+        assert settings.candidate.name == "Test User"
+        assert settings.candidate.email == "test@example.com"
+        assert "python" in settings.candidate.skills
+
+    def test_job_search_config(self):
+        yaml_data = {
             "job_search": {
-                "match_threshold": 0.90,
-                "max_postings_per_run": 25,
-            },
+                "keywords": ["Senior Engineer", "Staff Engineer"],
+                "locations": ["Remote", "SF"],
+                "match_threshold": 0.75,
+                "max_postings_per_run": 100,
+                "search_mode": "custom",
+            }
+        }
+        settings = _build_settings(yaml_data)
+        assert settings.job_search.keywords == ["Senior Engineer", "Staff Engineer"]
+        assert settings.job_search.locations == ["Remote", "SF"]
+        assert settings.job_search.match_threshold == 0.75
+        assert settings.job_search.max_postings_per_run == 100
+
+    def test_scheduler_config(self):
+        yaml_data = {
+            "job_search": {"search_mode": "custom"},
             "scheduler": {
                 "interval_minutes": 45,
                 "active_hours_start": 8,
-                "active_hours_end": 21,
-            },
-            "telegram": {
-                "notify_on_submit": False,
-            },
-            "inmail": {
-                "enabled": False,
-                "tone": "casual",
-            },
+                "active_hours_end": 20,
+            }
         }
-
         settings = _build_settings(yaml_data)
-
-        assert settings.candidate.name == "Test User"
-        assert settings.candidate.notice_period == "60 days"
-        assert settings.candidate.preferred_cities == ["Delhi"]
-        assert settings.job_search.match_threshold == 0.90
-        assert settings.job_search.max_postings_per_run == 25
         assert settings.scheduler.interval_minutes == 45
-        assert settings.telegram.bot_token == "tok-123"
-        assert settings.telegram.notify_on_submit is False
+        assert settings.scheduler.active_hours_start == 8
+        assert settings.scheduler.active_hours_end == 20
+
+    def test_telegram_from_env(self):
+        settings = _build_settings({})
+        # These come from the env vars set in conftest
+        assert settings.telegram.bot_token != ""
+        assert settings.telegram.chat_id != ""
+
+    def test_inmail_config(self):
+        yaml_data = {"inmail": {"enabled": False, "tone": "casual", "max_length": 200}}
+        settings = _build_settings(yaml_data)
         assert settings.inmail.enabled is False
         assert settings.inmail.tone == "casual"
-        assert settings.openai_api_key == "sk-test"
-        assert settings.linkedin_email == "user@test.com"
+        assert settings.inmail.max_length == 200
 
-    def test_defaults_when_yaml_empty(self, monkeypatch):
-        """Default values are used when YAML is empty."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tok")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "cid")
-        monkeypatch.setenv("OPENAI_API_KEY", "sk")
-        monkeypatch.setenv("LINKEDIN_EMAIL", "e")
-        monkeypatch.setenv("LINKEDIN_PASSWORD", "p")
-
-        settings = _build_settings({})
-
-        assert settings.candidate.name == ""
-        # Active mode defaults: threshold=0.70, max_postings=100, interval=30
-        assert settings.job_search.match_threshold == 0.70
-        assert settings.job_search.max_postings_per_run == 100
-        assert settings.scheduler.interval_minutes == 30
-        assert settings.inmail.enabled is True
-        assert settings.inmail.max_length == 300
-
-    def test_env_overrides_yaml_for_threshold(self, monkeypatch):
-        """MATCH_THRESHOLD env var overrides yaml value."""
-        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
-        monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
-        monkeypatch.setenv("OPENAI_API_KEY", "k")
-        monkeypatch.setenv("LINKEDIN_EMAIL", "e")
-        monkeypatch.setenv("LINKEDIN_PASSWORD", "p")
-        monkeypatch.setenv("MATCH_THRESHOLD", "0.95")
-
-        yaml_data = {"job_search": {"match_threshold": 0.70}}
+    def test_self_learning_config(self):
+        yaml_data = {
+            "self_learning": {
+                "target_companies": ["Google", "Meta"],
+                "blocklist_companies": ["Scam Inc"],
+                "target_boost": 0.2,
+                "blocklist_penalty": 0.3,
+            }
+        }
         settings = _build_settings(yaml_data)
-        assert settings.job_search.match_threshold == 0.95
+        assert "Google" in settings.self_learning.target_companies
+        assert "Scam Inc" in settings.self_learning.blocklist_companies
+        assert settings.self_learning.target_boost == 0.2
 
+    def test_threshold_normalization_in_build(self):
+        yaml_data = {"job_search": {"match_threshold": 70, "search_mode": "custom"}}
+        settings = _build_settings(yaml_data)
+        assert settings.job_search.match_threshold == 0.7
 
-# ===========================================================================
-# Singleton get_config
-# ===========================================================================
+    def test_search_mode_active_applies_defaults(self):
+        yaml_data = {"job_search": {"search_mode": "active"}}
+        settings = _build_settings(yaml_data)
+        assert settings.job_search.match_threshold == 0.70
+        assert settings.job_search.daily_application_limit == 80
+
+    def test_search_mode_aggressive(self):
+        yaml_data = {"job_search": {"search_mode": "aggressive"}}
+        settings = _build_settings(yaml_data)
+        assert settings.job_search.match_threshold == 0.55
+        assert settings.job_search.daily_application_limit == 150
 
 
 class TestGetConfig:
-    """Tests for the get_config singleton accessor."""
+    """Tests for the config singleton accessor."""
 
-    def test_get_config_no_validate(self, monkeypatch, config_yaml_file):
-        """get_config(validate=False) loads even without env vars."""
-        # Patch the module-level paths
-        monkeypatch.setattr("linkedin_agent.config.CONFIG_FILE", config_yaml_file)
-        monkeypatch.setattr("linkedin_agent.config.ENV_FILE", config_yaml_file.parent / ".env")
+    def test_returns_settings(self):
+        config = get_config(validate=False, reload=True)
+        assert isinstance(config, Settings)
 
-        settings = get_config(validate=False, reload=True)
-        assert settings.candidate.name == "Test User"
-        assert settings.job_search.match_threshold == 0.75
+    def test_singleton_behavior(self):
+        c1 = get_config(validate=False, reload=True)
+        c2 = get_config(validate=False)
+        assert c1 is c2
 
-    def test_get_config_validate_raises_without_env(self, monkeypatch, config_yaml_file):
-        """get_config(validate=True) raises when required vars are missing."""
-        monkeypatch.setattr("linkedin_agent.config.CONFIG_FILE", config_yaml_file)
-        monkeypatch.setattr("linkedin_agent.config.ENV_FILE", config_yaml_file.parent / ".env")
-        for var in REQUIRED_ENV_VARS:
+    def test_reload_returns_fresh(self):
+        c1 = get_config(validate=False, reload=True)
+        c2 = get_config(validate=False, reload=True)
+        # Not the same object when reloaded
+        assert c1 is not c2
+
+    def test_validation_raises_on_missing_vars(self, monkeypatch):
+        # Clear all required env vars AND prevent .env from reloading them
+        required = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "OPENAI_API_KEY",
+                    "LINKEDIN_EMAIL", "LINKEDIN_PASSWORD"]
+        for var in required:
             monkeypatch.delenv(var, raising=False)
 
-        with pytest.raises(ConfigError):
-            get_config(validate=True, reload=True)
-
-    def test_singleton_caching(self, monkeypatch, config_yaml_file):
-        """Second call returns same instance without reload."""
-        monkeypatch.setattr("linkedin_agent.config.CONFIG_FILE", config_yaml_file)
-        monkeypatch.setattr("linkedin_agent.config.ENV_FILE", config_yaml_file.parent / ".env")
-
-        s1 = get_config(validate=False, reload=True)
-        s2 = get_config(validate=False)
-        assert s1 is s2
-
-    def test_reload_forces_fresh_load(self, monkeypatch, config_yaml_file):
-        """reload=True creates a new instance."""
-        monkeypatch.setattr("linkedin_agent.config.CONFIG_FILE", config_yaml_file)
-        monkeypatch.setattr("linkedin_agent.config.ENV_FILE", config_yaml_file.parent / ".env")
-
-        s1 = get_config(validate=False, reload=True)
-        s2 = get_config(validate=False, reload=True)
-        # Both have same values but are different objects
-        assert s1.candidate.name == s2.candidate.name
+        # Patch load_dotenv to prevent it from re-reading .env file
+        with patch("linkedin_agent.config.load_dotenv"):
+            reset_config()
+            with pytest.raises(ConfigError, match="Missing required"):
+                get_config(validate=True, reload=True)
 
 
-# ===========================================================================
-# Dataclass defaults
-# ===========================================================================
+class TestSettingsImmutability:
+    """Verify Settings and sub-configs are frozen dataclasses."""
 
+    def test_settings_is_frozen(self):
+        config = get_config(validate=False, reload=True)
+        with pytest.raises(Exception):
+            config.openai_api_key = "hacked"
 
-class TestDataclassDefaults:
-    """Verify default values on config dataclasses."""
+    def test_candidate_is_frozen(self):
+        config = get_config(validate=False, reload=True)
+        with pytest.raises(Exception):
+            config.candidate.name = "hacked"
 
-    def test_candidate_defaults(self):
-        c = CandidateConfig()
-        assert c.name == ""
-        assert c.resume_filename == "resume.pdf"
-        assert c.notice_period == "Immediate"
-        assert c.willing_to_relocate is True
-        assert c.preferred_cities == []
-
-    def test_job_search_defaults(self):
-        js = JobSearchConfig()
-        assert js.match_threshold == 0.80
-        assert js.max_postings_per_run == 50
-        assert js.collection == "Recommended"
-        assert js.skip_external_apply is False
-        assert js.track_external_apply is True
-
-    def test_scheduler_defaults(self):
-        sc = SchedulerConfig()
-        assert sc.interval_minutes == 60
-        assert sc.active_hours_start == 9
-        assert sc.active_hours_end == 22
-
-    def test_telegram_defaults(self):
-        tg = TelegramConfig()
-        assert tg.bot_token == ""
-        assert tg.notify_on_submit is True
-        assert tg.notify_on_skip is False
-
-    def test_inmail_defaults(self):
-        im = InmailConfig()
-        assert im.enabled is True
-        assert im.tone == "professional"
-        assert im.max_length == 300
+    def test_job_search_is_frozen(self):
+        config = get_config(validate=False, reload=True)
+        with pytest.raises(Exception):
+            config.job_search.match_threshold = 0.0

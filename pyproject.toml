@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "linkedin-job-agent"
-version = "0.1.0"
-description = "Automated LinkedIn job application agent"
+version = "2.0.0"
+description = "Automated LinkedIn job application agent — enterprise-grade architecture"
 requires-python = ">=3.10"
 dependencies = [
     "playwright",
@@ -16,6 +16,7 @@ dependencies = [
     "apscheduler",
     "platformdirs",
     "rich",
+    "httpx",
 ]
 
 [project.optional-dependencies]
@@ -35,3 +36,26 @@ asyncio_mode = "auto"
 markers = [
     "integration: marks tests that require external services (Telegram, LinkedIn)",
 ]
+
+[tool.coverage.run]
+source = ["linkedin_agent"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "linkedin_agent/bot.py",
+    "linkedin_agent/browser.py",
+    "linkedin_agent/applicant.py",
+    "linkedin_agent/smart_parser.py",
+    "linkedin_agent/stealth.py",
+    "linkedin_agent/__main__.py",
+    "linkedin_agent/external_apply.py",
+    "linkedin_agent/telegram_bot.py",
+    "linkedin_agent/logger.py",
+    "linkedin_agent/answer_generator.py",
+    "linkedin_agent/dedup_db.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 80

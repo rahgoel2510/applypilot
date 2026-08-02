@@ -104,7 +104,6 @@ def _cmd_run(args: argparse.Namespace) -> None:
     if args.limit:
         # Override max_postings_per_run for this invocation
         from dataclasses import replace
-        from linkedin_agent.config import JobSearchConfig
 
         new_js = replace(config.job_search, max_postings_per_run=args.limit)
         config = replace(config, job_search=new_js)

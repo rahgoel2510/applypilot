@@ -1,4 +1,9 @@
-"""Main orchestrator that ties all modules together."""
+"""Main orchestrator that ties all modules together.
+
+Uses the DI container for all service dependencies, making the agent
+fully testable with mockable services. Coordinates the scan pipeline:
+discover → evaluate → apply → notify.
+"""
 
 from __future__ import annotations
 
@@ -10,15 +15,10 @@ from enum import Enum
 from typing import Any
 
 from linkedin_agent.config import Settings, get_config
-from linkedin_agent.browser import LinkedInBrowser as BrowserManager
-from linkedin_agent.matcher import JobMatcher
-from linkedin_agent.applicant import ApplicationExecutor, ApplicationResult
-from linkedin_agent.telegram_bot import TelegramNotifier
-from linkedin_agent.inmail import InMailDrafter
-from linkedin_agent.tracker_client import get_tracker
+from linkedin_agent.container import Container
 from linkedin_agent.logger import setup_logging
-from linkedin_agent.retry_queue import RetryQueue
-from linkedin_agent.daily_cap import get_daily_cap
+from linkedin_agent.applicant import ApplicationResult
+from linkedin_agent.resilience import CircuitBreaker, retry_with_backoff, graceful_fallback
 
 
 class JobStatus(str, Enum):
@@ -70,45 +70,51 @@ class CycleTally:
 class JobAgent:
     """Main agent that orchestrates the full job-application pipeline.
 
-    Ties together browser automation, job matching, application submission,
-    InMail drafting, Telegram notifications, and scheduling.
+    Uses dependency injection via Container for all services, enabling:
+    - Easy testing (swap any service with a mock)
+    - Loose coupling (services interact via protocols)
+    - Resilience (circuit breakers on external services)
     """
 
-    def __init__(self, config: Settings | None = None, dry_run: bool = False) -> None:
-        """Initialize the agent with config and all sub-modules.
+    def __init__(
+        self,
+        config: Settings | None = None,
+        dry_run: bool = False,
+        container: Container | None = None,
+    ) -> None:
+        """Initialize the agent with config and DI container.
 
         Args:
             config: Pre-loaded Settings instance. If None, loads via get_config().
             dry_run: If True, scan and score jobs but do NOT submit applications.
+            container: Optional pre-configured DI container (for testing).
         """
         self.config = config or get_config(validate=True)
         self.dry_run = dry_run
         self.log = setup_logging(level="INFO")
 
-        # Initialize modules
-        self.browser = BrowserManager()
-        self.matcher = JobMatcher(
-            threshold=self.config.job_search.match_threshold,
-            target_companies=self.config.self_learning.target_companies,
-            blocklist_companies=self.config.self_learning.blocklist_companies,
-            target_boost=self.config.self_learning.target_boost,
-            blocklist_penalty=self.config.self_learning.blocklist_penalty,
-        )
-        self.notifier = TelegramNotifier(
-            bot_token=self.config.telegram.bot_token,
-            chat_id=self.config.telegram.chat_id,
-        )
-        self.inmail = InMailDrafter(self.config)
-        self.tracker = get_tracker()
+        # DI Container — all services resolved through here
+        self._container = container or Container(self.config)
+
+        # Resolve services from container
+        self.browser = self._container.browser
+        self.matcher = self._container.scorer
+        self.notifier = self._container.notifier
+        self.inmail = self._container.inmail
+        self.tracker = self._container.tracker
 
         # ApplicationExecutor requires browser + matcher + notifier (created per cycle)
-        self._applicant: ApplicationExecutor | None = None
+        self._applicant = None
 
         # Retry queue for failed applications (persists across restarts)
-        self.retry_queue = RetryQueue()
+        self.retry_queue = self._container.retry_queue
 
         # Daily application cap tracking (avoids LinkedIn rate limiting)
-        self.daily_cap = get_daily_cap(daily_limit=self.config.job_search.daily_application_limit)
+        self.daily_cap = self._container.daily_cap
+
+        # Circuit breakers for external services
+        self._telegram_cb = CircuitBreaker("telegram", failure_threshold=3, recovery_timeout=120)
+        self._tracker_cb = CircuitBreaker("tracker", failure_threshold=5, recovery_timeout=60)
 
         # State
         self.tally = CycleTally()
@@ -403,31 +409,11 @@ class JobAgent:
             )
             self.log.info(f"LinkedIn connected ✓ ({_time.time()-t1:.1f}s)")
 
-            # Initialize the application executor for this cycle
-            self._applicant = ApplicationExecutor(
+            # Initialize the application executor for this cycle (via container)
+            self._applicant = self._container.create_applicant(
                 browser=self.browser,
-                matcher=self.matcher,
+                scorer=self.matcher,
                 notifier=self.notifier,
-                config={
-                    "candidate": {
-                        "name": self.config.candidate.name,
-                        "email": self.config.candidate.email,
-                        "phone": self.config.candidate.phone,
-                        "resume_filename": self.config.candidate.resume_filename,
-                        "notice_period": self.config.candidate.notice_period,
-                        "willing_to_relocate": self.config.candidate.willing_to_relocate,
-                        "work_authorization": self.config.candidate.work_authorization,
-                        "preferred_cities": list(self.config.candidate.preferred_cities),
-                    },
-                    "job_search": {
-                        "match_threshold": self.config.job_search.match_threshold,
-                        "skip_external_apply": self.config.job_search.skip_external_apply,
-                    },
-                    "telegram": {
-                        "notify_on_submit": notify_on_submit,
-                        "notify_on_pause": notify_on_pause,
-                    },
-                },
             )
 
             # c. Determine if this is the first-ever run

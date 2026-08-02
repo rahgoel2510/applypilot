@@ -1,97 +1,92 @@
 candidate:
-  name: "Rahul Goel"
-  email: ""
-  phone: ""
-  resume_filename: "RAHUL_GOEL_Resume_Final.pdf"
-  notice_period: "30 days"
+  name: Rahul Goel
+  email: ''
+  phone: ''
+  resume_filename: RAHUL_GOEL_Resume_Final.pdf
+  notice_period: 30 days
   willing_to_relocate: true
-  work_authorization: "Authorized to work"
+  work_authorization: Authorized to work
   preferred_cities:
-    - "Bangalore"
-    - "Hyderabad"
-    - "Mumbai"
-    - "Delhi NCR"
+  - Bangalore
+  - Hyderabad
+  - Mumbai
+  - Delhi NCR
   skills:
-    - "engineering management"
-    - "technical program management"
-    - "system design"
-    - "agile"
-    - "cross-functional leadership"
-    - "stakeholder management"
-    - "OKRs"
-    - "microservices"
-    - "cloud infrastructure"
-    - "team building"
+  - engineering management
+  - technical program management
+  - system design
+  - agile
+  - cross-functional leadership
+  - stakeholder management
+  - OKRs
+  - microservices
+  - cloud infrastructure
+  - team building
   sensitive_field_answers:
-    salary_expectation: "As per company standards"
-    current_ctc: "Confidential - happy to discuss"
-    expected_ctc: "Negotiable based on role"
-    years_of_experience: "12"
-    gender: "Male"
-    veteran_status: "No"
-    disability: "No"
-    race_ethnicity: "Prefer not to say"
-  human_input_timeout: 300  # seconds (5 minutes)
-
+    salary_expectation: As per company standards
+    current_ctc: Confidential - happy to discuss
+    expected_ctc: Negotiable based on role
+    years_of_experience: '12'
+    gender: Male
+    veteran_status: 'No'
+    disability: 'No'
+    race_ethnicity: Prefer not to say
+  human_input_timeout: 300
 job_search:
   keywords:
-    - "Engineering Manager"
-    - "Technical Program Manager"
-    - "Senior Engineering Manager"
-    - "Director of Engineering"
+  - Engineering Manager
+  - Technical Program Manager
+  - Senior Engineering Manager
+  - Director of Engineering
   custom_urls:
-    - "https://www.linkedin.com/jobs/search-results/?keywords=%22Senior%20Technical%20Program%20Manager%22%20OR%20%22Staff%20Technical%20Program%20Manager%22%20OR%20%22Principal%20Technical%20Program%20Manager%22&geoId=102713980"
+  - https://www.linkedin.com/jobs/search-results/?keywords=%22Senior%20Technical%20Program%20Manager%22%20OR%20%22Staff%20Technical%20Program%20Manager%22%20OR%20%22Principal%20Technical%20Program%20Manager%22&geoId=102713980
   locations:
-    - "India"
-    - "Bangalore"
-    - "Remote"
-  match_threshold: 0.80
+  - India
+  - Bangalore
+  - Remote
+  match_threshold: 0.8
   max_postings_per_run: 50
-  collection: "Recommended"
+  collection: Recommended
   skip_external_apply: false
   track_external_apply: true
-  posted_within: "24h"  # 24h, week, month, any
+  posted_within: 24h
   fallback_scoring: true
-  initial_scan_window: "week"  # Used on first-ever run to backfill pipeline
-  daily_application_limit: 80  # Conservative daily cap (LinkedIn soft limit ~100)
-  search_mode: "active"  # aggressive, active, passive, or custom
-  auto_apply_external: false  # Auto-apply to external job links (enabled in aggressive mode)
-
+  initial_scan_window: week
+  daily_application_limit: 80
+  search_mode: active
+  auto_apply_external: false
 scheduler:
   interval_minutes: 60
   active_hours_start: 9
   active_hours_end: 22
-  urgent_mode: true  # First-week sprint: higher throughput
-  urgent_interval_minutes: 30  # Run every 30min in urgent mode
-  urgent_max_postings: 100  # Process more jobs per run
-  urgent_duration_days: 7  # Auto-disable after 7 days
-
+  urgent_mode: true
+  urgent_interval_minutes: 30
+  urgent_max_postings: 100
+  urgent_duration_days: 7
 telegram:
   notify_on_submit: true
   notify_on_pause: true
   notify_on_skip: false
   tally_interval_minutes: 30
-
 inmail:
   enabled: true
-  tone: "professional"
+  tone: professional
   max_length: 300
-
 self_learning:
   target_companies:
-    - "Google"
-    - "Microsoft"
-    - "Amazon"
-    - "Flipkart"
-    - "Razorpay"
-    - "Swiggy"
-    - "PhonePe"
-    - "Zerodha"
+  - Google
+  - Microsoft
+  - Amazon
+  - Flipkart
+  - Razorpay
+  - Swiggy
+  - PhonePe
+  - Zerodha
   blocklist_companies:
-    - "Wipro"
-    - "Infosys"
-    - "TCS"
-    - "HCL"
-    - "Cognizant"
+  - Wipro
+  - Infosys
+  - TCS
+  - HCL
+  - Cognizant
   target_boost: 0.15
-  blocklist_penalty: 0.20
+  blocklist_penalty: 0.2

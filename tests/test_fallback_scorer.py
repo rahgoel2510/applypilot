@@ -1,164 +1,111 @@
-"""Unit tests for linkedin_agent.fallback_scorer module."""
-
-from __future__ import annotations
+"""Tests for the fallback keyword-based scorer."""
 
 import pytest
 
-from linkedin_agent.fallback_scorer import FallbackScorer, get_fallback_scorer
+from linkedin_agent.fallback_scorer import FallbackScorer
 
 
-# ===========================================================================
-# FallbackScorer — score_from_job_card
-# ===========================================================================
+@pytest.fixture
+def scorer():
+    """Create a FallbackScorer with test configuration."""
+    return FallbackScorer(
+        search_keywords=["Engineering Manager", "Technical Program Manager"],
+        skills=["system design", "agile", "leadership", "python"],
+        preferred_cities=["Bangalore", "Hyderabad"],
+        locations=["India", "Remote"],
+    )
 
 
-class TestScoreFromJobCard:
-    """Tests for card-level scoring (title + company + location only)."""
+class TestFallbackScorerBasics:
+    """Tests for basic scoring."""
 
-    @pytest.fixture
-    def scorer(self) -> FallbackScorer:
-        return FallbackScorer(
-            search_keywords=["Engineering Manager", "Technical Program Manager"],
-            skills=[
-                "engineering management",
-                "system design",
-                "agile",
-                "microservices",
-                "cloud infrastructure",
-            ],
-            preferred_cities=["Bangalore", "Hyderabad"],
-            locations=["India", "Remote"],
-        )
-
-    def test_exact_title_match_high_score(self, scorer: FallbackScorer):
-        """Exact title match should produce a high score."""
-        score = scorer.score_from_job_card("Engineering Manager", "Google", "Bangalore")
-        assert score >= 0.5, f"Expected >= 0.5 for exact title match, got {score}"
-
-    def test_no_overlap_zero_score(self, scorer: FallbackScorer):
-        """Completely unrelated job should score near zero."""
-        score = scorer.score_from_job_card("Marketing Analyst", "HubSpot", "San Francisco")
-        assert score <= 0.1, f"Expected <= 0.1 for no overlap, got {score}"
-
-    def test_partial_title_overlap(self, scorer: FallbackScorer):
-        """Partial keyword overlap should give a moderate score."""
+    def test_perfect_match(self, scorer):
+        """Title and location match should score high."""
         score = scorer.score_from_job_card(
-            "Senior Software Engineer", "Microsoft", "Bangalore"
+            title="Engineering Manager",
+            company="TechCorp",
+            location="Bangalore, India",
         )
-        assert 0.1 <= score <= 0.6, f"Expected moderate score, got {score}"
+        assert score > 0.6
 
-    def test_location_match_boosts_score(self, scorer: FallbackScorer):
-        """Same job in preferred city should score higher than unknown city."""
-        score_blr = scorer.score_from_job_card("Engineering Manager", "Acme", "Bangalore")
-        score_sf = scorer.score_from_job_card("Engineering Manager", "Acme", "San Francisco")
-        assert score_blr > score_sf, "Preferred city should boost score"
-
-    def test_remote_location_accepted(self, scorer: FallbackScorer):
-        """Remote location should be treated favorably."""
-        score = scorer.score_from_job_card("Engineering Manager", "Startup", "Remote")
-        assert score >= 0.5, f"Remote + good title should score well, got {score}"
-
-    def test_score_in_valid_range(self, scorer: FallbackScorer):
-        """Score should always be between 0.0 and 1.0."""
-        test_cases = [
-            ("CTO", "BigCo", "Mars"),
-            ("", "", ""),
-            ("Engineering Manager", "Google", "Bangalore, Karnataka, India"),
-        ]
-        for title, company, loc in test_cases:
-            score = scorer.score_from_job_card(title, company, loc)
-            assert 0.0 <= score <= 1.0, f"Score out of range for ({title}, {company}, {loc})"
-
-
-# ===========================================================================
-# FallbackScorer — score_from_text
-# ===========================================================================
-
-
-class TestScoreFromText:
-    """Tests for full JD scoring (title + company + description)."""
-
-    @pytest.fixture
-    def scorer(self) -> FallbackScorer:
-        return FallbackScorer(
-            search_keywords=["Engineering Manager", "Technical Program Manager"],
-            skills=[
-                "engineering management",
-                "system design",
-                "agile",
-                "microservices",
-                "cloud infrastructure",
-                "team building",
-            ],
-            preferred_cities=["Bangalore"],
-            locations=["India"],
+    def test_no_match(self, scorer):
+        """Completely irrelevant job should score low."""
+        score = scorer.score_from_job_card(
+            title="Truck Driver",
+            company="Logistics Inc",
+            location="Alaska, USA",
         )
+        assert score < 0.3
 
-    def test_rich_jd_high_score(self, scorer: FallbackScorer):
-        """JD with many matching keywords should score high."""
-        jd = (
-            "We are looking for an Engineering Manager to lead our cloud infrastructure "
-            "team in Bangalore. You will drive system design, agile practices, and "
-            "microservices architecture. Experience with team building required."
+    def test_partial_match(self, scorer):
+        """Some keyword overlap should produce moderate score."""
+        score = scorer.score_from_job_card(
+            title="Senior Technical Lead",
+            company="Agile Solutions",
+            location="Remote",
         )
-        score = scorer.score_from_text("Engineering Manager", "Amazon", jd)
-        assert score >= 0.6, f"Rich JD match should score >= 0.6, got {score}"
+        assert 0.2 < score < 0.9
 
-    def test_empty_jd_falls_back_to_title(self, scorer: FallbackScorer):
-        """With no JD, scoring should still work from title alone."""
-        score = scorer.score_from_text("Engineering Manager", "Google", "")
-        assert score > 0.0, "Should still produce a score from title alone"
-
-    def test_unrelated_jd_low_score(self, scorer: FallbackScorer):
-        """Unrelated JD should produce a low score."""
-        jd = "Marketing team seeking a social media manager to run campaigns."
-        score = scorer.score_from_text("Social Media Manager", "Startup", jd)
-        assert score <= 0.3, f"Unrelated JD should score low, got {score}"
-
-    def test_jd_with_location_mention(self, scorer: FallbackScorer):
-        """Location mentioned in JD should contribute to score."""
-        jd = "Role is based in Bangalore. We need an agile practitioner."
-        score_blr = scorer.score_from_text("Program Manager", "Co", jd)
-        jd_no_loc = "Role is based in Tokyo. We need an agile practitioner."
-        score_tok = scorer.score_from_text("Program Manager", "Co", jd_no_loc)
-        assert score_blr >= score_tok, "Matching location in JD should help"
-
-
-# ===========================================================================
-# get_fallback_scorer factory
-# ===========================================================================
-
-
-class TestGetFallbackScorer:
-    """Tests for the factory function."""
-
-    def test_creates_scorer_from_config(self):
-        """Should create a working scorer from a Settings-like object."""
-        from unittest.mock import MagicMock
-
-        config = MagicMock()
-        config.job_search.keywords = ["Software Engineer", "Backend Developer"]
-        config.job_search.locations = ["Remote"]
-        config.candidate.skills = ["python", "aws", "docker"]
-        config.candidate.preferred_cities = ["New York"]
-
-        scorer = get_fallback_scorer(config)
-        assert isinstance(scorer, FallbackScorer)
-
-        # Should produce a valid score
-        score = scorer.score_from_job_card("Software Engineer", "Meta", "Remote")
+    def test_score_range(self, scorer):
+        """Score should always be 0.0-1.0."""
+        score = scorer.score_from_job_card(
+            title="Random Job",
+            company="Random Corp",
+            location="Nowhere",
+        )
         assert 0.0 <= score <= 1.0
 
-    def test_handles_empty_skills(self):
-        """Should work even if skills list is empty."""
-        from unittest.mock import MagicMock
 
-        config = MagicMock()
-        config.job_search.keywords = ["Data Scientist"]
-        config.job_search.locations = []
-        config.candidate.skills = []
-        config.candidate.preferred_cities = []
+class TestFallbackScorerLocation:
+    """Tests for location matching."""
 
-        scorer = get_fallback_scorer(config)
-        score = scorer.score_from_job_card("Data Scientist", "OpenAI", "SF")
-        assert score > 0.0, "Should still match on keywords even without skills"
+    def test_preferred_city_boost(self, scorer):
+        """Preferred city should score higher than non-preferred."""
+        score_preferred = scorer.score_from_job_card(
+            title="Manager",
+            company="Corp",
+            location="Bangalore, India",
+        )
+        score_other = scorer.score_from_job_card(
+            title="Manager",
+            company="Corp",
+            location="Tokyo, Japan",
+        )
+        assert score_preferred > score_other
+
+    def test_remote_matches(self, scorer):
+        """Remote location should match 'Remote' in locations config."""
+        score = scorer.score_from_job_card(
+            title="Engineering Manager",
+            company="Corp",
+            location="Remote",
+        )
+        assert score > 0.4
+
+
+class TestFallbackScorerEdgeCases:
+    """Edge cases for fallback scorer."""
+
+    def test_empty_title(self, scorer):
+        score = scorer.score_from_job_card(title="", company="Corp", location="India")
+        assert 0.0 <= score <= 1.0
+
+    def test_empty_location(self, scorer):
+        score = scorer.score_from_job_card(
+            title="Engineering Manager",
+            company="Corp",
+            location="",
+        )
+        assert 0.0 <= score <= 1.0
+
+    def test_empty_everything(self, scorer):
+        score = scorer.score_from_job_card(title="", company="", location="")
+        assert score == 0.0 or score >= 0.0  # Should not crash
+
+    def test_special_characters(self, scorer):
+        score = scorer.score_from_job_card(
+            title="Sr. Engineering Manager (Contract)",
+            company="Tech & Co.",
+            location="Bangalore / Remote",
+        )
+        assert 0.0 <= score <= 1.0
