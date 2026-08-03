@@ -206,7 +206,7 @@ export default function Dashboard() {
       }
     });
 
-    return filtered.slice(0, 15);
+    return filtered.slice(0, 8);
   }, [jobs, filterTab, sortBy]);
 
   // Top companies with stats
@@ -598,89 +598,102 @@ export default function Dashboard() {
                     <Box
                       onClick={() => setExpandedJob(isExpanded ? null : job.id)}
                       sx={{
-                        p: 2, borderRadius: '12px',
-                        border: '1px solid', borderColor: isExpanded ? scoreColor + '60' : 'divider',
-                        bgcolor: isExpanded ? scoreColor + '06' : 'background.paper',
-                        cursor: 'pointer', transition: 'all 0.2s',
-                        borderLeft: `4px solid ${scorePct > 0 ? scoreColor : '#d1d5db'}`,
-                        '&:hover': { borderColor: scoreColor + '80', transform: 'translateX(2px)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' },
+                        py: 1.25, px: 1.5, borderRadius: '10px',
+                        border: '1px solid', borderColor: isExpanded ? scoreColor + '50' : 'transparent',
+                        bgcolor: isExpanded ? scoreColor + '04' : 'transparent',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                        borderLeft: `3px solid ${scorePct > 0 ? scoreColor : '#e5e7eb'}`,
+                        '&:hover': { bgcolor: '#f9fafb', borderColor: '#e5e7eb' },
                       }}
                     >
-                      <Stack direction="row" alignItems="center" spacing={2}>
-                        {/* Score Circle */}
-                        <Box sx={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
-                          <Box sx={{
-                            width: 48, height: 48, borderRadius: '50%',
-                            background: `conic-gradient(${scoreColor} ${scorePct * 3.6}deg, #f3f4f6 0deg)`,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          }}>
-                            <Box sx={{ width: 38, height: 38, borderRadius: '50%', bgcolor: 'background.paper', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <Typography sx={{ fontSize: '0.75rem', fontWeight: 800, color: scoreColor }}>
-                                {scorePct > 0 ? `${scorePct}%` : '—'}
-                              </Typography>
-                            </Box>
-                          </Box>
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        {/* Score Badge — compact */}
+                        <Box sx={{
+                          width: 36, height: 36, borderRadius: '8px', flexShrink: 0,
+                          bgcolor: scorePct >= 80 ? '#ecfdf5' : scorePct >= 60 ? '#fffbeb' : '#f9fafb',
+                          border: '1px solid', borderColor: scorePct >= 80 ? '#a7f3d0' : scorePct >= 60 ? '#fde68a' : '#e5e7eb',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, color: scoreColor }}>
+                            {scorePct > 0 ? `${scorePct}` : '—'}
+                          </Typography>
                         </Box>
 
-                        {/* Job Info */}
+                        {/* Title + Company — one line each */}
                         <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography variant="body1" fontWeight={700} noWrap sx={{ fontSize: '0.95rem' }}>
+                          <Typography variant="body2" fontWeight={700} noWrap sx={{ fontSize: '0.85rem', lineHeight: 1.3 }}>
                             {job.title || job.role || 'Untitled'}
                           </Typography>
-                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
-                            <Typography variant="caption" color="text.secondary" noWrap>
-                              🏢 {job.company || '—'}
-                            </Typography>
-                            {job.location && (
-                              <Typography variant="caption" color="text.secondary" noWrap>
-                                📍 {job.location}
-                              </Typography>
-                            )}
-                          </Stack>
+                          <Typography variant="caption" color="text.secondary" noWrap>
+                            {job.company || '—'}{job.location ? ` · ${job.location}` : ''}
+                          </Typography>
                         </Box>
 
-                        {/* Status + Time */}
-                        <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
-                          <Chip
-                            label={job.stage ? (STAGE_LABELS[job.stage] || job.stage) : 'New'}
-                            size="small"
-                            sx={{
-                              height: 24, fontSize: '0.72rem', fontWeight: 700,
-                              ...(STATUS_CHIP_STYLES[job.stage] || { bgcolor: '#f3f4f6', color: '#6b7280' }),
-                            }}
-                          />
-                          <Typography variant="caption" color="text.secondary" sx={{ minWidth: 50, textAlign: 'right' }}>
-                            {job.created_at || job.date ? dayjs(job.created_at || job.date).fromNow() : ''}
-                          </Typography>
-                          <ExpandMoreIcon sx={{ fontSize: 18, color: '#9ca3af', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
-                        </Stack>
+                        {/* Status + Time — right aligned */}
+                        <Chip
+                          label={job.stage ? (STAGE_LABELS[job.stage] || job.stage) : 'New'}
+                          size="small"
+                          sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700, ...(STATUS_CHIP_STYLES[job.stage] || { bgcolor: '#f3f4f6', color: '#6b7280' }) }}
+                        />
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', minWidth: 35 }}>
+                          {job.created_at || job.date ? dayjs(job.created_at || job.date).fromNow().replace(' ago', '').replace('a few seconds', 'now') : ''}
+                        </Typography>
+                        <ExpandMoreIcon sx={{ fontSize: 16, color: '#c9cdd3', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
                       </Stack>
                     </Box>
 
-                    {/* Expanded Detail */}
+                    {/* Expanded: Actionable Next Steps */}
                     <Collapse in={isExpanded}>
-                      <Box sx={{ mx: 2, mt: 1, mb: 0.5, p: 2, borderRadius: '8px', bgcolor: '#f8fafc', border: '1px solid', borderColor: 'divider' }}>
-                        <Grid container spacing={2}>
-                          <Grid size={{ xs: 12, md: 6 }}>
-                            <Stack spacing={1}>
-                              {job.location && <Typography variant="body2"><strong>Location:</strong> {job.location}</Typography>}
-                              {job.posting_url && (
-                                <Button size="small" startIcon={<OpenInNewIcon />} href={job.posting_url} target="_blank" sx={{ textTransform: 'none', fontWeight: 600, justifyContent: 'flex-start' }}>
-                                  View on LinkedIn
-                                </Button>
-                              )}
-                            </Stack>
-                          </Grid>
-                          <Grid size={{ xs: 12, md: 6 }}>
-                            <Stack spacing={1}>
-                              <Typography variant="body2"><strong>Stage:</strong> {STAGE_LABELS[job.stage] || job.stage || 'Discovered'}</Typography>
-                              <Typography variant="body2"><strong>Match:</strong> {scorePct > 0 ? `${scorePct}%` : 'Not scored'}</Typography>
-                              <Button size="small" variant="outlined" onClick={(e) => { e.stopPropagation(); navigate('/board'); }} sx={{ textTransform: 'none', fontWeight: 600, mt: 0.5 }}>
-                                Manage on Board →
-                              </Button>
-                            </Stack>
-                          </Grid>
-                        </Grid>
+                      <Box sx={{ ml: 5, mr: 1, my: 1, p: 2, borderRadius: '10px', bgcolor: '#f8fafc', border: '1px solid #eef0f2' }}>
+                        <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1.5, display: 'block' }}>
+                          Suggested Next Steps
+                        </Typography>
+                        <Stack spacing={1.5}>
+                          {/* Step 1: View / Apply */}
+                          {job.posting_url || job.url ? (
+                            <Button size="small" variant="contained" startIcon={<OpenInNewIcon />} href={job.posting_url || job.url} target="_blank"
+                              sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px', bgcolor: scoreColor, '&:hover': { bgcolor: scoreColor + 'dd' }, justifyContent: 'flex-start', py: 0.75 }}>
+                              {job.stage === 'applied' ? 'View Application' : scorePct >= 80 ? 'Apply Now — Great Match!' : 'View Job Listing'}
+                            </Button>
+                          ) : (
+                            <Button size="small" variant="contained" startIcon={<OpenInNewIcon />}
+                              href={`https://www.linkedin.com/jobs/view/${job.job_id || job.id}/`} target="_blank"
+                              sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px', bgcolor: scoreColor, '&:hover': { bgcolor: scoreColor + 'dd' }, justifyContent: 'flex-start', py: 0.75 }}>
+                              {scorePct >= 80 ? 'Apply Now — Great Match!' : 'View on LinkedIn'}
+                            </Button>
+                          )}
+
+                          {/* Step 2: Contextual actions */}
+                          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                            {scorePct >= 80 && job.stage === 'discovered' && (
+                              <Chip label="⭐ Top Match" size="small" sx={{ bgcolor: '#ecfdf5', color: '#059669', fontWeight: 600, fontSize: '0.7rem' }} />
+                            )}
+                            {(job.external || job.apply_type === 'external') && (
+                              <Chip label="🔗 External Apply" size="small" sx={{ bgcolor: '#eff6ff', color: '#3b82f6', fontWeight: 600, fontSize: '0.7rem' }} />
+                            )}
+                            {job.stage === 'applied' && (
+                              <Chip label="📋 Follow up in 3-5 days" size="small" sx={{ bgcolor: '#f5f3ff', color: '#7c3aed', fontWeight: 600, fontSize: '0.7rem' }} />
+                            )}
+                            {scorePct > 0 && scorePct < 70 && (
+                              <Chip label="💡 Optimize profile for this role" size="small" sx={{ bgcolor: '#fffbeb', color: '#d97706', fontWeight: 600, fontSize: '0.7rem' }} />
+                            )}
+                          </Stack>
+
+                          {/* Meta info row */}
+                          <Stack direction="row" spacing={2} sx={{ pt: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              <strong>Match:</strong> {scorePct > 0 ? `${scorePct}%` : 'Not scored'}
+                            </Typography>
+                            {job.location && (
+                              <Typography variant="caption" color="text.secondary">
+                                <strong>📍</strong> {job.location}
+                              </Typography>
+                            )}
+                            <Typography variant="caption" color="text.secondary">
+                              <strong>Stage:</strong> {STAGE_LABELS[job.stage] || job.stage || 'Discovered'}
+                            </Typography>
+                          </Stack>
+                        </Stack>
                       </Box>
                     </Collapse>
                   </Box>
@@ -689,7 +702,7 @@ export default function Dashboard() {
             </Stack>
 
             {/* View All link */}
-            {jobs.length > 15 && (
+            {jobs.length > 8 && (
               <Box sx={{ mt: 2, textAlign: 'center' }}>
                 <Button
                   endIcon={<ArrowForwardIcon />}
