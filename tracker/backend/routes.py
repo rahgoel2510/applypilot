@@ -116,17 +116,9 @@ def list_jobs_enriched(
         score = job.match_score
         score_pct = round(score * 100) if score and score <= 1 else round(score) if score else None
 
-        # Generate match explanation
+        # Match reason — only show if we actually have real data
+        # TODO: Capture real skill match details from LinkedIn AI or JD analysis
         match_reason = None
-        if score_pct is not None:
-            if score_pct >= 90:
-                match_reason = "Excellent match — aligns with your core skills and experience"
-            elif score_pct >= 80:
-                match_reason = "Strong match — most required qualifications met"
-            elif score_pct >= 60:
-                match_reason = "Partial match — some skills align, consider tailoring your resume"
-            else:
-                match_reason = "Low match — role may require skills outside your current profile"
 
         # Check InMail
         inmail_key = f"{job.title}::{job.company}".lower()
