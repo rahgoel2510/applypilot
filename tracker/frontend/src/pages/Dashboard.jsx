@@ -767,137 +767,66 @@ export default function Dashboard() {
         </Grid>
       </Grid>
 
-      {/* Schedule Drawer */}
+      {/* Schedule Drawer — Quick Start */}
       <Drawer anchor="right" open={scheduleOpen} onClose={() => setScheduleOpen(false)}>
-        <Box sx={{ width: 380, height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#fff' }}>
-          {/* Header — matches Scheduler page style */}
-          <Box sx={{ p: 2.5, borderBottom: '1px solid', borderColor: '#D5DBDB' }}>
+        <Box sx={{ width: 360, p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Typography variant="h5" fontWeight={700} sx={{ mb: 0.5 }}>
+            Schedule Agent
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            How often should the agent scan for jobs?
+          </Typography>
+
+          <Stack spacing={1.5} sx={{ mb: 3 }}>
+            {[
+              { min: 30, label: 'Every 30 minutes', desc: 'Aggressive — for urgent job searching' },
+              { min: 60, label: 'Every 1 hour', desc: 'Active — good balance of speed and safety' },
+              { min: 120, label: 'Every 2 hours', desc: 'Balanced — steady and reliable' },
+              { min: 240, label: 'Every 4 hours', desc: 'Relaxed — fewer scans, less risk' },
+            ].map(opt => (
+              <Box key={opt.min} onClick={() => setSchedInterval(opt.min)}
+                sx={{
+                  p: 2, borderRadius: '8px', cursor: 'pointer',
+                  border: '2px solid', borderColor: schedInterval === opt.min ? 'primary.main' : '#D5DBDB',
+                  bgcolor: schedInterval === opt.min ? 'primary.main' : '#fff',
+                  color: schedInterval === opt.min ? '#fff' : 'inherit',
+                  transition: 'all 0.15s',
+                  '&:hover': { borderColor: 'primary.main' },
+                }}>
+                <Typography fontWeight={600} sx={{ fontSize: '0.9rem' }}>{opt.label}</Typography>
+                <Typography sx={{ fontSize: '0.75rem', opacity: 0.8 }}>{opt.desc}</Typography>
+              </Box>
+            ))}
+          </Stack>
+
+          <Stack spacing={2} sx={{ mb: 3 }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Stack direction="row" alignItems="center" spacing={1.5}>
-                <ScheduleIcon sx={{ fontSize: 24, color: 'primary.main' }} />
-                <Box>
-                  <Typography variant="subtitle1" fontWeight={700}>Schedule Agent</Typography>
-                  <Typography variant="caption" color="text.secondary">Configure automatic scanning</Typography>
-                </Box>
-              </Stack>
-              <Button size="small" onClick={() => setScheduleOpen(false)} sx={{ minWidth: 'auto', color: 'text.secondary' }}>✕</Button>
+              <Typography variant="body2" fontWeight={600}>Dry Run (preview only)</Typography>
+              <Switch checked={schedDryRun} onChange={(e) => setSchedDryRun(e.target.checked)} size="small" />
             </Stack>
-          </Box>
+          </Stack>
 
-          {/* Content */}
-          <Box sx={{ flex: 1, overflow: 'auto', p: 2.5 }}>
-            <Stack spacing={3}>
-              {/* Interval */}
-              <Card variant="outlined" sx={{ borderRadius: '12px', borderColor: '#D5DBDB' }}>
-                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                  <Typography variant="body2" fontWeight={700} sx={{ mb: 1.5 }}>Run Interval</Typography>
-                  <Stack direction="row" spacing={1}>
-                    {[
-                      { min: 30, label: '30 min' },
-                      { min: 60, label: '1 hour' },
-                      { min: 120, label: '2 hours' },
-                      { min: 240, label: '4 hours' },
-                    ].map(opt => (
-                      <Chip key={opt.min} label={opt.label} clickable
-                        onClick={() => setSchedInterval(opt.min)}
-                        color={schedInterval === opt.min ? 'primary' : 'default'}
-                        variant={schedInterval === opt.min ? 'filled' : 'outlined'}
-                        sx={{ fontWeight: 600, fontSize: '0.8rem', height: 32 }}
-                      />
-                    ))}
-                  </Stack>
-                </CardContent>
-              </Card>
-
-              {/* Active Hours */}
-              <Card variant="outlined" sx={{ borderRadius: '12px', borderColor: '#D5DBDB' }}>
-                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                  <Typography variant="body2" fontWeight={700} sx={{ mb: 1.5 }}>Active Hours</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
-                    Agent only runs between these hours
-                  </Typography>
-                  <Stack direction="row" spacing={1.5} alignItems="center">
-                    <FormControl size="small" sx={{ width: 100 }}>
-                      <InputLabel sx={{ fontSize: '0.8rem' }}>From</InputLabel>
-                      <Select value={schedStart} label="From" onChange={(e) => setSchedStart(e.target.value)} sx={{ fontSize: '0.8rem' }}>
-                        {Array.from({ length: 24 }, (_, i) => (
-                          <MenuItem key={i} value={i} sx={{ fontSize: '0.8rem' }}>
-                            {i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i-12} PM`}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    <Typography color="text.secondary">to</Typography>
-                    <FormControl size="small" sx={{ width: 100 }}>
-                      <InputLabel sx={{ fontSize: '0.8rem' }}>To</InputLabel>
-                      <Select value={schedEnd} label="To" onChange={(e) => setSchedEnd(e.target.value)} sx={{ fontSize: '0.8rem' }}>
-                        {Array.from({ length: 24 }, (_, i) => (
-                          <MenuItem key={i} value={i} sx={{ fontSize: '0.8rem' }}>
-                            {i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i-12} PM`}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    <Chip label={`${schedEnd > schedStart ? schedEnd - schedStart : 24 - schedStart + schedEnd}h`} size="small" variant="outlined" sx={{ fontWeight: 600 }} />
-                  </Stack>
-                </CardContent>
-              </Card>
-
-              {/* Options */}
-              <Card variant="outlined" sx={{ borderRadius: '12px', borderColor: '#D5DBDB' }}>
-                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                  <Typography variant="body2" fontWeight={700} sx={{ mb: 1.5 }}>Options</Typography>
-                  <Stack spacing={1.5}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Box>
-                        <Typography variant="body2" fontWeight={600}>Dry Run</Typography>
-                        <Typography variant="caption" color="text.secondary">Preview without applying</Typography>
-                      </Box>
-                      <Switch checked={schedDryRun} onChange={(e) => setSchedDryRun(e.target.checked)} size="small" />
-                    </Stack>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Box>
-                        <Typography variant="body2" fontWeight={600}>Urgent Mode</Typography>
-                        <Typography variant="caption" color="text.secondary">Scan more frequently for 7 days</Typography>
-                      </Box>
-                      <Switch checked={schedUrgent} onChange={(e) => setSchedUrgent(e.target.checked)} size="small" />
-                    </Stack>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Box>
-                        <Typography variant="body2" fontWeight={600}>Telegram Alerts</Typography>
-                        <Typography variant="caption" color="text.secondary">Get notified on every application</Typography>
-                      </Box>
-                      <Switch checked={schedTelegram} onChange={(e) => setSchedTelegram(e.target.checked)} size="small" />
-                    </Stack>
-                  </Stack>
-                </CardContent>
-              </Card>
-            </Stack>
-          </Box>
-
-          {/* Footer */}
-          <Box sx={{ p: 2.5, borderTop: '1px solid', borderColor: '#D5DBDB' }}>
-            <Stack spacing={1.5}>
-              <Button variant="contained" fullWidth startIcon={<ScheduleIcon />}
-                onClick={async () => {
-                  try {
-                    await updateSchedule({ enabled: true, mode: 'interval', interval_minutes: schedInterval, active_hours_start: schedStart, active_hours_end: schedEnd });
-                    setScheduleOpen(false);
-                    loadData(false);
-                  } catch (e) { console.error(e); }
-                }}
-                sx={{ textTransform: 'none', fontWeight: 600, py: 1.25, borderRadius: '8px' }}>
-                Save & Activate
-              </Button>
-              <Button variant="outlined" fullWidth startIcon={<PlayArrowIcon />}
-                onClick={() => { setScheduleOpen(false); navigate('/agent'); }}
-                sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '8px' }}>
-                Run Once Now
-              </Button>
-            </Stack>
+          <Box sx={{ mt: 'auto' }}>
+            <Button variant="contained" fullWidth
+              onClick={async () => {
+                try {
+                  await updateSchedule({ enabled: true, mode: 'interval', interval_minutes: schedInterval, active_hours_start: schedStart, active_hours_end: schedEnd });
+                  setScheduleOpen(false);
+                  loadData(false);
+                } catch (e) { console.error(e); }
+              }}
+              sx={{ textTransform: 'none', fontWeight: 600, py: 1.25, mb: 1.5 }}>
+              Activate Schedule
+            </Button>
+            <Button variant="text" fullWidth
+              onClick={() => { setScheduleOpen(false); navigate('/scheduler'); }}
+              sx={{ textTransform: 'none', color: 'text.secondary', fontSize: '0.85rem' }}>
+              Advanced settings →
+            </Button>
           </Box>
         </Box>
       </Drawer>
+
 
       {/* ═══════════════════════════════════════════════════════════════════════
           JOB DETAIL MODAL
