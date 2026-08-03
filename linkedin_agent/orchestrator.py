@@ -234,6 +234,20 @@ class JobAgent:
                 company=job.get("company", "N/A"),
                 recruiter=recruiter,
             )
+
+            # Auto-create TODO to review InMail
+            try:
+                import requests
+                requests.post("http://localhost:8000/api/todos/auto", json={
+                    "title": f"Review InMail for {job.get('title', 'N/A')} @ {job.get('company', 'N/A')}",
+                    "description": f"InMail draft to {recruiter} is ready. Review on Telegram and send.",
+                    "category": "review_inmail",
+                    "priority": "medium",
+                    "job_title": job.get("title", ""),
+                    "company": job.get("company", ""),
+                }, timeout=2)
+            except Exception:
+                pass
         except Exception as exc:
             self.log.warning(f"Failed to draft InMail: {exc}")
 
@@ -715,6 +729,23 @@ class JobAgent:
 
                         external_count += 1
                         self.tally.record(JobStatus.SKIPPED)
+
+                        # Auto-create TODO for high-match external jobs
+                        if score is not None and score >= 0.7:
+                            try:
+                                import requests
+                                requests.post("http://localhost:8000/api/todos/auto", json={
+                                    "title": f"Apply to {job_title} @ {company}",
+                                    "description": f"External job with {score:.0%} match. Apply manually via the link.",
+                                    "category": "external_apply",
+                                    "priority": "high" if score >= 0.85 else "medium",
+                                    "job_title": job_title,
+                                    "company": company,
+                                    "action_url": external_url or job.get("url", ""),
+                                }, timeout=2)
+                            except Exception:
+                                pass
+
                         continue
 
                     if score is None:

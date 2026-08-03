@@ -335,3 +335,100 @@ class LogsPageResponse(BaseModel):
     page: int
     page_size: int
     has_more: bool
+
+
+# ===========================================================================
+# TODO / Notifications — actionable items for the user
+# ===========================================================================
+
+
+class TodoPriority(str, enum.Enum):
+    high = 'high'
+    medium = 'medium'
+    low = 'low'
+
+
+class TodoStatus(str, enum.Enum):
+    pending = 'pending'
+    done = 'done'
+    dismissed = 'dismissed'
+
+
+class Todo(Base):
+    __tablename__ = 'todos'
+
+    id = Column(CHAR(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String, nullable=False)  # 'external_apply', 'review_inmail', 'skill_gap', 'session_refresh', 'agent_error'
+    priority = Column(Enum(TodoPriority), default=TodoPriority.medium)
+    status = Column(Enum(TodoStatus), default=TodoStatus.pending)
+    job_id = Column(String, nullable=True)  # Link to job if relevant
+    job_title = Column(String, nullable=True)
+    company = Column(String, nullable=True)
+    action_url = Column(String, nullable=True)  # External apply link, etc
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+    reminder_at = Column(DateTime, nullable=True)
+    metadata_json = Column(Text, nullable=True)
+
+
+# --- Todo Pydantic Schemas ---
+
+
+class TodoCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    category: str
+    priority: TodoPriority = TodoPriority.medium
+    job_id: Optional[str] = None
+    job_title: Optional[str] = None
+    company: Optional[str] = None
+    action_url: Optional[str] = None
+    reminder_at: Optional[datetime] = None
+    metadata_json: Optional[str] = None
+
+
+class TodoAutoCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    category: str
+    priority: TodoPriority = TodoPriority.medium
+    job_id: Optional[str] = None
+    job_title: Optional[str] = None
+    company: Optional[str] = None
+    action_url: Optional[str] = None
+    reminder_at: Optional[datetime] = None
+    metadata_json: Optional[str] = None
+
+
+class TodoUpdate(BaseModel):
+    status: Optional[TodoStatus] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[TodoPriority] = None
+    reminder_at: Optional[datetime] = None
+
+
+class TodoResponse(BaseModel):
+    id: str
+    title: str
+    description: Optional[str] = None
+    category: str
+    priority: TodoPriority
+    status: TodoStatus
+    job_id: Optional[str] = None
+    job_title: Optional[str] = None
+    company: Optional[str] = None
+    action_url: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    reminder_at: Optional[datetime] = None
+    metadata_json: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TodoCountResponse(BaseModel):
+    pending_count: int

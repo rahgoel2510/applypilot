@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box } from '@mui/material';
 import { motion } from 'framer-motion';
 import AppLayout from './layout/AppLayout';
+import ToastProvider from './components/ToastProvider';
 import { ThemeContext } from './main';
 
 // Lazy-loaded page components
@@ -37,18 +38,20 @@ export default function App() {
   const { mode, toggleMode } = useContext(ThemeContext);
 
   return (
-    <Routes>
-      <Route element={<AppLayout mode={mode} toggleMode={toggleMode} />}>
-        <Route path="/" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Dashboard /></PageTransition></Suspense>} />
-        <Route path="/agent" element={<Suspense fallback={<MinimalFallback />}><PageTransition><AgentControl /></PageTransition></Suspense>} />
-        <Route path="/board" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Board /></PageTransition></Suspense>} />
-        <Route path="/scheduler" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Scheduler /></PageTransition></Suspense>} />
-        <Route path="/agents" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Agents /></PageTransition></Suspense>} />
-        <Route path="/settings" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Settings /></PageTransition></Suspense>} />
-        <Route path="/service" element={<Suspense fallback={<MinimalFallback />}><PageTransition><ServiceManager /></PageTransition></Suspense>} />
-        <Route path="/agent/runs/:runId" element={<Suspense fallback={<MinimalFallback />}><PageTransition><RunDetail /></PageTransition></Suspense>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
+    <ToastProvider>
+      <Routes>
+        <Route element={<AppLayout mode={mode} toggleMode={toggleMode} />}>
+          <Route path="/" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Dashboard /></PageTransition></Suspense>} />
+          <Route path="/agent" element={<Suspense fallback={<MinimalFallback />}><PageTransition><AgentControl /></PageTransition></Suspense>} />
+          <Route path="/board" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Board /></PageTransition></Suspense>} />
+          <Route path="/scheduler" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Scheduler /></PageTransition></Suspense>} />
+          <Route path="/agents" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Agents /></PageTransition></Suspense>} />
+          <Route path="/settings" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Settings /></PageTransition></Suspense>} />
+          <Route path="/service" element={<Suspense fallback={<MinimalFallback />}><PageTransition><ServiceManager /></PageTransition></Suspense>} />
+          <Route path="/agent/runs/:runId" element={<Suspense fallback={<MinimalFallback />}><PageTransition><RunDetail /></PageTransition></Suspense>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </ToastProvider>
   );
 }

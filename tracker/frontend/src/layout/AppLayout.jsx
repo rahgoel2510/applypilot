@@ -15,7 +15,6 @@ import {
   Chip,
   Tooltip,
   Divider,
-  Badge,
 } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
@@ -30,8 +29,8 @@ import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
-import NotificationsIcon from '@mui/icons-material/Notifications';
 import CircleIcon from '@mui/icons-material/Circle';
+import NotificationCenter from '../components/NotificationCenter';
 
 const DRAWER_WIDTH = 240;
 const DRAWER_COLLAPSED = 56;
@@ -233,14 +232,8 @@ export default function AppLayout({ mode, toggleMode }) {
               </IconButton>
             </Tooltip>
 
-            {/* Notification Bell */}
-            <Tooltip title="Notifications">
-              <IconButton size="small" sx={{ mr: 1 }}>
-                <Badge badgeContent={3} color="error" variant="dot">
-                  <NotificationsIcon fontSize="small" />
-                </Badge>
-              </IconButton>
-            </Tooltip>
+            {/* Notification Center */}
+            <NotificationCenter />
 
             {/* User Avatar */}
             <Avatar
