@@ -18,6 +18,9 @@ import {
   FormControl,
   InputLabel,
   Tooltip,
+  Drawer,
+  Slider,
+  Switch,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -31,6 +34,8 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import BusinessIcon from '@mui/icons-material/Business';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import CloseIcon from '@mui/icons-material/Close';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import dayjs from 'dayjs';
@@ -98,6 +103,7 @@ export default function Dashboard() {
   const [sortBy, setSortBy] = useState('score');
   const [expandedJob, setExpandedJob] = useState(null);
   const [countdown, setCountdown] = useState(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
 
   const { events: wsEvents, isConnected, liveStats } = useWebSocket();
 
@@ -343,33 +349,37 @@ export default function Dashboard() {
           </FadeInUp>
         </Grid>
 
-        {/* ⏱️ Next Run */}
+        {/* ⏱️ Next Run → Schedule */}
         <Grid item xs={12} sm={6} md={3}>
           <FadeInUp delay={0.3}>
-            <Card sx={{ ...cardSx, borderTop: `4px solid ${KPI_COLORS[3]}` }}>
+            <Card
+              sx={{ ...cardSx, borderTop: `4px solid ${KPI_COLORS[3]}`, cursor: 'pointer', background: countdown ? 'linear-gradient(135deg, #FEF3E8 0%, #fff 100%)' : 'linear-gradient(135deg, #667eea08 0%, #764ba210 100%)' }}
+              onClick={() => countdown ? navigate('/agent') : setScheduleOpen(true)}
+            >
               <CardContent sx={cardContentSx}>
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                   <Box>
                     <Typography variant="overline" color="text.secondary" sx={{ fontSize: '0.68rem', letterSpacing: 1 }}>
-                      ⏱️ Next Run
+                      ⏱️ {countdown ? 'Next Run' : 'Schedule'}
                     </Typography>
                     {countdown ? (
-                      <Typography variant="h3" fontWeight={700} sx={{ lineHeight: 1.2, mt: 0.5 }}>
+                      <Typography variant="h3" fontWeight={700} sx={{ lineHeight: 1.2, mt: 0.5, color: KPI_COLORS[3] }}>
                         {countdown}
                       </Typography>
                     ) : (
-                      <Button
-                        size="small"
-                        variant="contained"
-                        startIcon={<PlayArrowIcon />}
-                        onClick={() => navigate('/agent')}
-                        sx={{ mt: 1, textTransform: 'none', fontWeight: 600, borderRadius: '8px' }}
-                      >
-                        Run Now
-                      </Button>
+                      <Box sx={{ mt: 0.5 }}>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={<ScheduleIcon />}
+                          sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', boxShadow: '0 2px 8px rgba(102,126,234,0.3)' }}
+                        >
+                          Set Schedule
+                        </Button>
+                      </Box>
                     )}
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                      {agentStatus?.status === 'running' ? '● Agent active' : 'Idle'}
+                      {agentStatus?.state === 'running' ? '● Agent active' : countdown ? 'Scheduled' : 'Not scheduled yet'}
                     </Typography>
                   </Box>
                   <Box sx={{ width: 44, height: 44, borderRadius: '12px', bgcolor: KPI_BG[3], display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -568,10 +578,16 @@ export default function Dashboard() {
               ))}
             </Tabs>
 
-            {/* Job Rows */}
-            <Stack spacing={1}>
+            {/* Job Rows — Stylish Cards */}
+            <Stack spacing={1.5}>
+              {filteredJobs.length === 0 && (
+                <Box sx={{ py: 4, textAlign: 'center' }}>
+                  <Typography color="text.secondary">No jobs match this filter.</Typography>
+                </Box>
+              )}
               {filteredJobs.map((job) => {
                 const scorePct = getScorePercent(job.match_score);
+                const scoreColor = getScoreColor(scorePct);
                 const isExpanded = expandedJob === job.id;
 
                 return (
@@ -579,118 +595,86 @@ export default function Dashboard() {
                     <Box
                       onClick={() => setExpandedJob(isExpanded ? null : job.id)}
                       sx={{
-                        p: 2,
-                        borderRadius: '10px',
-                        border: '1px solid',
-                        borderColor: isExpanded ? 'primary.main' : 'divider',
-                        bgcolor: isExpanded ? 'action.hover' : 'background.paper',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                        '&:hover': { borderColor: 'primary.light', bgcolor: 'action.hover' },
+                        p: 2, borderRadius: '12px',
+                        border: '1px solid', borderColor: isExpanded ? scoreColor + '60' : 'divider',
+                        bgcolor: isExpanded ? scoreColor + '06' : 'background.paper',
+                        cursor: 'pointer', transition: 'all 0.2s',
+                        borderLeft: `4px solid ${scorePct > 0 ? scoreColor : '#d1d5db'}`,
+                        '&:hover': { borderColor: scoreColor + '80', transform: 'translateX(2px)', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' },
                       }}
                     >
-                      <Grid container spacing={1.5} alignItems="center">
-                        {/* Title & Company */}
-                        <Grid item xs={12} md={4}>
-                          <Typography variant="body2" fontWeight={700} noWrap>
+                      <Stack direction="row" alignItems="center" spacing={2}>
+                        {/* Score Circle */}
+                        <Box sx={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
+                          <Box sx={{
+                            width: 48, height: 48, borderRadius: '50%',
+                            background: `conic-gradient(${scoreColor} ${scorePct * 3.6}deg, #f3f4f6 0deg)`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            <Box sx={{ width: 38, height: 38, borderRadius: '50%', bgcolor: 'background.paper', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Typography sx={{ fontSize: '0.75rem', fontWeight: 800, color: scoreColor }}>
+                                {scorePct > 0 ? `${scorePct}%` : '—'}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </Box>
+
+                        {/* Job Info */}
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography variant="body1" fontWeight={700} noWrap sx={{ fontSize: '0.95rem' }}>
                             {job.title || job.role || 'Untitled'}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary" noWrap>
-                            {job.company || 'Unknown'} {job.location ? `• ${job.location}` : ''}
-                          </Typography>
-                        </Grid>
-
-                        {/* Score Bar */}
-                        <Grid item xs={6} md={3}>
-                          <Stack direction="row" alignItems="center" spacing={1}>
-                            <Box sx={{ flex: 1, height: 8, bgcolor: 'rgba(0,0,0,0.06)', borderRadius: 4, overflow: 'hidden' }}>
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: `${scorePct}%` }}
-                                transition={{ duration: 0.6, ease: 'easeOut' }}
-                                style={{ height: '100%', backgroundColor: getScoreColor(scorePct), borderRadius: 4 }}
-                              />
-                            </Box>
-                            <Typography variant="caption" fontWeight={700} sx={{ minWidth: 32, color: getScoreColor(scorePct) }}>
-                              {scorePct > 0 ? `${scorePct}%` : '—'}
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
+                            <Typography variant="caption" color="text.secondary" noWrap>
+                              🏢 {job.company || 'Unknown'}
                             </Typography>
+                            {job.location && (
+                              <Typography variant="caption" color="text.secondary" noWrap>
+                                📍 {job.location}
+                              </Typography>
+                            )}
                           </Stack>
-                        </Grid>
+                        </Box>
 
-                        {/* Status Chip */}
-                        <Grid item xs={4} md={2}>
+                        {/* Status + Time */}
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
                           <Chip
-                            label={STAGE_LABELS[job.stage] || job.stage || 'New'}
+                            label={job.stage ? (STAGE_LABELS[job.stage] || job.stage) : 'New'}
                             size="small"
                             sx={{
-                              height: 24,
-                              fontSize: '0.7rem',
-                              fontWeight: 600,
-                              ...(STATUS_CHIP_STYLES[job.stage] || STATUS_CHIP_STYLES.discovered),
+                              height: 24, fontSize: '0.72rem', fontWeight: 700,
+                              ...(STATUS_CHIP_STYLES[job.stage] || { bgcolor: '#f3f4f6', color: '#6b7280' }),
                             }}
                           />
-                          {(job.external || job.apply_type === 'external') && (
-                            <Chip
-                              label="External"
-                              size="small"
-                              sx={{ height: 20, fontSize: '0.65rem', ml: 0.5, ...STATUS_CHIP_STYLES.external }}
-                            />
-                          )}
-                        </Grid>
-
-                        {/* Time ago + Expand icon */}
-                        <Grid item xs={2} md={3}>
-                          <Stack direction="row" justifyContent="space-between" alignItems="center">
-                            <Typography variant="caption" color="text.secondary">
-                              {job.created_at || job.date ? dayjs(job.created_at || job.date).fromNow() : '—'}
-                            </Typography>
-                            <IconButton size="small">
-                              {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                            </IconButton>
-                          </Stack>
-                        </Grid>
-                      </Grid>
+                          <Typography variant="caption" color="text.secondary" sx={{ minWidth: 50, textAlign: 'right' }}>
+                            {job.created_at || job.date ? dayjs(job.created_at || job.date).fromNow() : ''}
+                          </Typography>
+                          <ExpandMoreIcon sx={{ fontSize: 18, color: '#9ca3af', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
+                        </Stack>
+                      </Stack>
                     </Box>
 
-                    {/* Expanded Details */}
+                    {/* Expanded Detail */}
                     <Collapse in={isExpanded}>
-                      <Box sx={{ px: 2, py: 1.5, ml: 2, borderLeft: '3px solid', borderColor: 'primary.main' }}>
+                      <Box sx={{ mx: 2, mt: 1, mb: 0.5, p: 2, borderRadius: '8px', bgcolor: '#f8fafc', border: '1px solid', borderColor: 'divider' }}>
                         <Grid container spacing={2}>
-                          <Grid item xs={12} md={8}>
-                            <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: 'block', mb: 0.5 }}>
-                              JD Summary
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
-                              {job.description || job.jd_summary || 'No description available'}
-                            </Typography>
-                          </Grid>
-                          <Grid item xs={12} md={4}>
+                          <Grid item xs={12} md={6}>
                             <Stack spacing={1}>
-                              {job.recruiter && (
-                                <Box>
-                                  <Typography variant="caption" color="text.secondary" fontWeight={600}>Recruiter</Typography>
-                                  <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>{job.recruiter}</Typography>
-                                </Box>
-                              )}
-                              {job.inmail_status && (
-                                <Box>
-                                  <Typography variant="caption" color="text.secondary" fontWeight={600}>InMail</Typography>
-                                  <Chip label={job.inmail_status} size="small" sx={{ height: 20, fontSize: '0.65rem' }} />
-                                </Box>
-                              )}
-                              {(job.apply_url || job.url) && (
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  startIcon={<OpenInNewIcon />}
-                                  href={job.apply_url || job.url}
-                                  target="_blank"
-                                  rel="noopener"
-                                  sx={{ textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 }}
-                                >
-                                  View Listing
+                              {job.location && <Typography variant="body2"><strong>Location:</strong> {job.location}</Typography>}
+                              {job.posting_url && (
+                                <Button size="small" startIcon={<OpenInNewIcon />} href={job.posting_url} target="_blank" sx={{ textTransform: 'none', fontWeight: 600, justifyContent: 'flex-start' }}>
+                                  View on LinkedIn
                                 </Button>
                               )}
+                            </Stack>
+                          </Grid>
+                          <Grid item xs={12} md={6}>
+                            <Stack spacing={1}>
+                              <Typography variant="body2"><strong>Stage:</strong> {STAGE_LABELS[job.stage] || job.stage || 'Discovered'}</Typography>
+                              <Typography variant="body2"><strong>Match:</strong> {scorePct > 0 ? `${scorePct}%` : 'Not scored'}</Typography>
+                              <Button size="small" variant="outlined" onClick={(e) => { e.stopPropagation(); navigate('/board'); }} sx={{ textTransform: 'none', fontWeight: 600, mt: 0.5 }}>
+                                Manage on Board →
+                              </Button>
                             </Stack>
                           </Grid>
                         </Grid>
@@ -699,14 +683,6 @@ export default function Dashboard() {
                   </Box>
                 );
               })}
-
-              {filteredJobs.length === 0 && (
-                <Box sx={{ py: 4, textAlign: 'center' }}>
-                  <Typography variant="body2" color="text.secondary">
-                    No jobs match this filter
-                  </Typography>
-                </Box>
-              )}
             </Stack>
 
             {/* View All link */}
@@ -858,6 +834,79 @@ export default function Dashboard() {
           </FadeInUp>
         </Grid>
       </Grid>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          SCHEDULE DRAWER
+      ═══════════════════════════════════════════════════════════════════════ */}
+      <Drawer anchor="right" open={scheduleOpen} onClose={() => setScheduleOpen(false)}>
+        <Box sx={{ width: 360, p: 3 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+            <Typography variant="h6" fontWeight={700}>⏱️ Schedule Agent</Typography>
+            <IconButton onClick={() => setScheduleOpen(false)}><CloseIcon /></IconButton>
+          </Stack>
+
+          <Stack spacing={3}>
+            <Box>
+              <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>Run Interval</Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {['30 min', '1 hour', '2 hours', '4 hours'].map(opt => (
+                  <Chip key={opt} label={opt} clickable variant="outlined" sx={{ fontWeight: 600 }} />
+                ))}
+              </Stack>
+            </Box>
+
+            <Box>
+              <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>Active Hours</Typography>
+              <Typography variant="caption" color="text.secondary">Agent only runs between these hours</Typography>
+              <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
+                <Chip label="9 AM" variant="outlined" />
+                <Typography sx={{ alignSelf: 'center' }}>→</Typography>
+                <Chip label="10 PM" variant="outlined" />
+              </Stack>
+            </Box>
+
+            <Box>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Box>
+                  <Typography variant="body2" fontWeight={600}>Dry Run Mode</Typography>
+                  <Typography variant="caption" color="text.secondary">Preview without applying</Typography>
+                </Box>
+                <Switch defaultChecked size="small" />
+              </Stack>
+            </Box>
+
+            <Box>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Box>
+                  <Typography variant="body2" fontWeight={600}>Urgent Mode</Typography>
+                  <Typography variant="caption" color="text.secondary">Scan more frequently for 7 days</Typography>
+                </Box>
+                <Switch size="small" />
+              </Stack>
+            </Box>
+
+            <Button
+              variant="contained"
+              fullWidth
+              startIcon={<ScheduleIcon />}
+              onClick={() => { setScheduleOpen(false); navigate('/scheduler'); }}
+              sx={{ textTransform: 'none', fontWeight: 700, py: 1.5, borderRadius: '10px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
+            >
+              Save & Activate Schedule
+            </Button>
+
+            <Button
+              variant="outlined"
+              fullWidth
+              startIcon={<PlayArrowIcon />}
+              onClick={() => { setScheduleOpen(false); navigate('/agent'); }}
+              sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '10px' }}
+            >
+              Run Once Now
+            </Button>
+          </Stack>
+        </Box>
+      </Drawer>
     </Box>
   );
 }
