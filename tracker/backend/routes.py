@@ -77,6 +77,97 @@ def list_jobs(
     return query.all()
 
 
+@router.get("/jobs/enriched")
+def list_jobs_enriched(
+    stage: Optional[str] = Query(None),
+    sort: Optional[str] = Query("score"),
+    db: Session = Depends(get_db),
+):
+    """List jobs enriched with InMail status and match explanation."""
+    from models import InMailDraft
+
+    query = db.query(Job)
+    if stage and stage != "all":
+        query = query.filter(Job.stage == stage)
+
+    if sort == "score":
+        query = query.order_by(Job.match_score.desc().nulls_last())
+    elif sort == "date":
+        query = query.order_by(Job.date_added.desc())
+    else:
+        query = query.order_by(Job.date_added.desc())
+
+    jobs = query.limit(50).all()
+
+    # Get InMail drafts for these jobs (by title+company match)
+    inmail_map = {}
+    inmails = db.query(InMailDraft).all()
+    for im in inmails:
+        key = f"{im.job_title}::{im.company}".lower()
+        inmail_map[key] = {
+            "status": im.status.value if im.status else "drafted",
+            "recruiter": im.recruiter_name,
+            "draft_preview": (im.draft_text or "")[:100],
+        }
+
+    # Build enriched response
+    result = []
+    for job in jobs:
+        score = job.match_score
+        score_pct = round(score * 100) if score and score <= 1 else round(score) if score else None
+
+        # Generate match explanation
+        match_reason = None
+        if score_pct is not None:
+            if score_pct >= 90:
+                match_reason = "Excellent match — aligns with your core skills and experience"
+            elif score_pct >= 80:
+                match_reason = "Strong match — most required qualifications met"
+            elif score_pct >= 60:
+                match_reason = "Partial match — some skills align, consider tailoring your resume"
+            else:
+                match_reason = "Low match — role may require skills outside your current profile"
+
+        # Check InMail
+        inmail_key = f"{job.title}::{job.company}".lower()
+        inmail_info = inmail_map.get(inmail_key)
+
+        # Determine if external
+        is_external = job.stage == JobStage.discovered and score_pct and score_pct >= 60
+
+        result.append({
+            "id": job.id,
+            "title": job.title,
+            "company": job.company,
+            "location": job.location,
+            "stage": job.stage.value if job.stage else "discovered",
+            "match_score": score_pct,
+            "match_reason": match_reason,
+            "posting_url": job.posting_url,
+            "date_added": job.date_added.isoformat() if job.date_added else None,
+            "source": job.source.value if job.source else "agent",
+            "inmail": inmail_info,
+            "is_external": is_external,
+            "notes": job.notes,
+        })
+
+    # Counts for filter badges
+    all_count = db.query(Job).count()
+    top_count = db.query(Job).filter(Job.match_score >= 0.8).count()
+    applied_count = db.query(Job).filter(Job.stage == JobStage.applied).count()
+    external_count = len([j for j in result if j["is_external"]])
+
+    return {
+        "jobs": result,
+        "counts": {
+            "all": all_count,
+            "top": top_count,
+            "applied": applied_count,
+            "external": external_count,
+        },
+    }
+
+
 @router.get("/jobs/audit")
 def audit_jobs(
     db: Session = Depends(get_db),

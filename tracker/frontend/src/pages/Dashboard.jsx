@@ -40,7 +40,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import { fetchStats, fetchJobs, getAgentStatus, getAgentRuns, triggerAgent } from '../api';
+import { fetchStats, fetchJobs, fetchJobsEnriched, getAgentStatus, getAgentRuns, triggerAgent } from '../api';
 import { AnimatedNumber, FadeInUp } from '../components/Animated';
 import { useWebSocket } from '../hooks/useWebSocket';
 
@@ -96,6 +96,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [jobs, setJobs] = useState([]);
+  const [jobCounts, setJobCounts] = useState({ all: 0, top: 0, applied: 0, external: 0 });
   const [agentStatus, setAgentStatus] = useState(null);
   const [lastRunData, setLastRunData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -112,13 +113,14 @@ export default function Dashboard() {
     try {
       const [statsData, jobsData, statusData, runsData] = await Promise.all([
         fetchStats(),
-        fetchJobs({ sort: 'newest' }),
+        fetchJobsEnriched({ sort: 'score' }).catch(() => ({ jobs: [], counts: {} })),
         getAgentStatus().catch(() => null),
         getAgentRuns(1).catch(() => []),
       ]);
       setStats(statsData);
-      const jobsList = Array.isArray(jobsData) ? jobsData : jobsData.jobs || jobsData.items || [];
-      setJobs(jobsList);
+      const enriched = jobsData.jobs || [];
+      setJobs(enriched);
+      setJobCounts(jobsData.counts || { all: 0, top: 0, applied: 0, external: 0 });
       setAgentStatus(statusData);
       const runs = Array.isArray(runsData) ? runsData : runsData.runs || [];
       if (runs.length > 0) setLastRunData(runs[0]);
@@ -174,20 +176,14 @@ export default function Dashboard() {
   const filteredJobs = useMemo(() => {
     let filtered = [...jobs];
     switch (filterTab) {
-      case 1: // High Match
-        filtered = filtered.filter(j => {
-          const score = j.match_score != null ? (j.match_score <= 1 ? j.match_score : j.match_score / 100) : 0;
-          return score >= 0.8;
-        });
+      case 1: // Top Matches (score >= 80)
+        filtered = filtered.filter(j => (j.match_score || 0) >= 80);
         break;
       case 2: // Applied
         filtered = filtered.filter(j => j.stage === 'applied');
         break;
       case 3: // External
-        filtered = filtered.filter(j => j.external || j.apply_type === 'external');
-        break;
-      case 4: // Needs Action
-        filtered = filtered.filter(j => j.needs_action || j.stage === 'discovered');
+        filtered = filtered.filter(j => j.is_external);
         break;
       default:
         break;
@@ -198,7 +194,7 @@ export default function Dashboard() {
         case 'score':
           return (b.match_score || 0) - (a.match_score || 0);
         case 'date':
-          return new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0);
+          return new Date(b.date_added || 0) - new Date(a.date_added || 0);
         case 'company':
           return (a.company || '').localeCompare(b.company || '');
         default:
@@ -233,7 +229,7 @@ export default function Dashboard() {
   // ─── Render helpers ──────────────────────────────────────────────────────
   const getScorePercent = (score) => {
     if (score == null) return 0;
-    return score <= 1 ? Math.round(score * 100) : Math.round(score);
+    return Math.round(score);  // Enriched API returns percentage directly
   };
 
   const getScoreColor = (pct) => {
@@ -536,190 +532,134 @@ export default function Dashboard() {
       </Grid>
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          SECTION 3: Smart Jobs Table
+          SECTION 3: Your Pipeline — Job Cards with full context
       ═══════════════════════════════════════════════════════════════════════ */}
       <FadeInUp delay={0.2}>
         <Card sx={{ ...cardSx, mb: 4 }}>
-          <CardContent sx={{ ...cardContentSx, p: '16px !important' }}>
-            {/* Header + Filters inline */}
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
-              <Typography variant="subtitle2" fontWeight={700} sx={{ fontSize: '0.9rem' }}>
-                💼 Recent Jobs
-              </Typography>
-              <Stack direction="row" spacing={0.75} alignItems="center">
+          <CardContent sx={{ p: '20px !important' }}>
+            <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2, fontSize: '1rem' }}>
+              💼 Your Pipeline
+            </Typography>
+
+            {/* Filter Bar */}
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2, pb: 1.5, borderBottom: '1px solid #f0f0f0' }}>
+              <Stack direction="row" spacing={1}>
                 {[
-                  { label: 'All', icon: '' },
-                  { label: '⭐ Top', icon: '' },
-                  { label: '✅ Applied', icon: '' },
-                  { label: '🔗 External', icon: '' },
+                  { label: 'All', key: 'all' },
+                  { label: '⭐ Top Matches', key: 'top' },
+                  { label: '✅ Applied', key: 'applied' },
+                  { label: '🔗 External', key: 'external' },
                 ].map((f, i) => (
-                  <Chip
-                    key={f.label}
-                    label={f.label}
-                    size="small"
-                    clickable
+                  <Chip key={f.key} label={f.label} size="small" clickable
                     onClick={() => setFilterTab(i)}
                     sx={{
-                      height: 26, fontSize: '0.7rem', fontWeight: filterTab === i ? 700 : 500,
-                      bgcolor: filterTab === i ? '#1e1b4b' : '#f9fafb',
-                      color: filterTab === i ? '#fff' : '#6b7280',
-                      border: filterTab === i ? 'none' : '1px solid #e5e7eb',
-                      '&:hover': { bgcolor: filterTab === i ? '#1e1b4b' : '#f3f4f6' },
+                      height: 28, fontSize: '0.72rem', fontWeight: filterTab === i ? 700 : 500,
+                      bgcolor: filterTab === i ? '#667eea15' : 'transparent',
+                      color: filterTab === i ? '#667eea' : '#6b7280',
+                      border: '1px solid', borderColor: filterTab === i ? '#667eea50' : '#e5e7eb',
+                      '&:hover': { borderColor: '#667eea' },
                     }}
                   />
                 ))}
-                <Box sx={{ width: 1, height: 20, bgcolor: '#e5e7eb', mx: 0.5 }} />
-                <Select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  size="small"
-                  variant="standard"
-                  disableUnderline
-                  sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#6b7280', '& .MuiSelect-select': { py: 0, pr: 2 } }}
-                >
-                  <MenuItem value="score" sx={{ fontSize: '0.8rem' }}>↓ Score</MenuItem>
-                  <MenuItem value="date" sx={{ fontSize: '0.8rem' }}>↓ Recent</MenuItem>
-                  <MenuItem value="company" sx={{ fontSize: '0.8rem' }}>↓ Company</MenuItem>
-                </Select>
               </Stack>
+              <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)} size="small" variant="standard" disableUnderline
+                sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280' }}>
+                <MenuItem value="score">Sort: Match ↓</MenuItem>
+                <MenuItem value="date">Sort: Recent ↓</MenuItem>
+                <MenuItem value="company">Sort: Company</MenuItem>
+              </Select>
             </Stack>
 
-            {/* Job Rows — Dark styled table */}
-            <Box sx={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-              {/* Table Header */}
-              <Box sx={{ display: 'flex', alignItems: 'center', px: 2, py: 1, bgcolor: '#1e1b4b', color: '#e2e8f0', gap: 2 }}>
-                <Typography sx={{ width: 40, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score</Typography>
-                <Typography sx={{ flex: 1, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Role & Company</Typography>
-                <Typography sx={{ width: 70, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Status</Typography>
-                <Typography sx={{ width: 40, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>When</Typography>
-              </Box>
-
+            {/* Job Cards */}
+            <Stack spacing={1.5} sx={{ maxHeight: 460, overflow: 'auto', pr: 0.5 }}>
               {filteredJobs.length === 0 && (
-                <Box sx={{ py: 3, textAlign: 'center', bgcolor: '#fafafa' }}>
+                <Box sx={{ py: 4, textAlign: 'center' }}>
                   <Typography variant="body2" color="text.secondary">No jobs match this filter.</Typography>
                 </Box>
               )}
-              {filteredJobs.map((job, idx) => {
+              {filteredJobs.map((job) => {
                 const scorePct = getScorePercent(job.match_score);
                 const scoreColor = getScoreColor(scorePct);
                 const isExpanded = expandedJob === job.id;
 
                 return (
-                  <Box key={job.id}>
-                    <Box
-                      onClick={() => setExpandedJob(isExpanded ? null : job.id)}
-                      sx={{
-                        display: 'flex', alignItems: 'center', gap: 2,
-                        px: 2, py: 1.25, cursor: 'pointer',
-                        bgcolor: isExpanded ? '#f0f4ff' : idx % 2 === 0 ? '#ffffff' : '#f9fafb',
-                        borderBottom: '1px solid #f0f0f0',
-                        transition: 'all 0.12s',
-                        '&:hover': { bgcolor: '#f0f4ff' },
-                      }}
-                    >
-                      {/* Score */}
-                      <Box sx={{
-                        width: 36, height: 28, borderRadius: '6px', flexShrink: 0,
-                        bgcolor: scoreColor + '18',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: scoreColor }}>
-                          {scorePct > 0 ? scorePct : '—'}
+                  <Box key={job.id} onClick={() => setExpandedJob(isExpanded ? null : job.id)}
+                    sx={{
+                      p: 2, borderRadius: '12px', cursor: 'pointer',
+                      border: '1px solid', borderColor: isExpanded ? '#667eea40' : '#eef0f2',
+                      bgcolor: isExpanded ? '#f8f9ff' : '#fafbfc',
+                      transition: 'all 0.15s',
+                      '&:hover': { borderColor: '#667eea30', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' },
+                    }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                      <Box sx={{ flex: 1, minWidth: 0, mr: 2 }}>
+                        <Typography noWrap sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e1b4b' }}>
+                          {job.title || 'Untitled'}
+                        </Typography>
+                        <Typography noWrap sx={{ fontSize: '0.73rem', color: '#6b7280', mt: 0.25 }}>
+                          {job.company || '—'}{job.location ? ` · 📍 ${job.location}` : ''}{` · ${job.created_at || job.date_added ? dayjs(job.created_at || job.date_added).fromNow() : ''}`}
                         </Typography>
                       </Box>
-
-                      {/* Role & Company */}
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography noWrap sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e1b4b', lineHeight: 1.3 }}>
-                          {job.title || job.role || 'Untitled'}
-                        </Typography>
-                        <Typography noWrap sx={{ fontSize: '0.7rem', color: '#6b7280' }}>
-                          {job.company || '—'}{job.location ? ` · ${job.location}` : ''}
-                        </Typography>
-                      </Box>
-
-                      {/* Status */}
-                      <Box sx={{ width: 70, textAlign: 'center' }}>
-                        <Chip
-                          label={job.stage ? (STAGE_LABELS[job.stage] || job.stage) : 'New'}
-                          size="small"
-                          sx={{ height: 20, fontSize: '0.6rem', fontWeight: 700, ...(STATUS_CHIP_STYLES[job.stage] || { bgcolor: '#f3f4f6', color: '#6b7280' }) }}
-                        />
-                      </Box>
-
-                      {/* When */}
-                      <Typography sx={{ width: 40, fontSize: '0.65rem', color: '#9ca3af', textAlign: 'right' }}>
-                        {job.created_at || job.date ? dayjs(job.created_at || job.date).fromNow().replace(' ago', '').replace('a few seconds', 'now').replace(' minutes', 'm').replace(' hours', 'h').replace(' days', 'd').replace('an hour', '1h').replace('a day', '1d') : ''}
+                      {scorePct > 0 && (
+                        <Box sx={{ px: 1.25, py: 0.5, borderRadius: '8px', bgcolor: scoreColor + '12', border: `1px solid ${scoreColor}30`, flexShrink: 0 }}>
+                          <Typography sx={{ fontSize: '0.75rem', fontWeight: 800, color: scoreColor, lineHeight: 1 }}>
+                            {scorePct}% match
+                          </Typography>
+                        </Box>
+                      )}
+                    </Stack>
+                    {scorePct >= 80 && (
+                      <Typography sx={{ fontSize: '0.7rem', color: '#059669', mt: 0.75, fontWeight: 500 }}>
+                        💡 Strong match — aligns with your core skills and experience
                       </Typography>
-                    </Box>
-
-                    {/* Expanded: Actionable Next Steps */}
+                    )}
+                    {scorePct >= 60 && scorePct < 80 && (
+                      <Typography sx={{ fontSize: '0.7rem', color: '#d97706', mt: 0.75, fontWeight: 500 }}>
+                        💡 Partial match — some skills align, consider tailoring resume
+                      </Typography>
+                    )}
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                      <Chip label={job.stage ? (STAGE_LABELS[job.stage] || job.stage) : 'New'} size="small"
+                        sx={{ height: 20, fontSize: '0.63rem', fontWeight: 700, ...(STATUS_CHIP_STYLES[job.stage] || { bgcolor: '#f3f4f6', color: '#6b7280' }) }} />
+                      {job.inmail && (
+                        <Chip label={`✉️ InMail ${job.inmail.status}${job.inmail.recruiter ? ` → ${job.inmail.recruiter}` : ''}`} size="small"
+                          sx={{ height: 20, fontSize: '0.63rem', fontWeight: 600, bgcolor: '#f5f3ff', color: '#7c3aed' }} />
+                      )}
+                      {job.is_external && !job.inmail && (
+                        <Chip label="🔗 External" size="small" sx={{ height: 20, fontSize: '0.63rem', fontWeight: 600, bgcolor: '#eff6ff', color: '#3b82f6' }} />
+                      )}
+                    </Stack>
                     <Collapse in={isExpanded}>
-                      <Box sx={{ ml: 5, mr: 1, my: 1, p: 2, borderRadius: '10px', bgcolor: '#f8fafc', border: '1px solid #eef0f2' }}>
-                        <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', mb: 1.5, display: 'block' }}>
-                          Suggested Next Steps
-                        </Typography>
-                        <Stack spacing={1.5}>
-                          {/* Step 1: View / Apply */}
-                          {job.posting_url || job.url ? (
-                            <Button size="small" variant="contained" startIcon={<OpenInNewIcon />} href={job.posting_url || job.url} target="_blank"
-                              sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px', bgcolor: scoreColor, '&:hover': { bgcolor: scoreColor + 'dd' }, justifyContent: 'flex-start', py: 0.75 }}>
-                              {job.stage === 'applied' ? 'View Application' : scorePct >= 80 ? 'Apply Now — Great Match!' : 'View Job Listing'}
-                            </Button>
-                          ) : (
-                            <Button size="small" variant="contained" startIcon={<OpenInNewIcon />}
-                              href={`https://www.linkedin.com/jobs/view/${job.job_id || job.id}/`} target="_blank"
-                              sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px', bgcolor: scoreColor, '&:hover': { bgcolor: scoreColor + 'dd' }, justifyContent: 'flex-start', py: 0.75 }}>
-                              {scorePct >= 80 ? 'Apply Now — Great Match!' : 'View on LinkedIn'}
-                            </Button>
+                      <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px solid #f0f0f0' }}>
+                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                          <Button size="small" variant="contained" startIcon={<OpenInNewIcon />}
+                            href={job.posting_url || `https://www.linkedin.com/jobs/view/${job.id}/`} target="_blank"
+                            onClick={(e) => e.stopPropagation()}
+                            sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.73rem', borderRadius: '8px', bgcolor: scoreColor, '&:hover': { bgcolor: scoreColor + 'cc' } }}>
+                            {scorePct >= 80 ? 'Apply Now' : 'View Listing'}
+                          </Button>
+                          {!job.inmail && scorePct >= 70 && (
+                            <Button size="small" variant="outlined" onClick={(e) => e.stopPropagation()}
+                              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.72rem', borderRadius: '8px' }}>✉️ Draft InMail</Button>
                           )}
-
-                          {/* Step 2: Contextual actions */}
-                          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                            {scorePct >= 80 && job.stage === 'discovered' && (
-                              <Chip label="⭐ Top Match" size="small" sx={{ bgcolor: '#ecfdf5', color: '#059669', fontWeight: 600, fontSize: '0.7rem' }} />
-                            )}
-                            {(job.external || job.apply_type === 'external') && (
-                              <Chip label="🔗 External Apply" size="small" sx={{ bgcolor: '#eff6ff', color: '#3b82f6', fontWeight: 600, fontSize: '0.7rem' }} />
-                            )}
-                            {job.stage === 'applied' && (
-                              <Chip label="📋 Follow up in 3-5 days" size="small" sx={{ bgcolor: '#f5f3ff', color: '#7c3aed', fontWeight: 600, fontSize: '0.7rem' }} />
-                            )}
-                            {scorePct > 0 && scorePct < 70 && (
-                              <Chip label="💡 Optimize profile for this role" size="small" sx={{ bgcolor: '#fffbeb', color: '#d97706', fontWeight: 600, fontSize: '0.7rem' }} />
-                            )}
-                          </Stack>
-
-                          {/* Meta info row */}
-                          <Stack direction="row" spacing={2} sx={{ pt: 0.5 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              <strong>Match:</strong> {scorePct > 0 ? `${scorePct}%` : 'Not scored'}
-                            </Typography>
-                            {job.location && (
-                              <Typography variant="caption" color="text.secondary">
-                                <strong>📍</strong> {job.location}
-                              </Typography>
-                            )}
-                            <Typography variant="caption" color="text.secondary">
-                              <strong>Stage:</strong> {STAGE_LABELS[job.stage] || job.stage || 'Discovered'}
-                            </Typography>
-                          </Stack>
+                          <Button size="small" onClick={(e) => e.stopPropagation()}
+                            sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.72rem', color: '#9ca3af' }}>Dismiss</Button>
                         </Stack>
+                        {job.inmail?.draft_preview && (
+                          <Box sx={{ mt: 1.5, p: 1.5, borderRadius: '8px', bgcolor: '#faf8ff', border: '1px solid #ede9fe' }}>
+                            <Typography sx={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600 }}>✉️ InMail to {job.inmail.recruiter}:</Typography>
+                            <Typography sx={{ fontSize: '0.7rem', color: '#4b5563', mt: 0.25, fontStyle: 'italic' }}>"{job.inmail.draft_preview}..."</Typography>
+                          </Box>
+                        )}
                       </Box>
                     </Collapse>
                   </Box>
                 );
               })}
-            </Box>
-
-            {/* View All link */}
+            </Stack>
             {jobs.length > 8 && (
-              <Box sx={{ mt: 1.5, textAlign: 'center' }}>
-                <Button
-                  endIcon={<ArrowForwardIcon />}
-                  onClick={() => navigate('/board')}
-                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', color: '#6b7280' }}
-                >
+              <Box sx={{ mt: 2, textAlign: 'center' }}>
+                <Button onClick={() => navigate('/board')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', color: '#667eea' }}>
                   View all {jobs.length} jobs on Board →
                 </Button>
               </Box>
@@ -727,6 +667,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </FadeInUp>
+
 
       {/* ═══════════════════════════════════════════════════════════════════════
           SECTION 4: Company Intelligence + AI Insights

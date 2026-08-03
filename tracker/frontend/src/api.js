@@ -12,6 +12,15 @@ export async function fetchJobs({ stage, company, search, sort } = {}) {
   return res.json();
 }
 
+export async function fetchJobsEnriched({ stage, sort } = {}) {
+  const params = new URLSearchParams();
+  if (stage && stage !== 'all') params.append('stage', stage);
+  if (sort) params.append('sort', sort);
+  const res = await fetch(`${BASE_URL}/jobs/enriched?${params}`);
+  if (!res.ok) throw new Error('Failed to fetch enriched jobs');
+  return res.json();
+}
+
 export async function fetchStats() {
   const res = await fetch(`${BASE_URL}/stats`);
   if (!res.ok) throw new Error('Failed to fetch stats');
