@@ -43,7 +43,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import { fetchStats, fetchJobs, fetchJobsEnriched, getAgentStatus, getAgentRuns, triggerAgent } from '../api';
+import { fetchStats, fetchJobs, fetchJobsEnriched, getAgentStatus, getAgentRuns, triggerAgent, updateSchedule } from '../api';
 import { AnimatedNumber, FadeInUp } from '../components/Animated';
 import { useWebSocket } from '../hooks/useWebSocket';
 
@@ -109,6 +109,12 @@ export default function Dashboard() {
   const [selectedJob, setSelectedJob] = useState(null);
   const [countdown, setCountdown] = useState(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [schedInterval, setSchedInterval] = useState(60);
+  const [schedStart, setSchedStart] = useState(9);
+  const [schedEnd, setSchedEnd] = useState(22);
+  const [schedDryRun, setSchedDryRun] = useState(true);
+  const [schedUrgent, setSchedUrgent] = useState(false);
+  const [schedTelegram, setSchedTelegram] = useState(true);
 
   const { events: wsEvents, isConnected, liveStats } = useWebSocket();
 
@@ -760,9 +766,8 @@ export default function Dashboard() {
           </FadeInUp>
         </Grid>
       </Grid>
-
       {/* ═══════════════════════════════════════════════════════════════════════
-          SCHEDULE DRAWER — Friendly & Intuitive
+          SCHEDULE DRAWER — Functional
       ═══════════════════════════════════════════════════════════════════════ */}
       <Drawer anchor="right" open={scheduleOpen} onClose={() => setScheduleOpen(false)} PaperProps={{ sx: { borderRadius: '16px 0 0 16px' } }}>
         <Box sx={{ width: 380, height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -773,11 +778,9 @@ export default function Dashboard() {
                 <Typography variant="h6" fontWeight={800} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <ScheduleIcon sx={{ color: '#667eea' }} /> Schedule Agent
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Set it and forget it — your agent works while you sleep
-                </Typography>
+                <Typography variant="caption" color="text.secondary">Set it and forget it</Typography>
               </Box>
-              <IconButton onClick={() => setScheduleOpen(false)} size="small" sx={{ bgcolor: '#f3f4f6', '&:hover': { bgcolor: '#e5e7eb' } }}>
+              <IconButton onClick={() => setScheduleOpen(false)} size="small" sx={{ bgcolor: '#f3f4f6' }}>
                 <CloseIcon fontSize="small" />
               </IconButton>
             </Stack>
@@ -785,116 +788,105 @@ export default function Dashboard() {
 
           {/* Content */}
           <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
-            <Stack spacing={3.5}>
-              {/* Frequency — Visual Cards */}
+            <Stack spacing={3}>
+              {/* Frequency */}
               <Box>
-                <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>How often should I scan?</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>Pick a pace that matches your urgency</Typography>
+                <Typography variant="body2" fontWeight={700} sx={{ mb: 1 }}>How often?</Typography>
                 <Grid container spacing={1}>
                   {[
-                    { label: '30m', desc: 'Aggressive', icon: '🔥', color: '#ef4444' },
-                    { label: '1h', desc: 'Active', icon: '⚡', color: '#f59e0b' },
-                    { label: '2h', desc: 'Balanced', icon: '🎯', color: '#3b82f6' },
-                    { label: '4h', desc: 'Chill', icon: '🌊', color: '#10b981' },
+                    { min: 30, label: '30m', desc: 'Aggressive', icon: '🔥', color: '#ef4444' },
+                    { min: 60, label: '1h', desc: 'Active', icon: '⚡', color: '#f59e0b' },
+                    { min: 120, label: '2h', desc: 'Balanced', icon: '🎯', color: '#3b82f6' },
+                    { min: 240, label: '4h', desc: 'Chill', icon: '🌊', color: '#10b981' },
                   ].map(opt => (
-                    <Grid size={{ xs: 3 }} key={opt.label}>
-                      <Box sx={{
-                        p: 1.5, borderRadius: '12px', textAlign: 'center', cursor: 'pointer',
-                        border: '2px solid', borderColor: '#e5e7eb',
+                    <Grid size={{ xs: 3 }} key={opt.min}>
+                      <Box onClick={() => setSchedInterval(opt.min)} sx={{
+                        p: 1.25, borderRadius: '10px', textAlign: 'center', cursor: 'pointer',
+                        border: '2px solid', borderColor: schedInterval === opt.min ? opt.color : '#e5e7eb',
+                        bgcolor: schedInterval === opt.min ? opt.color + '10' : '#fff',
                         transition: 'all 0.15s',
-                        '&:hover': { borderColor: opt.color, bgcolor: opt.color + '08', transform: 'scale(1.03)' },
+                        '&:hover': { borderColor: opt.color },
                       }}>
-                        <Typography sx={{ fontSize: '1.2rem', mb: 0.25 }}>{opt.icon}</Typography>
-                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 800, color: opt.color }}>{opt.label}</Typography>
-                        <Typography sx={{ fontSize: '0.6rem', color: '#6b7280' }}>{opt.desc}</Typography>
+                        <Typography sx={{ fontSize: '1rem', mb: 0.25 }}>{opt.icon}</Typography>
+                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 800, color: schedInterval === opt.min ? opt.color : '#374151' }}>{opt.label}</Typography>
+                        <Typography sx={{ fontSize: '0.58rem', color: '#6b7280' }}>{opt.desc}</Typography>
                       </Box>
                     </Grid>
                   ))}
                 </Grid>
               </Box>
 
-              {/* Active Hours — Visual Slider */}
+              {/* Active Hours — editable */}
               <Box>
-                <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>When should I work?</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>Agent only runs during these hours</Typography>
-                <Box sx={{ px: 1 }}>
-                  <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
-                    <Chip label="🌅 9:00 AM" size="small" sx={{ fontWeight: 700, bgcolor: '#eff6ff', color: '#3b82f6' }} />
-                    <Chip label="🌙 10:00 PM" size="small" sx={{ fontWeight: 700, bgcolor: '#f5f3ff', color: '#7c3aed' }} />
-                  </Stack>
-                  <Box sx={{ height: 8, borderRadius: 4, background: 'linear-gradient(90deg, #3b82f6 0%, #7c3aed 100%)', opacity: 0.7 }} />
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}>
-                    13 hours of active scanning
-                  </Typography>
-                </Box>
+                <Typography variant="body2" fontWeight={700} sx={{ mb: 1 }}>Active hours</Typography>
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                  <Select value={schedStart} onChange={(e) => setSchedStart(e.target.value)} size="small" sx={{ width: 90, fontSize: '0.8rem' }}>
+                    {Array.from({ length: 24 }, (_, i) => <MenuItem key={i} value={i} sx={{ fontSize: '0.8rem' }}>{i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i-12} PM`}</MenuItem>)}
+                  </Select>
+                  <Typography sx={{ color: '#9ca3af' }}>→</Typography>
+                  <Select value={schedEnd} onChange={(e) => setSchedEnd(e.target.value)} size="small" sx={{ width: 90, fontSize: '0.8rem' }}>
+                    {Array.from({ length: 24 }, (_, i) => <MenuItem key={i} value={i} sx={{ fontSize: '0.8rem' }}>{i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i-12} PM`}</MenuItem>)}
+                  </Select>
+                  <Typography variant="caption" color="text.secondary">{schedEnd > schedStart ? schedEnd - schedStart : 24 - schedStart + schedEnd}h window</Typography>
+                </Stack>
               </Box>
 
-              {/* Toggles — Clean Cards */}
+              {/* Toggles */}
               <Box>
                 <Typography variant="body2" fontWeight={700} sx={{ mb: 1.5 }}>Options</Typography>
                 <Stack spacing={1.5}>
                   <Box sx={{ p: 1.5, borderRadius: '10px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Stack direction="row" spacing={1.5} alignItems="center">
-                      <Box sx={{ width: 32, height: 32, borderRadius: '8px', bgcolor: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Typography sx={{ fontSize: '1rem' }}>🧪</Typography>
-                      </Box>
+                      <Typography sx={{ fontSize: '1rem' }}>🧪</Typography>
                       <Box>
-                        <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.82rem' }}>Dry Run</Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>Preview matches without applying</Typography>
+                        <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8rem' }}>Dry Run</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Preview without applying</Typography>
                       </Box>
                     </Stack>
-                    <Switch defaultChecked size="small" color="success" />
+                    <Switch checked={schedDryRun} onChange={(e) => setSchedDryRun(e.target.checked)} size="small" color="success" />
                   </Box>
-
                   <Box sx={{ p: 1.5, borderRadius: '10px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Stack direction="row" spacing={1.5} alignItems="center">
-                      <Box sx={{ width: 32, height: 32, borderRadius: '8px', bgcolor: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Typography sx={{ fontSize: '1rem' }}>🔥</Typography>
-                      </Box>
+                      <Typography sx={{ fontSize: '1rem' }}>🔥</Typography>
                       <Box>
-                        <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.82rem' }}>Urgent Mode</Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>Double speed for 7 days</Typography>
+                        <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8rem' }}>Urgent Mode</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Double speed for 7 days</Typography>
                       </Box>
                     </Stack>
-                    <Switch size="small" color="error" />
+                    <Switch checked={schedUrgent} onChange={(e) => setSchedUrgent(e.target.checked)} size="small" color="error" />
                   </Box>
-
                   <Box sx={{ p: 1.5, borderRadius: '10px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Stack direction="row" spacing={1.5} alignItems="center">
-                      <Box sx={{ width: 32, height: 32, borderRadius: '8px', bgcolor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Typography sx={{ fontSize: '1rem' }}>📱</Typography>
-                      </Box>
+                      <Typography sx={{ fontSize: '1rem' }}>📱</Typography>
                       <Box>
-                        <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.82rem' }}>Telegram Alerts</Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>Get notified on every application</Typography>
+                        <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8rem' }}>Telegram Alerts</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Notified on every apply</Typography>
                       </Box>
                     </Stack>
-                    <Switch defaultChecked size="small" />
+                    <Switch checked={schedTelegram} onChange={(e) => setSchedTelegram(e.target.checked)} size="small" />
                   </Box>
                 </Stack>
               </Box>
             </Stack>
           </Box>
 
-          {/* Footer Actions */}
+          {/* Footer */}
           <Box sx={{ p: 3, pt: 2, borderTop: '1px solid #f0f0f0' }}>
             <Stack spacing={1.5}>
-              <Button
-                variant="contained"
-                fullWidth
-                startIcon={<ScheduleIcon />}
-                onClick={() => { setScheduleOpen(false); navigate('/scheduler'); }}
-                sx={{ textTransform: 'none', fontWeight: 700, py: 1.5, borderRadius: '12px', fontSize: '0.9rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', boxShadow: '0 4px 14px rgba(102,126,234,0.35)' }}
-              >
+              <Button variant="contained" fullWidth startIcon={<ScheduleIcon />}
+                onClick={async () => {
+                  try {
+                    await updateSchedule({ enabled: true, mode: 'interval', interval_minutes: schedInterval, active_hours_start: schedStart, active_hours_end: schedEnd });
+                    setScheduleOpen(false);
+                    loadData(false);
+                  } catch (e) { console.error(e); }
+                }}
+                sx={{ textTransform: 'none', fontWeight: 700, py: 1.5, borderRadius: '12px', fontSize: '0.9rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', boxShadow: '0 4px 14px rgba(102,126,234,0.35)' }}>
                 Activate Schedule
               </Button>
-              <Button
-                variant="text"
-                fullWidth
-                startIcon={<PlayArrowIcon />}
+              <Button variant="text" fullWidth startIcon={<PlayArrowIcon />}
                 onClick={() => { setScheduleOpen(false); navigate('/agent'); }}
-                sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '12px', color: '#6b7280' }}
-              >
+                sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '12px', color: '#6b7280' }}>
                 Just run once instead
               </Button>
             </Stack>
