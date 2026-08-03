@@ -22,7 +22,7 @@ import {
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import cronstrue from 'cronstrue';
-import { parseExpression } from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import utc from 'dayjs/plugin/utc';
@@ -57,12 +57,12 @@ const styles = {
     borderRadius: '12px',
     border: '1px solid #e8ebf0',
     p: 3,
+    width: '100%',
   },
   containerCompact: {
-    backgroundColor: '#fafbfc',
-    borderRadius: '12px',
-    border: '1px solid #e8ebf0',
-    p: 2,
+    backgroundColor: 'transparent',
+    p: 0,
+    width: '100%',
   },
   card: {
     border: '1px solid #e8ebf0',
@@ -193,13 +193,13 @@ function getHumanReadable(cronExpression) {
 
 function getNextRuns(cronExpression, tz, count = 5) {
   try {
-    const interval = parseExpression(cronExpression, {
+    const cron = CronExpressionParser.parse(cronExpression, {
       tz,
       currentDate: new Date(),
     });
     const runs = [];
     for (let i = 0; i < count; i++) {
-      const next = interval.next();
+      const next = cron.next();
       runs.push(next.toDate());
     }
     return { runs, error: null };
@@ -326,12 +326,14 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
     <Box sx={compact ? styles.containerCompact : styles.container}>
       <Stack spacing={spacing}>
         {/* Header */}
+        {!compact && (
         <Stack direction="row" alignItems="center" justifyContent="space-between">
           <Typography variant="h6" sx={{ fontWeight: 700, color: '#2c3e50' }}>
             Schedule Builder
           </Typography>
           <InfoTooltip title="Configure when the agent should run. Use Basic mode for simple schedules or Advanced mode for full cron control." />
         </Stack>
+        )}
 
         {/* Mode Toggle */}
         <Box sx={{ display: 'flex', justifyContent: 'center' }}>
