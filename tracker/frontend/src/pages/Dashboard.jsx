@@ -584,14 +584,22 @@ export default function Dashboard() {
               </Stack>
             </Stack>
 
-            {/* Job Rows — Compact */}
-            <Stack spacing={0.5}>
+            {/* Job Rows — Dark styled table */}
+            <Box sx={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+              {/* Table Header */}
+              <Box sx={{ display: 'flex', alignItems: 'center', px: 2, py: 1, bgcolor: '#1e1b4b', color: '#e2e8f0', gap: 2 }}>
+                <Typography sx={{ width: 40, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score</Typography>
+                <Typography sx={{ flex: 1, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Role & Company</Typography>
+                <Typography sx={{ width: 70, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Status</Typography>
+                <Typography sx={{ width: 40, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>When</Typography>
+              </Box>
+
               {filteredJobs.length === 0 && (
-                <Box sx={{ py: 3, textAlign: 'center' }}>
+                <Box sx={{ py: 3, textAlign: 'center', bgcolor: '#fafafa' }}>
                   <Typography variant="body2" color="text.secondary">No jobs match this filter.</Typography>
                 </Box>
               )}
-              {filteredJobs.map((job) => {
+              {filteredJobs.map((job, idx) => {
                 const scorePct = getScorePercent(job.match_score);
                 const scoreColor = getScoreColor(scorePct);
                 const isExpanded = expandedJob === job.id;
@@ -601,48 +609,48 @@ export default function Dashboard() {
                     <Box
                       onClick={() => setExpandedJob(isExpanded ? null : job.id)}
                       sx={{
-                        py: 1.25, px: 1.5, borderRadius: '10px',
-                        border: '1px solid', borderColor: isExpanded ? scoreColor + '50' : 'transparent',
-                        bgcolor: isExpanded ? scoreColor + '04' : 'transparent',
-                        cursor: 'pointer', transition: 'all 0.15s',
-                        borderLeft: `3px solid ${scorePct > 0 ? scoreColor : '#e5e7eb'}`,
-                        '&:hover': { bgcolor: '#f9fafb', borderColor: '#e5e7eb' },
+                        display: 'flex', alignItems: 'center', gap: 2,
+                        px: 2, py: 1.25, cursor: 'pointer',
+                        bgcolor: isExpanded ? '#f0f4ff' : idx % 2 === 0 ? '#ffffff' : '#f9fafb',
+                        borderBottom: '1px solid #f0f0f0',
+                        transition: 'all 0.12s',
+                        '&:hover': { bgcolor: '#f0f4ff' },
                       }}
                     >
-                      <Stack direction="row" alignItems="center" spacing={1.5}>
-                        {/* Score Badge — compact */}
-                        <Box sx={{
-                          width: 36, height: 36, borderRadius: '8px', flexShrink: 0,
-                          bgcolor: scorePct >= 80 ? '#ecfdf5' : scorePct >= 60 ? '#fffbeb' : '#f9fafb',
-                          border: '1px solid', borderColor: scorePct >= 80 ? '#a7f3d0' : scorePct >= 60 ? '#fde68a' : '#e5e7eb',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, color: scoreColor }}>
-                            {scorePct > 0 ? `${scorePct}` : '—'}
-                          </Typography>
-                        </Box>
+                      {/* Score */}
+                      <Box sx={{
+                        width: 36, height: 28, borderRadius: '6px', flexShrink: 0,
+                        bgcolor: scoreColor + '18',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: scoreColor }}>
+                          {scorePct > 0 ? scorePct : '—'}
+                        </Typography>
+                      </Box>
 
-                        {/* Title + Company — one line each */}
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography variant="body2" fontWeight={700} noWrap sx={{ fontSize: '0.85rem', lineHeight: 1.3 }}>
-                            {job.title || job.role || 'Untitled'}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" noWrap>
-                            {job.company || '—'}{job.location ? ` · ${job.location}` : ''}
-                          </Typography>
-                        </Box>
+                      {/* Role & Company */}
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography noWrap sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e1b4b', lineHeight: 1.3 }}>
+                          {job.title || job.role || 'Untitled'}
+                        </Typography>
+                        <Typography noWrap sx={{ fontSize: '0.7rem', color: '#6b7280' }}>
+                          {job.company || '—'}{job.location ? ` · ${job.location}` : ''}
+                        </Typography>
+                      </Box>
 
-                        {/* Status + Time — right aligned */}
+                      {/* Status */}
+                      <Box sx={{ width: 70, textAlign: 'center' }}>
                         <Chip
                           label={job.stage ? (STAGE_LABELS[job.stage] || job.stage) : 'New'}
                           size="small"
-                          sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700, ...(STATUS_CHIP_STYLES[job.stage] || { bgcolor: '#f3f4f6', color: '#6b7280' }) }}
+                          sx={{ height: 20, fontSize: '0.6rem', fontWeight: 700, ...(STATUS_CHIP_STYLES[job.stage] || { bgcolor: '#f3f4f6', color: '#6b7280' }) }}
                         />
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', minWidth: 35 }}>
-                          {job.created_at || job.date ? dayjs(job.created_at || job.date).fromNow().replace(' ago', '').replace('a few seconds', 'now') : ''}
-                        </Typography>
-                        <ExpandMoreIcon sx={{ fontSize: 16, color: '#c9cdd3', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
-                      </Stack>
+                      </Box>
+
+                      {/* When */}
+                      <Typography sx={{ width: 40, fontSize: '0.65rem', color: '#9ca3af', textAlign: 'right' }}>
+                        {job.created_at || job.date ? dayjs(job.created_at || job.date).fromNow().replace(' ago', '').replace('a few seconds', 'now').replace(' minutes', 'm').replace(' hours', 'h').replace(' days', 'd').replace('an hour', '1h').replace('a day', '1d') : ''}
+                      </Typography>
                     </Box>
 
                     {/* Expanded: Actionable Next Steps */}
@@ -702,17 +710,17 @@ export default function Dashboard() {
                   </Box>
                 );
               })}
-            </Stack>
+            </Box>
 
             {/* View All link */}
             {jobs.length > 8 && (
-              <Box sx={{ mt: 2, textAlign: 'center' }}>
+              <Box sx={{ mt: 1.5, textAlign: 'center' }}>
                 <Button
                   endIcon={<ArrowForwardIcon />}
                   onClick={() => navigate('/board')}
-                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.85rem' }}
+                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', color: '#6b7280' }}
                 >
-                  View All on Board →
+                  View all {jobs.length} jobs on Board →
                 </Button>
               </Box>
             )}
