@@ -769,11 +769,12 @@ export default function Dashboard() {
       </Grid>
 
       {/* Schedule Drawer */}
-      <Drawer anchor="right" open={scheduleOpen} onClose={() => setScheduleOpen(false)}>
-        <Box sx={{ width: 420, height: '100%', overflow: 'auto', p: 3 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+      <Drawer anchor="right" open={scheduleOpen} onClose={() => setScheduleOpen(false)}
+        slotProps={{ backdrop: { sx: { backgroundColor: 'rgba(0,0,0,0.2)' } } }}>
+        <Box sx={{ width: 400, height: '100%', overflow: 'auto', p: 3, bgcolor: '#fff' }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2.5 }}>
             <Typography variant="h6" fontWeight={700} sx={{ textTransform: 'none' }}>Schedule Agent</Typography>
-            <Button size="small" onClick={() => setScheduleOpen(false)} sx={{ minWidth: 'auto', color: 'text.secondary' }}>✕</Button>
+            <IconButton size="small" onClick={() => setScheduleOpen(false)}><CloseIcon fontSize="small" /></IconButton>
           </Stack>
           <SchedulerBuilder
             compact

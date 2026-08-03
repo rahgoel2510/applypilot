@@ -68,13 +68,15 @@ const styles = {
     color: 'text.primary',
   },
   translatorValid: {
-    backgroundColor: '#f0fdf4',
+    backgroundColor: '#f8fafb',
+    border: '1px solid #e2e8f0',
     borderRadius: '8px',
     p: 1.5,
     mt: 1,
   },
   translatorInvalid: {
     backgroundColor: '#fef2f2',
+    border: '1px solid #fecaca',
     borderRadius: '8px',
     p: 1.5,
     mt: 1,
@@ -572,7 +574,7 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
               sx={{
                 fontSize: '0.9rem',
                 fontWeight: 500,
-                color: translation.valid ? '#2e7d32' : '#c62828',
+                color: translation.valid ? '#374151' : '#c62828',
               }}
             >
               {translation.valid ? '✓' : '✗'} {translation.text}
