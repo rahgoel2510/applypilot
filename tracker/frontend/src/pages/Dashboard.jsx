@@ -214,7 +214,8 @@ export default function Dashboard() {
     if (stats?.top_companies) return stats.top_companies.slice(0, 6);
     const map = {};
     jobs.forEach((j) => {
-      const c = j.company || 'Unknown';
+      const c = j.company || '';
+      if (!c || c === 'Unknown') return;  // Skip jobs with no company
       if (!map[c]) map[c] = { name: c, count: 0, totalScore: 0, scored: 0, responded: 0 };
       map[c].count++;
       if (j.match_score != null) {
@@ -253,7 +254,7 @@ export default function Dashboard() {
   }
 
   return (
-    <Box sx={{ height: '100%', p: { xs: 2, md: 3 } }}>
+    <Box sx={{ height: '100%', overflow: 'auto', p: { xs: 1.5, md: 2.5 }, maxWidth: 1400, mx: 'auto' }}>
       <Typography variant="h4" fontWeight={700} sx={{ mb: 3 }}>
         Dashboard
       </Typography>
@@ -476,7 +477,9 @@ export default function Dashboard() {
                     <Stack direction="row" justifyContent="space-between">
                       <Typography variant="body2" color="text.secondary">Jobs Found</Typography>
                       <Typography variant="body2" fontWeight={600}>
-                        {lastRunData.jobs_found ?? lastRunData.discovered ?? '—'}
+                        {lastRunData.jobs_processed && lastRunData.jobs_processed !== '0'
+                          ? lastRunData.jobs_processed
+                          : totalDiscovered > 0 ? totalDiscovered : '—'}
                       </Typography>
                     </Stack>
                     <Stack direction="row" justifyContent="space-between">
@@ -626,7 +629,7 @@ export default function Dashboard() {
                           </Typography>
                           <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
                             <Typography variant="caption" color="text.secondary" noWrap>
-                              🏢 {job.company || 'Unknown'}
+                              🏢 {job.company || '—'}
                             </Typography>
                             {job.location && (
                               <Typography variant="caption" color="text.secondary" noWrap>
@@ -818,12 +821,12 @@ export default function Dashboard() {
                       <BusinessIcon sx={{ fontSize: 18, color: '#0073BB', mt: 0.25 }} />
                       <Box>
                         <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.82rem' }}>
-                          {topCompanies.length > 0
-                            ? `${topCompanies[0]?.name || 'Top company'} responds fastest — prioritize their listings`
+                          {topCompanies.length > 0 && topCompanies[0]?.name
+                            ? `${topCompanies[0].name} has the most open roles — prioritize their listings`
                             : 'Run your first scan to discover company insights'}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          Avg response time: 2-3 days from application
+                          Companies with more roles give you better chances
                         </Typography>
                       </Box>
                     </Stack>
