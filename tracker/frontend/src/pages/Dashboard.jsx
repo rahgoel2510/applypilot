@@ -995,10 +995,11 @@ export default function Dashboard() {
                     { stage: 'saved', label: '📌 Save for Later', show: job.stage === 'discovered' },
                   ].filter(s => s.show).map(s => (
                     <Chip key={s.stage} label={s.label} size="small" clickable
-                      onClick={async () => {
-                        await fetch(`/api/jobs/${job.id}/stage`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: s.stage }) });
-                        setSelectedJob(null);
-                        loadData();
+                      onClick={() => {
+                        if (window.confirm(`Move "${job.title}" to ${s.label.replace(/[^\w\s]/g, '').trim()}?`)) {
+                          fetch(`/api/jobs/${job.id}/stage`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: s.stage }) })
+                            .then(() => { setSelectedJob(null); loadData(); });
+                        }
                       }}
                       sx={{ height: 28, fontSize: '0.72rem', fontWeight: 600, border: '1px solid #e5e7eb', '&:hover': { bgcolor: '#667eea10', borderColor: '#667eea50' } }}
                     />
