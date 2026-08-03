@@ -317,6 +317,11 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
           <InfoTooltip title="Configure when the agent should run. Use Basic mode for simple schedules or Advanced mode for full cron control." />
         </Stack>
         )}
+        {compact && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+            Set when the agent scans for jobs automatically.
+          </Typography>
+        )}
 
         {/* Mode Toggle */}
         <Box>
@@ -569,6 +574,9 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
 
         {/* ═══ LIVE TRANSLATOR ═══ */}
         <Box sx={translation.valid ? styles.translatorValid : styles.translatorInvalid}>
+          <Typography sx={{ fontSize: '0.7rem', fontWeight: 600, color: '#6b7280', mb: 0.5 }}>
+            This schedule means:
+          </Typography>
           <Stack direction="row" alignItems="center" spacing={1}>
             <Typography
               sx={{
@@ -577,7 +585,7 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
                 color: translation.valid ? '#374151' : '#c62828',
               }}
             >
-              {translation.valid ? '✓' : '✗'} {translation.text}
+              {translation.valid ? '📅' : '⚠️'} {translation.text}
             </Typography>
           </Stack>
         </Box>
