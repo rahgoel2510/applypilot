@@ -45,6 +45,7 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { fetchStats, fetchJobs, fetchJobsEnriched, getAgentStatus, getAgentRuns, triggerAgent, updateSchedule } from '../api';
 import { AnimatedNumber, FadeInUp } from '../components/Animated';
+import SchedulerBuilder from '../components/SchedulerBuilder';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 dayjs.extend(relativeTime);
@@ -767,63 +768,23 @@ export default function Dashboard() {
         </Grid>
       </Grid>
 
-      {/* Schedule Drawer — Quick Start */}
+      {/* Schedule Drawer */}
       <Drawer anchor="right" open={scheduleOpen} onClose={() => setScheduleOpen(false)}>
-        <Box sx={{ width: 360, p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <Typography variant="h5" fontWeight={700} sx={{ mb: 0.5 }}>
-            Schedule Agent
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            How often should the agent scan for jobs?
-          </Typography>
-
-          <Stack spacing={1.5} sx={{ mb: 3 }}>
-            {[
-              { min: 30, label: 'Every 30 minutes', desc: 'Aggressive — for urgent job searching' },
-              { min: 60, label: 'Every 1 hour', desc: 'Active — good balance of speed and safety' },
-              { min: 120, label: 'Every 2 hours', desc: 'Balanced — steady and reliable' },
-              { min: 240, label: 'Every 4 hours', desc: 'Relaxed — fewer scans, less risk' },
-            ].map(opt => (
-              <Box key={opt.min} onClick={() => setSchedInterval(opt.min)}
-                sx={{
-                  p: 2, borderRadius: '8px', cursor: 'pointer',
-                  border: '2px solid', borderColor: schedInterval === opt.min ? 'primary.main' : '#D5DBDB',
-                  bgcolor: schedInterval === opt.min ? 'primary.main' : '#fff',
-                  color: schedInterval === opt.min ? '#fff' : 'inherit',
-                  transition: 'all 0.15s',
-                  '&:hover': { borderColor: 'primary.main' },
-                }}>
-                <Typography fontWeight={600} sx={{ fontSize: '0.9rem' }}>{opt.label}</Typography>
-                <Typography sx={{ fontSize: '0.75rem', opacity: 0.8 }}>{opt.desc}</Typography>
-              </Box>
-            ))}
+        <Box sx={{ width: 420, height: '100%', overflow: 'auto', p: 3 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="h6" fontWeight={700}>Schedule Agent</Typography>
+            <Button size="small" onClick={() => setScheduleOpen(false)} sx={{ minWidth: 'auto', color: 'text.secondary' }}>✕</Button>
           </Stack>
-
-          <Stack spacing={2} sx={{ mb: 3 }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography variant="body2" fontWeight={600}>Dry Run (preview only)</Typography>
-              <Switch checked={schedDryRun} onChange={(e) => setSchedDryRun(e.target.checked)} size="small" />
-            </Stack>
-          </Stack>
-
-          <Box sx={{ mt: 'auto' }}>
-            <Button variant="contained" fullWidth
-              onClick={async () => {
-                try {
-                  await updateSchedule({ enabled: true, mode: 'interval', interval_minutes: schedInterval, active_hours_start: schedStart, active_hours_end: schedEnd });
-                  setScheduleOpen(false);
-                  loadData(false);
-                } catch (e) { console.error(e); }
-              }}
-              sx={{ textTransform: 'none', fontWeight: 600, py: 1.25, mb: 1.5 }}>
-              Activate Schedule
-            </Button>
-            <Button variant="text" fullWidth
-              onClick={() => { setScheduleOpen(false); navigate('/scheduler'); }}
-              sx={{ textTransform: 'none', color: 'text.secondary', fontSize: '0.85rem' }}>
-              Advanced settings →
-            </Button>
-          </Box>
+          <SchedulerBuilder
+            compact
+            onSave={async (config) => {
+              try {
+                await updateSchedule(config);
+                setScheduleOpen(false);
+                loadData(false);
+              } catch (e) { console.error(e); }
+            }}
+          />
         </Box>
       </Drawer>
 
