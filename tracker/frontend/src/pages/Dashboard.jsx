@@ -540,52 +540,55 @@ export default function Dashboard() {
       ═══════════════════════════════════════════════════════════════════════ */}
       <FadeInUp delay={0.2}>
         <Card sx={{ ...cardSx, mb: 4 }}>
-          <CardContent sx={{ ...cardContentSx, pb: '16px !important' }}>
-            {/* Header with filter tabs and sort */}
-            <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1.5} sx={{ mb: 2 }}>
-              <Typography variant="subtitle1" fontWeight={600}>
-                Recent Jobs
+          <CardContent sx={{ ...cardContentSx, p: '16px !important' }}>
+            {/* Header + Filters inline */}
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ fontSize: '0.9rem' }}>
+                💼 Recent Jobs
               </Typography>
-              <Stack direction="row" spacing={2} alignItems="center">
-                <FormControl size="small" sx={{ minWidth: 120 }}>
-                  <InputLabel sx={{ fontSize: '0.8rem' }}>Sort by</InputLabel>
-                  <Select
-                    value={sortBy}
-                    label="Sort by"
-                    onChange={(e) => setSortBy(e.target.value)}
-                    sx={{ fontSize: '0.8rem', height: 36 }}
-                  >
-                    <MenuItem value="score">Score</MenuItem>
-                    <MenuItem value="date">Date</MenuItem>
-                    <MenuItem value="company">Company</MenuItem>
-                  </Select>
-                </FormControl>
+              <Stack direction="row" spacing={0.75} alignItems="center">
+                {[
+                  { label: 'All', icon: '' },
+                  { label: '⭐ Top', icon: '' },
+                  { label: '✅ Applied', icon: '' },
+                  { label: '🔗 External', icon: '' },
+                ].map((f, i) => (
+                  <Chip
+                    key={f.label}
+                    label={f.label}
+                    size="small"
+                    clickable
+                    onClick={() => setFilterTab(i)}
+                    sx={{
+                      height: 26, fontSize: '0.7rem', fontWeight: filterTab === i ? 700 : 500,
+                      bgcolor: filterTab === i ? '#1e1b4b' : '#f9fafb',
+                      color: filterTab === i ? '#fff' : '#6b7280',
+                      border: filterTab === i ? 'none' : '1px solid #e5e7eb',
+                      '&:hover': { bgcolor: filterTab === i ? '#1e1b4b' : '#f3f4f6' },
+                    }}
+                  />
+                ))}
+                <Box sx={{ width: 1, height: 20, bgcolor: '#e5e7eb', mx: 0.5 }} />
+                <Select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  size="small"
+                  variant="standard"
+                  disableUnderline
+                  sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#6b7280', '& .MuiSelect-select': { py: 0, pr: 2 } }}
+                >
+                  <MenuItem value="score" sx={{ fontSize: '0.8rem' }}>↓ Score</MenuItem>
+                  <MenuItem value="date" sx={{ fontSize: '0.8rem' }}>↓ Recent</MenuItem>
+                  <MenuItem value="company" sx={{ fontSize: '0.8rem' }}>↓ Company</MenuItem>
+                </Select>
               </Stack>
             </Stack>
 
-            {/* Filter Tabs */}
-            <Tabs
-              value={filterTab}
-              onChange={(_, v) => setFilterTab(v)}
-              variant="scrollable"
-              scrollButtons="auto"
-              sx={{
-                mb: 2,
-                minHeight: 36,
-                '& .MuiTab-root': { minHeight: 36, textTransform: 'none', fontSize: '0.8rem', fontWeight: 500, px: 2 },
-                '& .Mui-selected': { fontWeight: 700 },
-              }}
-            >
-              {FILTER_TABS.map((label) => (
-                <Tab key={label} label={label} />
-              ))}
-            </Tabs>
-
-            {/* Job Rows — Stylish Cards */}
-            <Stack spacing={1.5}>
+            {/* Job Rows — Compact */}
+            <Stack spacing={0.5}>
               {filteredJobs.length === 0 && (
-                <Box sx={{ py: 4, textAlign: 'center' }}>
-                  <Typography color="text.secondary">No jobs match this filter.</Typography>
+                <Box sx={{ py: 3, textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">No jobs match this filter.</Typography>
                 </Box>
               )}
               {filteredJobs.map((job) => {
