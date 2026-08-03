@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -30,6 +31,7 @@ import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import HistoryIcon from '@mui/icons-material/History';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -60,12 +62,13 @@ function getLogLineColor(line) {
 
 export default function AgentControl() {
   const { enqueueSnackbar } = useSnackbar();
+  const navigate = useNavigate();
   const logEndRef = useRef(null);
 
   const [status, setStatus] = useState({ state: 'idle', current_step: null, started_at: null });
   const [mode, setMode] = useState('single');
   const [dryRun, setDryRun] = useState(true);
-  const [threshold, setThreshold] = useState(70);
+  const [threshold, setThreshold] = useState(80);
   const [limit, setLimit] = useState(10);
   const [searchMode, setSearchMode] = useState('active');
   const [tab, setTab] = useState(0);
@@ -128,8 +131,9 @@ export default function AgentControl() {
   const dedupRate = totalSeen > 0 ? Math.round((dedupHits / totalSeen) * 100) : 0;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', p: 2 }}>
-      {/* ═══ CONTROL PANEL ═══ */}
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* ═══ FIXED HEADER ═══ */}
+      <Box sx={{ flexShrink: 0, p: 2, pb: 0 }}>
       <Typography variant="h3" sx={{ mb: 2 }}>Agent Control</Typography>
       <Box sx={{ mb: 0 }}>
         {/* Status Row */}
@@ -168,22 +172,27 @@ export default function AgentControl() {
           </Stack>
         </Box>
         </motion.div>
+      </Box>
+      </Box>
 
+      {/* ═══ SCROLLABLE CONTENT ═══ */}
+      <Box sx={{ flex: 1, overflow: 'auto', px: 2, pb: 2 }}>
+      <Box sx={{ mb: 0 }}>
         {/* Search Mode Selector */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}>
         <Box sx={{
           display: 'flex', gap: 1.5, mb: 2,
         }}>
           {[
-            { key: 'aggressive', label: '🔥 Aggressive', desc: 'Max throughput, 55% bar, 15min scans', color: '#D13212' },
-            { key: 'active', label: '⚡ Active', desc: 'Balanced, 70% bar, 30min scans', color: '#0073BB' },
-            { key: 'passive', label: '🌊 Passive', desc: 'High bar only, 85%, every 2hrs', color: '#067D68' },
+            { key: 'aggressive', label: '🔥 Aggressive', desc: 'Max throughput, 80% bar, 15min scans', color: '#D13212' },
+            { key: 'active', label: '⚡ Active', desc: 'Balanced, 80% bar, 30min scans', color: '#0073BB' },
+            { key: 'passive', label: '🌊 Passive', desc: 'Selective, 80% bar, every 2hrs', color: '#067D68' },
           ].map(m => (
             <Box key={m.key} onClick={() => {
               setSearchMode(m.key);
-              if (m.key === 'aggressive') { setThreshold(55); setLimit(0); }
-              else if (m.key === 'active') { setThreshold(70); setLimit(50); }
-              else { setThreshold(85); setLimit(30); }
+              if (m.key === 'aggressive') { setThreshold(80); setLimit(0); }
+              else if (m.key === 'active') { setThreshold(80); setLimit(50); }
+              else { setThreshold(80); setLimit(30); }
             }}
               sx={{
                 flex: 1, p: 2, borderRadius: '12px', cursor: 'pointer',
@@ -296,9 +305,9 @@ export default function AgentControl() {
       </Box>
 
       {/* ═══ MAIN CONTENT ═══ */}
-      <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', mt: 2, gap: 2 }}>
+      <Box sx={{ flex: 1, minHeight: 500, display: 'flex', mt: 2, gap: 2 }}>
         {/* LEFT — Tabs + Content */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, border: '1px solid', borderColor: 'divider', borderRadius: '12px', overflow: 'hidden', bgcolor: 'background.paper', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 450, border: '1px solid', borderColor: 'divider', borderRadius: '12px', overflow: 'hidden', bgcolor: 'background.paper', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           {/* Tab bar */}
           <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
             <Stack direction="row" spacing={1}>
@@ -397,6 +406,15 @@ export default function AgentControl() {
                                     <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Paused</Typography><Typography variant="body2" fontWeight={600}>{paused}</Typography></Stack>
                                     <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Errors</Typography><Typography variant="body2" fontWeight={600} sx={{ color: errored > 0 ? '#D13212' : 'inherit' }}>{errored}</Typography></Stack>
                                     {run.error_message && <Stack direction="row" justifyContent="space-between"><Typography variant="body2" color="text.secondary">Error</Typography><Typography variant="body2" color="error">{run.error_message}</Typography></Stack>}
+                                    <Button
+                                      size="small"
+                                      variant="contained"
+                                      startIcon={<OpenInNewIcon />}
+                                      onClick={(e) => { e.stopPropagation(); navigate(`/agent/runs/${runId}`); }}
+                                      sx={{ mt: 1.5, textTransform: 'none', fontWeight: 700, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '8px', boxShadow: '0 2px 8px rgba(102,126,234,0.3)' }}
+                                    >
+                                      🔍 Analyze This Run
+                                    </Button>
                                   </Stack>
                                 </Box>
                               </Collapse>
@@ -489,6 +507,7 @@ export default function AgentControl() {
             </CardContent>
           </Card>
         </Box>
+      </Box>
       </Box>
     </Box>
   );

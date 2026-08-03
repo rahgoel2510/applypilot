@@ -13,6 +13,7 @@ const Scheduler = lazy(() => import('./pages/Scheduler'));
 const Agents = lazy(() => import('./pages/Agents'));
 const Settings = lazy(() => import('./pages/Settings'));
 const ServiceManager = lazy(() => import('./pages/ServiceManager'));
+const RunDetail = lazy(() => import('./pages/RunDetail'));
 
 function PageTransition({ children }) {
   return (
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/agents" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Agents /></PageTransition></Suspense>} />
         <Route path="/settings" element={<Suspense fallback={<MinimalFallback />}><PageTransition><Settings /></PageTransition></Suspense>} />
         <Route path="/service" element={<Suspense fallback={<MinimalFallback />}><PageTransition><ServiceManager /></PageTransition></Suspense>} />
+        <Route path="/agent/runs/:runId" element={<Suspense fallback={<MinimalFallback />}><PageTransition><RunDetail /></PageTransition></Suspense>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

@@ -192,7 +192,9 @@ def _seed_from_sources(db: Session) -> None:
         env_values = dotenv_values(ENV_FILE)
         for key, value in env_values.items():
             if key in valid_keys and value and _is_real_value(value) and key not in seen_keys:
-                db.add(AppSetting(key=key, value=value))
+                # Strip wrapping quotes that some editors add
+                clean_value = value.strip().strip("'").strip('"')
+                db.add(AppSetting(key=key, value=clean_value))
                 seen_keys.add(key)
                 seeded = True
 
@@ -200,7 +202,8 @@ def _seed_from_sources(db: Session) -> None:
     for key in valid_keys:
         value = os.environ.get(key, "")
         if value and _is_real_value(value) and key not in seen_keys:
-            db.add(AppSetting(key=key, value=value))
+            clean_value = value.strip().strip("'").strip('"')
+            db.add(AppSetting(key=key, value=clean_value))
             seen_keys.add(key)
             seeded = True
 
@@ -299,6 +302,9 @@ def update_settings(req: SettingsUpdateRequest, db: Session = Depends(get_db)):
         if key not in valid_keys:
             continue
         if not value.strip():
+            continue
+        # Never save masked values (contain bullet chars from the UI display)
+        if "••" in value or value == "••••••••":
             continue
         existing = db.query(AppSetting).filter(AppSetting.key == key).first()
         if existing:

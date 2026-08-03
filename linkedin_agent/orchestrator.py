@@ -476,22 +476,26 @@ class JobAgent:
                     for location in locations:
                         if self._shutdown_event.is_set() or len(all_jobs) >= max_postings:
                             break
-                        await self.browser.search_jobs(
-                            keyword=combined_query,
-                            location=location,
-                            posted_within=posted_within,
-                        )
-                        search_count += 1
-                        remaining = max_postings - len(all_jobs)
-                        page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 25))
-                        new_count = 0
-                        for j in page_jobs:
-                            jid = j.get("job_id", "")
-                            if jid and jid not in seen_job_ids:
-                                all_jobs.append(j)
-                                seen_job_ids.add(jid)
-                                new_count += 1
-                        self.log.info(f"  Combined search ({location}) → {new_count} jobs")
+                        try:
+                            await self.browser.search_jobs(
+                                keyword=combined_query,
+                                location=location,
+                                posted_within=posted_within,
+                            )
+                            search_count += 1
+                            remaining = max_postings - len(all_jobs)
+                            page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 25))
+                            new_count = 0
+                            for j in page_jobs:
+                                jid = j.get("job_id", "")
+                                if jid and jid not in seen_job_ids:
+                                    all_jobs.append(j)
+                                    seen_job_ids.add(jid)
+                                    new_count += 1
+                            self.log.info(f"  Combined search ({location}) → {new_count} jobs")
+                        except Exception as search_err:
+                            self.log.warning(f"  Combined search ({location}) → failed: {str(search_err)[:60]}. Continuing...")
+                            await asyncio.sleep(3)
 
                 # Phase 2: Individual keyword × location (only if OR search didn't find enough)
                 or_found_count = len(all_jobs)
@@ -508,23 +512,27 @@ class JobAgent:
                         for location in locations:
                             if self._shutdown_event.is_set() or len(all_jobs) >= max_postings:
                                 break
-                            await self.browser.search_jobs(
-                                keyword=keyword,
-                                location=location,
-                                posted_within=posted_within,
-                            )
-                            search_count += 1
-                            remaining = max_postings - len(all_jobs)
-                            page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 20))
-                            new_count = 0
-                            for j in page_jobs:
-                                jid = j.get("job_id", "")
-                                if jid and jid not in seen_job_ids:
-                                    all_jobs.append(j)
-                                    seen_job_ids.add(jid)
-                                    new_count += 1
-                            if new_count > 0:
-                                self.log.info(f"  '{keyword}' in {location} → {new_count} new jobs")
+                            try:
+                                await self.browser.search_jobs(
+                                    keyword=keyword,
+                                    location=location,
+                                    posted_within=posted_within,
+                                )
+                                search_count += 1
+                                remaining = max_postings - len(all_jobs)
+                                page_jobs = await self.browser.get_job_listings(max_count=min(remaining, 20))
+                                new_count = 0
+                                for j in page_jobs:
+                                    jid = j.get("job_id", "")
+                                    if jid and jid not in seen_job_ids:
+                                        all_jobs.append(j)
+                                        seen_job_ids.add(jid)
+                                        new_count += 1
+                                if new_count > 0:
+                                    self.log.info(f"  '{keyword}' in {location} → {new_count} new jobs")
+                            except Exception as search_err:
+                                self.log.warning(f"  '{keyword}' in {location} → failed: {str(search_err)[:60]}. Continuing...")
+                                await asyncio.sleep(3)
 
                 self.log.info(f'Search efficiency: {len(all_jobs)} unique from {search_count} searches ({len(all_jobs)/max(search_count,1):.1f} jobs/search)')
 
@@ -576,6 +584,12 @@ class JobAgent:
                     if job_id and dedup.is_seen(job_id):
                         dedup_skipped += 1
                         continue
+
+                    # Anti-detection: random human-paced delay between evaluations
+                    if idx > 1:
+                        import random
+                        delay = random.uniform(3, 6)
+                        await asyncio.sleep(delay)
 
                     self.log.info(f"Scanning {idx}/{total_jobs}: {job_title} @ {company}")
 

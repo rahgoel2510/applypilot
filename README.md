@@ -194,7 +194,7 @@ job_search:
   locations: ["India", "Bangalore", "Remote"]
   posted_within: "24h"
   initial_scan_window: "week"
-  match_threshold: 0.70
+  match_threshold: 0.80
   max_postings_per_run: 50
   skip_external_apply: false
   track_external_apply: true

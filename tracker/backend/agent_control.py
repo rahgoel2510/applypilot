@@ -198,16 +198,262 @@ class AgentController:
             return {"error": str(exc), "status": self._status.to_dict()}
 
     def _read_output(self) -> None:
+        """Read subprocess stdout and transform into user-friendly messages."""
         if self._process is None or self._process.stdout is None:
             return
         try:
+            in_traceback = False
+            traceback_lines = []
             for line in self._process.stdout:
-                with self._lock:
-                    self._output_lines.append(line.rstrip("\n"))
-                    if len(self._output_lines) > self._max_output:
-                        self._output_lines.pop(0)
+                clean_line = line.rstrip("\n")
+                result = self._transform_line(clean_line, in_traceback, traceback_lines)
+
+                if result == "__SKIP__":
+                    continue
+                elif result == "__TB_START__":
+                    in_traceback = True
+                    traceback_lines = [clean_line]
+                    continue
+                elif result == "__TB_ACC__":
+                    traceback_lines.append(clean_line)
+                    continue
+                elif result == "__TB_END__":
+                    traceback_lines.append(clean_line)
+                    summary = self._summarize_traceback(traceback_lines)
+                    in_traceback = False
+                    traceback_lines = []
+                    if summary:
+                        with self._lock:
+                            self._output_lines.append(summary)
+                            if len(self._output_lines) > self._max_output:
+                                self._output_lines.pop(0)
+                    continue
+                else:
+                    in_traceback = False
+                    traceback_lines = []
+                    if result:
+                        with self._lock:
+                            self._output_lines.append(result)
+                            if len(self._output_lines) > self._max_output:
+                                self._output_lines.pop(0)
         except (ValueError, OSError):
             pass
+
+    def _transform_line(self, line, in_traceback, traceback_lines):
+        """Transform raw log line into user-friendly message."""
+        import re
+        s = line.strip()
+
+        # Traceback handling
+        if s.startswith(("\u256d\u2500", "\u2502 \u256d", "Traceback (most recent")):
+            return "__TB_START__" if not in_traceback else "__TB_ACC__"
+        if in_traceback:
+            if re.match(r'^[A-Za-z_]*Error:', s) or re.match(r'^[A-Za-z_]*Exception:', s):
+                return "__TB_END__"
+            if s.startswith(("\u2502", "\u2570", "\u256d")):
+                return "__TB_ACC__"
+            if re.match(r'^\[?\d{2}/\d{2}/\d{2}', s):
+                return "__TB_END__"
+            return "__TB_ACC__"
+
+        # Skip noise
+        if not s or s.startswith(("\u256d", "\u2570", "\u2502")):
+            return "__SKIP__"
+        if re.match(r'^\s*(File |/Users/.*site-packages)', s):
+            return "__SKIP__"
+
+        # Detect Rich continuation lines (wrapped text from previous log message)
+        # These are lines that DON'T start with a timestamp or level prefix
+        # and the RAW line has heavy leading whitespace (Rich indents continuations)
+        raw_leading = len(line) - len(line.lstrip())
+        has_timestamp = bool(re.match(r'^\[?\d{2}/\d{2}/\d{2}', s))
+        has_level = bool(re.match(r'^(INFO|WARNING|ERROR|DEBUG|CRITICAL)\s', s))
+        is_continuation = raw_leading >= 20 and not has_timestamp and not has_level
+        if is_continuation:
+            # It's a wrapped fragment — skip unless it's one of our already-transformed messages
+            if s.startswith(("\U0001f680", "\U0001f525", "\u26a1", "\U0001f310", "\u2705",
+                           "\U0001f511", "\U0001f50d", "\U0001f4cb", "\U0001f50e",
+                           "\U0001f4cd", "\U0001f4ca", "\U0001f9e0", "\U0001f3af",
+                           "\U0001f517", "\U0001f44b", "\u26a0", "\u21b3", "\u274c",
+                           "\u23ed", "\U0001f389", "\u23f8")):
+                return s  # Already friendly, pass through
+            return "__SKIP__"
+
+        # Extract message from Rich format
+        msg = re.sub(r'^\[?\d{2}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}\]?\s*', '', s)
+        msg = re.sub(r'^(INFO|WARNING|ERROR|DEBUG|CRITICAL)\s+', '', msg)
+        msg = re.sub(r'\s+\w+\.py:\d+\s*$', '', msg)
+        msg = re.sub(r'\s{3,}', '  ', msg).strip()
+        if not msg:
+            return "__SKIP__"
+
+        # Humanize
+        return self._humanize(msg)
+
+    def _humanize(self, msg):
+        """Convert log message to user-friendly narrative."""
+        import re
+
+        # Skip internal noise
+        skip = [r'^Using user-agent:', r'^Browser launched \(headless',
+                r'^Loaded \d+ cached', r'^Dedup DB connected', r'^AI model:',
+                r'^Navigated to custom URL:', r'^Navigated to jobs collection:',
+                r'^Searched jobs: keyword=', r'^Scan complete: \d+ unique',
+                r'^Page \d+: scrolling', r'^Page \d+: \+\d+ jobs',
+                r'^No new jobs on page', r'^No .Next. button', r'^Pagination ended',
+                r'^Opened job \d+', r'^No Easy Apply', r"^'Show match details'",
+                r'^Tally report sent:', r'^Notification sent:', r'^Across locations:',
+                r'^Search efficiency:', r'^OR search already found',
+                r'^Already seen \(dedup\):', r'^New discovered:',
+                r'^Retry queue pending:', r'^Daily cap:', r'^Shutdown complete',
+                r'^Browser closed', r'^Running single scan',
+                r'^Search navigation attempt', r'^URL navigation attempt',
+                r'^Collection navigation attempt',
+                r'scanned\.$', r'reached\.$', r'^\d+ page\(s\)\.$',
+                r'^page instead of', r'^scrape\.$',
+                r'^failed:', r'^Call log:', r'^- navigatin',
+                r'^\{.submitted', r'^https://', r'^posting',
+                r'^data_dir=', r'^ication$', r'^Support/',
+                r'^\(Macintosh', r'^AppleWebKit', r'^KHTML']
+        for p in skip:
+            if re.match(p, msg):
+                return ""
+
+        # Pipeline
+        if msg == "Pipeline started":
+            return "\U0001f680 Starting job search..."
+        m = re.match(r'^Search mode: (\w+)', msg)
+        if m:
+            return f"\u26a1 Mode: {m.group(1).title()}"
+        m = re.match(r'^URGENT MODE: max_postings=(\d+)', msg)
+        if m:
+            return f"\U0001f525 Urgent mode \u2014 scanning up to {m.group(1)} jobs"
+        if "Launching browser" in msg:
+            return "\U0001f310 Launching browser..."
+        if re.match(r'^Browser ready', msg):
+            return "\u2705 Browser ready"
+        if "Checking LinkedIn session" in msg:
+            return "\U0001f511 Checking your LinkedIn session..."
+        if "Already logged in" in msg or "LinkedIn connected" in msg:
+            return "\u2705 LinkedIn connected"
+        if "Session expired" in msg:
+            return "\u26a0\ufe0f Session expired \u2014 logging in..."
+
+        # Discovery
+        if "LinkedIn scanning started" in msg:
+            return "\U0001f50d Scanning LinkedIn for jobs..."
+        if "Checking Recommended" in msg:
+            return "\U0001f4cb Checking Recommended jobs..."
+        m = re.match(r"^Combined search \((.+?)\) .+ (\d+) jobs", msg)
+        if m:
+            return f"  \U0001f4cd {m.group(1)} \u2014 {m.group(2)} jobs" if m.group(2) != "0" else f"  \U0001f4cd {m.group(1)} \u2014 no new jobs"
+        m = re.match(r"^'(.+?)' in (.+?) .+ (\d+) new jobs", msg)
+        if m:
+            return f"  \U0001f4cd {m.group(1)} in {m.group(2)} \u2014 {m.group(3)} jobs"
+        if re.match(r"^Searching by keywords:", msg):
+            return "\U0001f50e Searching across keywords & locations..."
+        if re.match(r"^OR search found", msg):
+            return ""
+        m = re.match(r"^Found (\d+) unique jobs", msg)
+        if m:
+            return f"\U0001f4ca Found {m.group(1)} jobs to evaluate"
+        m = re.match(r"^Dedup DB: (\d+)", msg)
+        if m:
+            return f"\U0001f9e0 {m.group(1)} jobs in memory (skipping duplicates)"
+        if "Recommended" in msg and "skipped" in msg:
+            return "  \U0001f4cb Recommended \u2014 unavailable"
+        m = re.search(r"Recommended .+ (\d+) jobs", msg)
+        if m:
+            return f"  \U0001f4cb Recommended \u2014 {m.group(1)} jobs"
+        if re.match(r"^Scanning \d+ custom", msg):
+            return "\U0001f517 Checking custom search URLs..."
+        if "Custom URL" in msg:
+            m = re.search(r"(\d+)", msg)
+            return f"  \U0001f517 Custom URL \u2014 {m.group(1)} jobs" if m and m.group(1) != "0" else "  \U0001f517 Custom URL \u2014 no new jobs"
+
+        # Evaluation
+        m = re.match(r"^Scanning (\d+)/(\d+): (.+?) @ (.+)", msg)
+        if m:
+            return f"\U0001f3af [{m.group(1)}/{m.group(2)}] {m.group(3)} @ {m.group(4)}"
+        if "Already applied" in msg:
+            return "  \u21b3 Already applied \u2014 skipping"
+        if "Match score:" in msg:
+            m = re.search(r"(\d+)%", msg)
+            return f"  \u21b3 Match: {m.group(1)}%" if m else ""
+        if "No score (LinkedIn Premium" in msg:
+            return "  \u21b3 Using keyword matching (no Premium)"
+        if "Fallback score:" in msg:
+            m = re.search(r"(\d+)%", msg)
+            return f"  \u21b3 Match: {m.group(1)}% (keyword)" if m else ""
+        if "Not worth applying" in msg:
+            m = re.search(r"(\d+)% < (\d+)%", msg)
+            if m:
+                return f"  \u21b3 \u274c Skipped \u2014 {m.group(1)}% below {m.group(2)}% threshold"
+            return "  \u21b3 \u274c Below threshold"
+        if "Worth applying" in msg and "DRY RUN" in msg:
+            return "  \u21b3 \u2705 Qualifies! (dry run \u2014 not submitting)"
+        if "Worth applying" in msg and "submitting" in msg:
+            return "  \u21b3 \u2705 Submitting application..."
+        if "Applied successfully" in msg:
+            return "  \u21b3 \U0001f389 Applied!"
+        if "External apply" in msg:
+            return "  \u21b3 \U0001f517 External link saved"
+        if "Paused" in msg and "human input" in msg:
+            return "  \u21b3 \u23f8\ufe0f Needs your input"
+
+        # Summary section
+        if msg.startswith("\u2500") or msg == "SUMMARY:":
+            return ""
+        m = re.match(r"^Total jobs found:\s+(\d+)", msg)
+        if m:
+            return f"\n\U0001f4ca Run complete \u2014 {m.group(1)} jobs found"
+        m = re.match(r"^Applied/would apply:\s+(\d+)", msg)
+        if m:
+            return f"  \u2705 Qualified: {m.group(1)}" if m.group(1) != "0" else ""
+        m = re.match(r"^Skipped \(low score\):\s+(\d+)", msg)
+        if m:
+            return f"  \u23ed\ufe0f Skipped: {m.group(1)}" if m.group(1) != "0" else ""
+        m = re.match(r"^External \(manual\):\s+(\d+)", msg)
+        if m:
+            return f"  \U0001f517 External: {m.group(1)}" if m.group(1) != "0" else ""
+            return f"  \U0001f517 External: {m.group(1)}" if m.group(1) != "0" else ""
+
+        # End
+        if "Scan cycle complete" in msg:
+            return "\u2705 Done!"
+        if "Shutting down" in msg:
+            return "\U0001f44b Shutting down"
+        if "Checking application response" in msg:
+            return "\U0001f4cb Checking for responses..."
+        if "Could not check" in msg:
+            return ""
+        if "Session invalid" in msg:
+            return "\u26a0\ufe0f Session expired \u2014 please log in to LinkedIn manually"
+        if "Daily application cap" in msg:
+            return "\U0001f6d1 Daily limit reached"
+
+        # Default: pass through if short, skip if looks internal
+        if re.match(r'^\w+\.py:\d+', msg) or len(msg) > 200:
+            return ""
+        return msg
+
+    def _summarize_traceback(self, lines):
+        """One-line user summary from a traceback."""
+        import re
+        text = "\n".join(lines)
+        m = re.search(r'(TimeoutError|Error|Exception)[:\s]+(.+?)(?:\n|$)', text)
+        if m:
+            err = m.group(2).strip()[:100]
+            if "Timeout" in m.group(1):
+                if "search" in text:
+                    return "\u26a0\ufe0f Search page timed out \u2014 retrying..."
+                return "\u26a0\ufe0f Page timed out"
+            if "context was destroyed" in err.lower() or "Protocol error" in err:
+                return ""
+            if "net::ERR" in err:
+                return "\u26a0\ufe0f Network error"
+            return f"\u26a0\ufe0f {err[:80]}"
+        return ""
 
     # ------------------------------------------------------------------
     # Run persistence

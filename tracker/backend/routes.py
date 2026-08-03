@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -706,6 +706,61 @@ def check_linkedin_session():
     }
 
 
+@router.get("/agent/screenshot")
+def get_agent_screenshot():
+    """Get the latest pipeline screenshot as base64."""
+    import base64
+    from pathlib import Path
+
+    screenshot_dir = Path(__file__).parent.parent.parent / "screenshots"
+    if not screenshot_dir.exists():
+        # Try the standard location
+        from platformdirs import user_data_dir
+        screenshot_dir = Path(user_data_dir("linkedin_agent", "linkedin_agent")) / "screenshots"
+
+    if not screenshot_dir.exists():
+        return {"image": None, "timestamp": None, "filename": None}
+
+    # Get the most recent .png
+    screenshots = sorted(screenshot_dir.glob("*.png"), key=lambda f: f.stat().st_mtime, reverse=True)
+    if not screenshots:
+        return {"image": None, "timestamp": None, "filename": None}
+
+    latest = screenshots[0]
+    with open(latest, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    return {
+        "image": f"data:image/png;base64,{b64}",
+        "timestamp": latest.stat().st_mtime,
+        "filename": latest.name,
+    }
+
+
+@router.post("/agent/screenshot")
+async def upload_agent_screenshot(request: Request):
+    """Receive a screenshot from the debug pipeline."""
+    import base64
+    from pathlib import Path
+
+    data = await request.json()
+    image_b64 = data.get("image", "")
+    name = data.get("name", "pipeline_step")
+
+    screenshot_dir = Path(__file__).parent.parent.parent / "screenshots"
+    screenshot_dir.mkdir(parents=True, exist_ok=True)
+
+    filepath = screenshot_dir / f"{name}.png"
+    img_data = base64.b64decode(image_b64)
+    filepath.write_bytes(img_data)
+
+    # Push WebSocket event so frontend refreshes
+    from websocket_routes import push_event
+    await push_event("screenshot", message=name)
+
+    return {"ok": True, "path": str(filepath)}
+
+
 @router.get("/agent/output")
 def get_agent_output(tail: int = 50):
     """Get recent agent stdout output (last N lines)."""
@@ -746,6 +801,19 @@ def get_agent_run(run_id: str, db: Session = Depends(get_db)):
     run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
+
+    output_log = run.output_log or ""
+
+    # If run is still active, grab live output from the controller buffer
+    if run.status == "running" and not output_log:
+        try:
+            from agent_control import get_controller
+            controller = get_controller()
+            if controller._status.run_id == run_id:
+                output_log = "\n".join(controller.output)
+        except Exception:
+            pass
+
     return {
         "id": run.id,
         "started_at": run.started_at.isoformat() if run.started_at else None,
@@ -763,6 +831,392 @@ def get_agent_run(run_id: str, db: Session = Depends(get_db)):
         "jobs_errored": run.jobs_errored,
         "duration_seconds": run.duration_seconds,
         "error_message": run.error_message,
+        "output_log": output_log,
+    }
+
+
+def _parse_pipeline_steps(output: str) -> list:
+    """Parse agent output into GitHub Actions-style named steps with sub-steps, durations, and logs."""
+    import re
+    from datetime import datetime
+
+    lines = [l for l in output.split("\n") if l.strip()]
+    if not lines:
+        return []
+
+    def extract_time(line):
+        m = re.search(r'\[?(\d{2}/\d{2}/\d{2})\s+(\d{2}:\d{2}:\d{2})\]?', line)
+        if m:
+            try:
+                return datetime.strptime(f"{m.group(1)} {m.group(2)}", "%m/%d/%y %H:%M:%S")
+            except Exception:
+                pass
+        return None
+
+    def clean_line(line):
+        line = re.sub(r'^\[?\d{2}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2}\]?\s*', '', line)
+        line = re.sub(r'^(INFO|WARNING|ERROR|DEBUG|CRITICAL)\s+', '', line)
+        line = re.sub(r'\s+\w+\.py:\d+\s*$', '', line)
+        line = re.sub(r'\s{3,}', '  ', line).strip()
+        return line
+
+    # Parse ALL lines into timestamped entries
+    entries = []
+    for line in lines:
+        ts = extract_time(line)
+        cleaned = clean_line(line)
+        if cleaned and len(cleaned) > 1:
+            entries.append({"ts": ts, "raw": line, "text": cleaned})
+
+    if not entries:
+        return []
+
+    # Define step boundaries
+    step_defs = [
+        {"id": "init", "icon": "🚀", "name": "Initialize Pipeline",
+         "trigger": r"(Pipeline started|Starting job search|Running single scan|Search mode:|URGENT MODE)"},
+        {"id": "browser", "icon": "🌐", "name": "Launch Browser",
+         "trigger": r"(Launching browser|Browser launched|Browser ready)"},
+        {"id": "session", "icon": "🔑", "name": "Verify LinkedIn Session",
+         "trigger": r"(Checking.*session|LinkedIn connected|Already logged in|Session expired|Logging in|logged in)"},
+        {"id": "discover", "icon": "🔍", "name": "Discover Jobs",
+         "trigger": r"(LinkedIn scanning|Checking Recommended|Searching by keywords|Across locations)"},
+        {"id": "search", "icon": "📡", "name": "Search & Collect",
+         "trigger": r"(Combined search|Searched jobs|custom URL|Custom URL|individual search|OR search)"},
+        {"id": "evaluate", "icon": "🎯", "name": "Evaluate & Score Jobs",
+         "trigger": r"(Found \d+ unique|Scanning \d+/\d+|Dedup DB:)"},
+        {"id": "decide", "icon": "📝", "name": "Score & Decide",
+         "trigger": r"(Fallback score|Match score|Not worth|Worth applying|Applied|External apply|Paused)"},
+        {"id": "summary", "icon": "📊", "name": "Generate Report",
+         "trigger": r"(SUMMARY:|Total jobs found:|─{5,}|Tally report)"},
+        {"id": "status_check", "icon": "📋", "name": "Check Responses",
+         "trigger": r"(Checking application response|application statuses)"},
+        {"id": "shutdown", "icon": "🏁", "name": "Shutdown & Cleanup",
+         "trigger": r"(Scan cycle complete|Shutting down|Shutdown complete|Browser closed|Agent shutting)"},
+    ]
+
+    # Assign entries to steps
+    steps = []
+    current_step = None
+    current_entries = []
+
+    for entry in entries:
+        matched_def = None
+        for sdef in step_defs:
+            if re.search(sdef["trigger"], entry["text"]):
+                if current_step and current_step["id"] == sdef["id"]:
+                    break  # Same step, don't re-trigger
+                matched_def = sdef
+                break
+
+        if matched_def:
+            # Finalize previous step
+            if current_step and current_entries:
+                steps.append(_finalize_step(current_step, current_entries))
+            current_step = {"id": matched_def["id"], "icon": matched_def["icon"], "name": matched_def["name"]}
+            current_entries = [entry]
+        elif current_step:
+            current_entries.append(entry)
+
+    # Finalize last step
+    if current_step and current_entries:
+        steps.append(_finalize_step(current_step, current_entries))
+
+    # Number steps
+    for i, s in enumerate(steps):
+        s["number"] = i + 1
+
+    return steps
+
+
+def _finalize_step(step_def, entries):
+    """Build a step object with sub-steps, duration, status, and logs."""
+    import re
+
+    # Duration from first to last timestamp
+    times = [e["ts"] for e in entries if e["ts"]]
+    duration = None
+    start_time = None
+    end_time = None
+    if len(times) >= 2:
+        duration = int((times[-1] - times[0]).total_seconds())
+        start_time = times[0].strftime("%H:%M:%S")
+        end_time = times[-1].strftime("%H:%M:%S")
+    elif len(times) == 1:
+        start_time = times[0].strftime("%H:%M:%S")
+        duration = 0
+
+    # Build sub-steps: each log line becomes a sub-step with its own duration
+    sub_steps = []
+    for i, entry in enumerate(entries):
+        text = entry["text"]
+        if not text or len(text) < 2:
+            continue
+
+        # Calculate duration to next entry
+        sub_dur = None
+        if entry["ts"] and i + 1 < len(entries) and entries[i + 1]["ts"]:
+            sub_dur = int((entries[i + 1]["ts"] - entry["ts"]).total_seconds())
+
+        # Determine sub-step status
+        sub_status = "success"
+        if re.search(r'error|failed|exception', text, re.I):
+            sub_status = "error"
+        elif re.search(r'warn|expired|invalid|blocked|could not|abort', text, re.I):
+            sub_status = "warning"
+
+        sub_steps.append({
+            "text": text,
+            "duration_seconds": sub_dur,
+            "timestamp": entry["ts"].strftime("%H:%M:%S") if entry["ts"] else None,
+            "status": sub_status,
+        })
+
+    # Overall step status
+    status = "success"
+    for ss in sub_steps:
+        if ss["status"] == "error":
+            status = "error"
+            break
+        if ss["status"] == "warning":
+            status = "warning"
+
+    return {
+        **step_def,
+        "duration_seconds": duration,
+        "start_time": start_time,
+        "end_time": end_time,
+        "status": status,
+        "sub_steps": sub_steps,
+        "log_count": len(sub_steps),
+    }
+
+
+@router.get("/agent/runs/{run_id}/analysis")
+def get_run_analysis(run_id: str, db: Session = Depends(get_db)):
+    """Parse run output_log into structured job events for the Analysis Mode view."""
+    import re
+    from models import AgentRun
+
+    run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    output = run.output_log or ""
+
+    # If run is still active, grab live output from the controller buffer
+    if run.status == "running" and not output:
+        try:
+            from agent_control import get_controller
+            controller = get_controller()
+            if controller._status.run_id == run_id:
+                output = "\n".join(controller.output)
+        except Exception:
+            pass
+
+    lines = output.split("\n")
+
+    # --- Parse into GitHub Actions-style pipeline steps ---
+    steps = _parse_pipeline_steps(output)
+
+    # --- Parse pipeline phases ---
+    phases = []
+    phase_patterns = [
+        (r"Pipeline started", "pipeline_start", "Pipeline Initialized"),
+        (r"Launching browser", "browser_launch", "Launching Browser"),
+        (r"Browser ready \(([0-9.]+)s\)", "browser_ready", "Browser Ready"),
+        (r"LinkedIn connected", "linkedin_connected", "LinkedIn Connected"),
+        (r"LinkedIn scanning started", "scanning_start", "Discovery Phase Started"),
+        (r"Found (\d+) unique jobs", "discovery_complete", "Discovery Complete"),
+        (r"Dedup DB: (\d+) jobs previously seen", "dedup_loaded", "Dedup Database Loaded"),
+    ]
+
+    for line in lines:
+        for pattern, phase_id, label in phase_patterns:
+            m = re.search(pattern, line)
+            if m:
+                detail = m.group(1) if m.lastindex else None
+                phases.append({"id": phase_id, "label": label, "detail": detail})
+                break
+
+    # --- Parse individual job events ---
+    jobs = []
+    current_job = None
+
+    for line in lines:
+        # Detect "Scanning N/M: Title @ Company"
+        scan_match = re.search(r"Scanning (\d+)/(\d+): (.+?) @ (.+)", line)
+        if scan_match:
+            if current_job:
+                jobs.append(current_job)
+            current_job = {
+                "index": int(scan_match.group(1)),
+                "total": int(scan_match.group(2)),
+                "title": scan_match.group(3).strip(),
+                "company": scan_match.group(4).strip(),
+                "score": None,
+                "score_method": None,
+                "decision": None,
+                "reason": None,
+                "events": [],
+            }
+            continue
+
+        if not current_job:
+            continue
+
+        # Score detection
+        score_match = re.search(r"Match score: (\d+)/(\d+) = (\d+)%", line)
+        if score_match:
+            current_job["score"] = int(score_match.group(3)) / 100
+            current_job["score_method"] = "premium"
+            current_job["events"].append({"type": "score", "detail": f"{score_match.group(1)}/{score_match.group(2)} = {score_match.group(3)}%"})
+            continue
+
+        fallback_match = re.search(r"Fallback score: (\d+)% \(keyword match\)", line)
+        if fallback_match:
+            current_job["score"] = int(fallback_match.group(1)) / 100
+            current_job["score_method"] = "fallback"
+            current_job["events"].append({"type": "score", "detail": f"{fallback_match.group(1)}% (keyword match)"})
+            continue
+
+        # No score available
+        if re.search(r"No score \(LinkedIn Premium needed\)", line):
+            current_job["events"].append({"type": "no_score", "detail": "LinkedIn Premium needed"})
+            continue
+
+        # Decision outcomes
+        if re.search(r"Worth applying.*DRY RUN", line):
+            current_job["decision"] = "would_apply"
+            current_job["reason"] = "Score meets threshold (dry run)"
+            current_job["events"].append({"type": "decision", "detail": "Would apply (dry run)"})
+            continue
+
+        if re.search(r"Worth applying.*submitting", line):
+            current_job["decision"] = "applying"
+            current_job["events"].append({"type": "decision", "detail": "Submitting application"})
+            continue
+
+        if re.search(r"Applied successfully", line):
+            current_job["decision"] = "applied"
+            current_job["reason"] = "Application submitted"
+            current_job["events"].append({"type": "applied", "detail": "Application submitted successfully"})
+            continue
+
+        if re.search(r"Not worth applying \((\d+)% < (\d+)%\)", line):
+            m2 = re.search(r"Not worth applying \((\d+)% < (\d+)%\)", line)
+            current_job["decision"] = "skipped"
+            current_job["reason"] = f"Score {m2.group(1)}% below threshold {m2.group(2)}%"
+            current_job["events"].append({"type": "decision", "detail": f"Skipped — {m2.group(1)}% < {m2.group(2)}%"})
+            continue
+
+        if re.search(r"Already applied", line):
+            current_job["decision"] = "skipped"
+            current_job["reason"] = "Already applied"
+            current_job["events"].append({"type": "decision", "detail": "Already applied"})
+            continue
+
+        if re.search(r"External apply", line):
+            ext_match = re.search(r"External apply: (.+)", line)
+            current_job["decision"] = "external"
+            current_job["reason"] = "External application link"
+            url = ext_match.group(1).strip() if ext_match else None
+            current_job["external_url"] = url
+            current_job["events"].append({"type": "external", "detail": url or "External link"})
+            continue
+
+        if re.search(r"Paused.*human input", line):
+            current_job["decision"] = "paused"
+            current_job["reason"] = "Needs human input"
+            current_job["events"].append({"type": "paused", "detail": "Awaiting human input"})
+            continue
+
+        if re.search(r"Error:", line):
+            err_match = re.search(r"Error: (.+)", line)
+            current_job["decision"] = "error"
+            current_job["reason"] = err_match.group(1).strip() if err_match else "Unknown error"
+            current_job["events"].append({"type": "error", "detail": current_job["reason"]})
+            continue
+
+    if current_job:
+        jobs.append(current_job)
+
+    # --- Generate summary insights ---
+    total_jobs_found = 0
+    found_match = re.search(r"Found (\d+) unique jobs", output)
+    if found_match:
+        total_jobs_found = int(found_match.group(1))
+
+    dedup_count = 0
+    dedup_match = re.search(r"Dedup DB: (\d+) jobs previously seen", output)
+    if dedup_match:
+        dedup_count = int(dedup_match.group(1))
+
+    applied_jobs = [j for j in jobs if j["decision"] in ("applied", "would_apply")]
+    skipped_jobs = [j for j in jobs if j["decision"] == "skipped"]
+    external_jobs = [j for j in jobs if j["decision"] == "external"]
+    paused_jobs = [j for j in jobs if j["decision"] == "paused"]
+    error_jobs = [j for j in jobs if j["decision"] == "error"]
+
+    scores = [j["score"] for j in jobs if j["score"] is not None]
+    avg_score = sum(scores) / len(scores) if scores else None
+    top_match = max(scores) if scores else None
+
+    # Companies breakdown
+    companies = {}
+    for j in jobs:
+        co = j.get("company", "Unknown")
+        if co not in companies:
+            companies[co] = {"applied": 0, "skipped": 0, "external": 0, "total": 0}
+        companies[co]["total"] += 1
+        if j["decision"] in ("applied", "would_apply"):
+            companies[co]["applied"] += 1
+        elif j["decision"] == "skipped":
+            companies[co]["skipped"] += 1
+        elif j["decision"] == "external":
+            companies[co]["external"] += 1
+
+    # Search sources
+    sources = []
+    for line in lines:
+        rec_match = re.search(r"Recommended → (\d+) jobs", line)
+        if rec_match:
+            sources.append({"source": "Recommended", "count": int(rec_match.group(1))})
+        combined_match = re.search(r"Combined search \((.+?)\) → (\d+) jobs", line)
+        if combined_match:
+            sources.append({"source": f"Search: {combined_match.group(1)}", "count": int(combined_match.group(2))})
+        kw_match = re.search(r"'(.+?)' in (.+?) → (\d+) new jobs", line)
+        if kw_match:
+            sources.append({"source": f"{kw_match.group(1)} in {kw_match.group(2)}", "count": int(kw_match.group(3))})
+
+    return {
+        "run_id": run.id,
+        "status": run.status,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+        "duration_seconds": run.duration_seconds,
+        "mode": run.mode,
+        "dry_run": run.dry_run,
+        "match_threshold": run.match_threshold,
+        "collection": run.collection,
+        "error_message": run.error_message,
+        "summary": {
+            "total_discovered": total_jobs_found,
+            "dedup_database_size": dedup_count,
+            "jobs_evaluated": len(jobs),
+            "applied": len(applied_jobs),
+            "skipped": len(skipped_jobs),
+            "external": len(external_jobs),
+            "paused": len(paused_jobs),
+            "errors": len(error_jobs),
+            "avg_score": round(avg_score * 100) if avg_score else None,
+            "top_score": round(top_match * 100) if top_match else None,
+        },
+        "phases": phases,
+        "steps": steps,
+        "jobs": jobs,
+        "companies": companies,
+        "sources": sources,
         "output_log": run.output_log,
     }
 

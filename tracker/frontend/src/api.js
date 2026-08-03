@@ -114,6 +114,12 @@ export async function getAgentRunDetail(runId) {
   return res.json();
 }
 
+export async function getRunAnalysis(runId) {
+  const res = await fetch(`${BASE_URL}/agent/runs/${runId}/analysis`);
+  if (!res.ok) throw new Error('Failed to get run analysis');
+  return res.json();
+}
+
 export async function diagnoseRun(runId) {
   const res = await fetch(`${BASE_URL}/agent/diagnose/${runId}`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to diagnose');

@@ -22,8 +22,25 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create database tables on startup."""
+    """Create database tables on startup + cleanup orphaned runs."""
     Base.metadata.create_all(bind=engine)
+
+    # Fix any runs stuck as "running" from previous crashes/restarts
+    try:
+        from database import SessionLocal
+        from datetime import datetime
+        db = SessionLocal()
+        orphaned = db.query(AgentRun).filter(AgentRun.status == "running").all()
+        for run in orphaned:
+            run.status = "stopped"
+            run.finished_at = run.finished_at or datetime.now()
+            run.error_message = run.error_message or "Process terminated (server restarted)"
+        if orphaned:
+            db.commit()
+        db.close()
+    except Exception:
+        pass
+
     yield
 
 

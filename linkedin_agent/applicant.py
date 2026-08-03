@@ -162,8 +162,8 @@ class ApplicationExecutor:
                     location=location,
                 )
 
-            # Step b: Get match score
-            match_score = await self.matcher.score_job(job)
+            # Step b: Get match score (already computed by orchestrator)
+            match_score = job.get("match_score")
             threshold = self.job_search.get("match_threshold", 0.80)
 
             if match_score is not None and match_score < threshold:

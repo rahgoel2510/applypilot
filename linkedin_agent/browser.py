@@ -156,7 +156,7 @@ class LinkedInBrowser:
 
     Usage:
         browser = LinkedInBrowser()
-        await browser.launch(headless=True)
+        await browser.launch(headless=False)
         await browser.login(email, password)
         ...
         await browser.close()
@@ -179,11 +179,12 @@ class LinkedInBrowser:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    async def launch(self, headless: bool = True) -> None:
+    async def launch(self, headless: bool = False) -> None:
         """Launch browser with persistent context for session reuse.
 
         Args:
-            headless: Run in headless mode (default True). Set False for debugging.
+            headless: Run in headless mode. Default False because LinkedIn
+                      actively blocks headless browsers via authwall detection.
         """
         # Ensure data directories exist
         BROWSER_DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -251,7 +252,7 @@ class LinkedInBrowser:
         current_url = page.url.lower()
 
         # Check for login page redirect (session expired)
-        if "/login" in current_url or "/uas/login" in current_url:
+        if "/login" in current_url or "/uas/login" in current_url or "/authwall" in current_url:
             if "/feed" not in current_url:
                 logger.warning("Session health: login page detected (session expired). URL: %s", page.url)
                 return False
@@ -396,6 +397,20 @@ class LinkedInBrowser:
         # Wait up to 15s for feed page (Docker network can be slow)
         try:
             await page.wait_for_url("**/feed/**", timeout=15000)
+            # Double-check we're not on a login redirect
+            current = page.url
+            if "/login" in current or "/checkpoint" in current or "/authwall" in current:
+                raise PlaywrightTimeout("Redirected to login")
+
+            # Deep validation: verify jobs section is also accessible
+            # LinkedIn sometimes keeps feed alive but blocks jobs (anti-scraping)
+            await page.goto("https://www.linkedin.com/jobs/", wait_until="domcontentloaded", timeout=20000)
+            await asyncio.sleep(2)
+            jobs_url = page.url
+            if "/login" in jobs_url or "/checkpoint" in jobs_url or "/authwall" in jobs_url:
+                logger.warning("Feed session valid but jobs section requires re-auth.")
+                raise PlaywrightTimeout("Jobs section requires login")
+
             logger.info("Already logged in (session persisted). (%.1fs)", _time.time()-t0)
             return
         except PlaywrightTimeout:
@@ -403,7 +418,7 @@ class LinkedInBrowser:
 
         # Double-check current URL after wait
         current = page.url
-        if "/feed" in current and "/login" not in current:
+        if "/feed" in current and "/login" not in current and "/authwall" not in current:
             logger.info("Already logged in (session persisted). (%.1fs)", _time.time()-t0)
             return
 
@@ -520,7 +535,20 @@ class LinkedInBrowser:
         collection_slug = collection.lower().replace(" ", "-")
         url = f"{LINKEDIN_JOBS}collections/{collection_slug}/"
 
-        await page.goto(url, wait_until="domcontentloaded")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=90000)
+                break
+            except Exception as nav_err:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Collection navigation attempt %d/%d failed: %s. Retrying...",
+                        attempt + 1, max_retries, str(nav_err)[:60]
+                    )
+                    await _human_delay(3, 6)
+                else:
+                    raise
         await _human_delay()
 
         logger.info("Navigated to jobs collection: %s", collection)
@@ -564,7 +592,27 @@ class LinkedInBrowser:
         # params["f_AL"] = "true"  # Disabled: let agent check per-job for more results
 
         search_url = f"{LINKEDIN_JOBS}search/?{urllib.parse.urlencode(params)}"
-        await page.goto(search_url, wait_until="domcontentloaded")
+
+        # Retry navigation with increased timeout — LinkedIn search can be slow
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await page.goto(search_url, wait_until="domcontentloaded", timeout=90000)
+                break
+            except Exception as nav_err:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Search navigation attempt %d/%d failed: %s. Retrying...",
+                        attempt + 1, max_retries, str(nav_err)[:60]
+                    )
+                    await _human_delay(3, 6)
+                else:
+                    logger.error(
+                        "Search navigation failed after %d attempts: %s",
+                        max_retries, str(nav_err)[:80]
+                    )
+                    raise
+
         await _human_delay(2, 4)
 
         logger.info(
@@ -579,7 +627,20 @@ class LinkedInBrowser:
             url: Full LinkedIn job search URL (supports boolean queries, alerts, etc.)
         """
         page = self.page
-        await page.goto(url, wait_until="domcontentloaded")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=90000)
+                break
+            except Exception as nav_err:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "URL navigation attempt %d/%d failed: %s. Retrying...",
+                        attempt + 1, max_retries, str(nav_err)[:60]
+                    )
+                    await _human_delay(3, 6)
+                else:
+                    raise
         await _human_delay(2, 4)
         logger.info("Navigated to custom URL: %s", url[:80])
 
@@ -604,30 +665,41 @@ class LinkedInBrowser:
         seen_ids: set[str] = set()
         page_num = 1
 
+        # Quick session check — if we got redirected to login, abort early
+        current_url = page.url
+        if "/login" in current_url or "/checkpoint" in current_url or "/authwall" in current_url:
+            logger.warning("Session invalid — landed on login page instead of jobs. Aborting scrape.")
+            return listings
+
         while len(listings) < max_count:
             # Scroll the list container to load all lazy cards
             logger.info("  Page %d: scrolling to load cards...", page_num)
             prev_count = 0
-            for scroll_attempt in range(20):
+            for scroll_attempt in range(30):
                 await page.evaluate('''() => {
                     const list = document.querySelector('.scaffold-layout__list')
                         || document.querySelector('[class*="scaffold-layout__list"]')
                         || document.querySelector('.jobs-search-results-list');
-                    if (list) { list.scrollTop += 600; return; }
+                    if (list) { list.scrollTop += 400; return; }
                     const main = document.querySelector('main');
-                    if (main) { main.scrollTop += 600; return; }
-                    window.scrollBy(0, 600);
+                    if (main) { main.scrollTop += 400; return; }
+                    window.scrollBy(0, 400);
                 }''')
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(0.6)
 
                 # Check if new links loaded
                 current_links = await page.query_selector_all("a[href*='/jobs/view/']")
                 if len(current_links) > prev_count:
                     prev_count = len(current_links)
-                elif scroll_attempt > 5:
-                    break  # No new cards loading, stop scrolling
+                elif scroll_attempt > 10:
+                    # No new cards for several attempts — wait a bit more then stop
+                    await asyncio.sleep(1.5)
+                    final_check = await page.query_selector_all("a[href*='/jobs/view/']")
+                    if len(final_check) <= prev_count:
+                        break
+                    prev_count = len(final_check)
 
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
 
             # Collect all job links on this page
             job_links = await page.query_selector_all("a[href*='/jobs/view/']")
