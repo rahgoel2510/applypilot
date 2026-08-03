@@ -631,20 +631,52 @@ export default function Dashboard() {
                     </Stack>
                     <Collapse in={isExpanded}>
                       <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px solid #f0f0f0' }}>
+                        {/* Primary actions */}
                         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                           <Button size="small" variant="contained" startIcon={<OpenInNewIcon />}
                             href={job.posting_url || `https://www.linkedin.com/jobs/view/${job.id}/`} target="_blank"
                             onClick={(e) => e.stopPropagation()}
                             sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.73rem', borderRadius: '8px', bgcolor: scoreColor, '&:hover': { bgcolor: scoreColor + 'cc' } }}>
-                            {scorePct >= 80 ? 'Apply Now' : 'View Listing'}
+                            {job.stage === 'applied' ? 'View Application' : scorePct >= 80 ? 'Apply Now' : 'View Listing'}
                           </Button>
                           {!job.inmail && scorePct >= 70 && (
                             <Button size="small" variant="outlined" onClick={(e) => e.stopPropagation()}
                               sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.72rem', borderRadius: '8px' }}>✉️ Draft InMail</Button>
                           )}
-                          <Button size="small" onClick={(e) => e.stopPropagation()}
-                            sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.72rem', color: '#9ca3af' }}>Dismiss</Button>
                         </Stack>
+
+                        {/* Stage change buttons */}
+                        <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px dashed #e5e7eb' }}>
+                          <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: '#9ca3af', mb: 0.75, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Move to:
+                          </Typography>
+                          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                            {[
+                              { stage: 'applied', label: '✅ Applied', show: job.stage !== 'applied' },
+                              { stage: 'interviewing', label: '🎤 Interviewing', show: job.stage === 'applied' },
+                              { stage: 'offered', label: '🎉 Offered', show: job.stage === 'interviewing' },
+                              { stage: 'rejected', label: '❌ Rejected', show: ['applied', 'interviewing'].includes(job.stage) },
+                              { stage: 'saved', label: '📌 Saved', show: job.stage === 'discovered' },
+                            ].filter(s => s.show).map(s => (
+                              <Chip key={s.stage} label={s.label} size="small" clickable
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    await fetch(`/api/jobs/${job.id}`, {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ stage: s.stage }),
+                                    });
+                                    loadData(); // Refresh
+                                  } catch (err) { console.error(err); }
+                                }}
+                                sx={{ height: 24, fontSize: '0.68rem', fontWeight: 600, border: '1px solid #e5e7eb', '&:hover': { bgcolor: '#667eea10', borderColor: '#667eea50' } }}
+                              />
+                            ))}
+                          </Stack>
+                        </Box>
+
+                        {/* InMail preview */}
                         {job.inmail?.draft_preview && (
                           <Box sx={{ mt: 1.5, p: 1.5, borderRadius: '8px', bgcolor: '#faf8ff', border: '1px solid #ede9fe' }}>
                             <Typography sx={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600 }}>✉️ InMail to {job.inmail.recruiter}:</Typography>
