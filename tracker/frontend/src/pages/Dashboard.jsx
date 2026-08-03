@@ -964,7 +964,7 @@ export default function Dashboard() {
                 <Box sx={{ mb: 2.5, p: 2, borderRadius: '10px', bgcolor: '#f9fafb', border: '1px dashed #d1d5db' }}>
                   <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#9ca3af' }}>📄 Job Description</Typography>
                   <Typography sx={{ fontSize: '0.78rem', color: '#6b7280', mt: 0.5 }}>
-                    {job.notes || 'JD capture coming in next update — for now, click "View on LinkedIn" below.'}
+                    {job.notes || 'View the full job description on LinkedIn.'}
                   </Typography>
                 </Box>
 

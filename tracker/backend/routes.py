@@ -116,16 +116,11 @@ def list_jobs_enriched(
         score = job.match_score
         score_pct = round(score * 100) if score and score <= 1 else round(score) if score else None
 
-        # Match reason — honest about what we know
+        # Match reason — only show what we factually know
         match_reason = None
-        if score_pct is not None and score_pct > 0:
-            if score_pct == 100:
-                match_reason = "Scored 100% — all required qualifications matched by LinkedIn AI or keyword analysis"
-            elif score_pct >= 80:
-                match_reason = f"Scored {score_pct}% — strong alignment with your profile. View listing for full requirements."
-            elif score_pct >= 60:
-                match_reason = f"Scored {score_pct}% — partial alignment. Some required skills may be missing from your profile."
-            # Below 60% — don't show reason, score speaks for itself
+        # We don't show a reason because we can't honestly explain WHY yet.
+        # The score is displayed separately. When JD capture + skill extraction
+        # is implemented, this will contain real skill-level explanations.
 
         # Check InMail
         inmail_key = f"{job.title}::{job.company}".lower()
