@@ -53,44 +53,28 @@ const DAYS_OF_MONTH = Array.from({ length: 31 }, (_, i) => i + 1);
 
 const styles = {
   container: {
-    backgroundColor: '#fafbfc',
-    borderRadius: '12px',
-    border: '1px solid #e8ebf0',
     p: 3,
     width: '100%',
   },
   containerCompact: {
-    backgroundColor: 'transparent',
     p: 0,
     width: '100%',
   },
-  card: {
-    border: '1px solid #e8ebf0',
-    borderRadius: '12px',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-    backgroundColor: '#ffffff',
-  },
-  activeCard: {
-    border: '1px solid #b3d4fc',
-    borderRadius: '12px',
-    boxShadow: '0 2px 8px rgba(99,149,236,0.10)',
-    backgroundColor: '#f0f6ff',
-  },
+  card: {},
+  activeCard: {},
   sectionTitle: {
     fontWeight: 600,
-    fontSize: '0.95rem',
-    color: '#3a4a5c',
+    fontSize: '0.9rem',
+    color: 'text.primary',
   },
   translatorValid: {
-    backgroundColor: '#e8f8e8',
-    border: '1px solid #b8e6b8',
+    backgroundColor: '#f0fdf4',
     borderRadius: '8px',
     p: 1.5,
     mt: 1,
   },
   translatorInvalid: {
-    backgroundColor: '#fde8e8',
-    border: '1px solid #f5b8b8',
+    backgroundColor: '#fef2f2',
     borderRadius: '8px',
     p: 1.5,
     mt: 1,
@@ -98,13 +82,10 @@ const styles = {
   chip: {
     borderRadius: '8px',
     fontWeight: 500,
-    px: 1,
   },
   chipActive: {
     borderRadius: '8px',
     fontWeight: 600,
-    px: 1,
-    backgroundColor: '#e3edfc',
     color: '#3b6cb7',
     borderColor: '#b3d4fc',
   },
@@ -336,7 +317,7 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
         )}
 
         {/* Mode Toggle */}
-        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+        <Box>
           <ToggleButtonGroup
             value={mode}
             exclusive
@@ -345,17 +326,9 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
             sx={{
               '& .MuiToggleButton-root': {
                 px: 3,
-                py: 0.8,
-                borderRadius: '8px',
+                py: 0.75,
                 textTransform: 'none',
-                fontWeight: 500,
-                border: '1px solid #e8ebf0',
-                '&.Mui-selected': {
-                  backgroundColor: '#e3edfc',
-                  color: '#3b6cb7',
-                  borderColor: '#b3d4fc',
-                  '&:hover': { backgroundColor: '#d4e4fa' },
-                },
+                fontWeight: 600,
               },
             }}
           >
@@ -366,8 +339,8 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
 
         {/* ═══ BASIC MODE ═══ */}
         {mode === 'basic' && (
-          <Card sx={styles.card}>
-            <CardContent sx={{ p: compact ? 2 : 3 }}>
+          <Box>
+            <Box sx={{ pb: 2.5, mb: 2.5, borderBottom: "1px solid", borderColor: "divider" }}>
               <Stack spacing={spacing}>
                 {/* Frequency selector */}
                 <Box>
@@ -540,14 +513,14 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
                   </Box>
                 )}
               </Stack>
-            </CardContent>
-          </Card>
+            </Box>
+          </Box>
         )}
 
         {/* ═══ ADVANCED MODE ═══ */}
         {mode === 'advanced' && (
-          <Card sx={styles.card}>
-            <CardContent sx={{ p: compact ? 2 : 3 }}>
+          <Box>
+            <Box sx={{ pb: 2.5, mb: 2.5, borderBottom: "1px solid", borderColor: "divider" }}>
               <Stack spacing={spacing}>
                 <Stack direction="row" alignItems="center">
                   <Typography sx={styles.sectionTitle}>Cron Expression</Typography>
@@ -588,8 +561,8 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
                   Use * for any, */n for every n, ranges (1-5), or lists (1,3,5)
                 </Typography>
               </Stack>
-            </CardContent>
-          </Card>
+            </Box>
+          </Box>
         )}
 
         {/* ═══ LIVE TRANSLATOR ═══ */}
@@ -608,8 +581,8 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
         </Box>
 
         {/* ═══ TIMEZONE SELECTOR ═══ */}
-        <Card sx={styles.card}>
-          <CardContent sx={{ p: compact ? 2 : 3 }}>
+        <Box>
+          <Box sx={{ pb: 2.5, mb: 2.5, borderBottom: "1px solid", borderColor: "divider" }}>
             <Stack spacing={1.5}>
               <Stack direction="row" alignItems="center">
                 <Typography sx={styles.sectionTitle}>Timezone</Typography>
@@ -636,12 +609,12 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
                 sx={{ maxWidth: 400 }}
               />
             </Stack>
-          </CardContent>
-        </Card>
+          </Box>
+        </Box>
 
         {/* ═══ NEXT 5 RUNS PREVIEW ═══ */}
-        <Card sx={styles.card}>
-          <CardContent sx={{ p: compact ? 2 : 3 }}>
+        <Box>
+          <Box sx={{ pb: 2.5, mb: 2.5, borderBottom: "1px solid", borderColor: "divider" }}>
             <Stack spacing={1.5}>
               <Stack direction="row" alignItems="center">
                 <Typography sx={styles.sectionTitle}>Next 5 Runs</Typography>
@@ -692,8 +665,8 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
                 </Stack>
               )}
             </Stack>
-          </CardContent>
-        </Card>
+          </Box>
+        </Box>
 
         {/* ═══ SAVE BUTTON ═══ */}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>

@@ -772,7 +772,7 @@ export default function Dashboard() {
       <Drawer anchor="right" open={scheduleOpen} onClose={() => setScheduleOpen(false)}>
         <Box sx={{ width: 420, height: '100%', overflow: 'auto', p: 3 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-            <Typography variant="h6" fontWeight={700}>Schedule Agent</Typography>
+            <Typography variant="h6" fontWeight={700} sx={{ textTransform: 'none' }}>Schedule Agent</Typography>
             <Button size="small" onClick={() => setScheduleOpen(false)} sx={{ minWidth: 'auto', color: 'text.secondary' }}>✕</Button>
           </Stack>
           <SchedulerBuilder
