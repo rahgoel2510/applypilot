@@ -211,7 +211,7 @@ export default function SchedulerBuilder({ onSave, initialConfig, compact = fals
   const [mode, setMode] = useState(initialConfig?.mode || 'basic');
 
   // Basic mode state
-  const [frequency, setFrequency] = useState(initialConfig?.frequency || '');
+  const [frequency, setFrequency] = useState(initialConfig?.frequency || 'hourly');
   const [hourlyInterval, setHourlyInterval] = useState(initialConfig?.hourlyInterval || 1);
   const [hour, setHour] = useState(initialConfig?.hour ?? 9);
   const [minute, setMinute] = useState(initialConfig?.minute ?? 0);
