@@ -254,7 +254,7 @@ export default function Dashboard() {
   }
 
   return (
-    <Box sx={{ height: '100%', overflow: 'auto', p: { xs: 1.5, md: 2.5 }, maxWidth: 1400, mx: 'auto' }}>
+    <Box sx={{ height: '100%', overflow: 'auto', p: { xs: 1.5, md: 2.5 } }}>
       <Typography variant="h4" fontWeight={700} sx={{ mb: 3 }}>
         Dashboard
       </Typography>
@@ -264,7 +264,7 @@ export default function Dashboard() {
       ═══════════════════════════════════════════════════════════════════════ */}
       <Grid container spacing={2.5} sx={{ mb: 4 }}>
         {/* 🔍 Discovered */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <FadeInUp delay={0}>
             <Card
               sx={{ ...cardSx, borderTop: `4px solid ${KPI_COLORS[0]}`, cursor: 'pointer' }}
@@ -293,7 +293,7 @@ export default function Dashboard() {
         </Grid>
 
         {/* ✅ Applied */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <FadeInUp delay={0.1}>
             <Card
               sx={{ ...cardSx, borderTop: `4px solid ${KPI_COLORS[1]}`, cursor: 'pointer' }}
@@ -322,7 +322,7 @@ export default function Dashboard() {
         </Grid>
 
         {/* 📬 Responses */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <FadeInUp delay={0.2}>
             <Card
               sx={{ ...cardSx, borderTop: `4px solid ${KPI_COLORS[2]}`, cursor: 'pointer' }}
@@ -351,7 +351,7 @@ export default function Dashboard() {
         </Grid>
 
         {/* ⏱️ Next Run → Schedule */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <FadeInUp delay={0.3}>
             <Card
               sx={{ ...cardSx, borderTop: `4px solid ${KPI_COLORS[3]}`, cursor: 'pointer', background: countdown ? 'linear-gradient(135deg, #FEF3E8 0%, #fff 100%)' : 'linear-gradient(135deg, #667eea08 0%, #764ba210 100%)' }}
@@ -398,7 +398,7 @@ export default function Dashboard() {
       ═══════════════════════════════════════════════════════════════════════ */}
       <Grid container spacing={2.5} sx={{ mb: 4 }}>
         {/* Left: Animated Funnel Bar Chart */}
-        <Grid item xs={12} md={7}>
+        <Grid size={{ xs: 12, md: 7 }}>
           <FadeInUp delay={0.1}>
             <Card sx={cardSx}>
               <CardContent sx={cardContentSx}>
@@ -446,7 +446,7 @@ export default function Dashboard() {
         </Grid>
 
         {/* Right: Last Run Summary */}
-        <Grid item xs={12} md={5}>
+        <Grid size={{ xs: 12, md: 5 }}>
           <FadeInUp delay={0.2}>
             <Card sx={{ ...cardSx, cursor: lastRunData?.id ? 'pointer' : 'default' }} onClick={() => lastRunData?.id && navigate(`/agent/runs/${lastRunData.id}`)}>
               <CardContent sx={cardContentSx}>
@@ -661,7 +661,7 @@ export default function Dashboard() {
                     <Collapse in={isExpanded}>
                       <Box sx={{ mx: 2, mt: 1, mb: 0.5, p: 2, borderRadius: '8px', bgcolor: '#f8fafc', border: '1px solid', borderColor: 'divider' }}>
                         <Grid container spacing={2}>
-                          <Grid item xs={12} md={6}>
+                          <Grid size={{ xs: 12, md: 6 }}>
                             <Stack spacing={1}>
                               {job.location && <Typography variant="body2"><strong>Location:</strong> {job.location}</Typography>}
                               {job.posting_url && (
@@ -671,7 +671,7 @@ export default function Dashboard() {
                               )}
                             </Stack>
                           </Grid>
-                          <Grid item xs={12} md={6}>
+                          <Grid size={{ xs: 12, md: 6 }}>
                             <Stack spacing={1}>
                               <Typography variant="body2"><strong>Stage:</strong> {STAGE_LABELS[job.stage] || job.stage || 'Discovered'}</Typography>
                               <Typography variant="body2"><strong>Match:</strong> {scorePct > 0 ? `${scorePct}%` : 'Not scored'}</Typography>
@@ -709,7 +709,7 @@ export default function Dashboard() {
       ═══════════════════════════════════════════════════════════════════════ */}
       <Grid container spacing={2.5}>
         {/* Left: Company Intelligence */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <FadeInUp delay={0.1}>
             <Card sx={{ ...cardSx, cursor: 'pointer' }} onClick={() => navigate('/board')}>
               <CardContent sx={cardContentSx}>
@@ -773,7 +773,7 @@ export default function Dashboard() {
         </Grid>
 
         {/* Right: AI Insights */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <FadeInUp delay={0.2}>
             <Card sx={cardSx}>
               <CardContent sx={cardContentSx}>
