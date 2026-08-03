@@ -662,7 +662,7 @@ export default function Dashboard() {
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   try {
-                                    await fetch(`/api/jobs/${job.id}`, {
+                                    await fetch(`/api/jobs/${job.id}/stage`, {
                                       method: 'PATCH',
                                       headers: { 'Content-Type': 'application/json' },
                                       body: JSON.stringify({ stage: s.stage }),
