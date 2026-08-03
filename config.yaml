@@ -90,3 +90,13 @@ self_learning:
   - Cognizant
   target_boost: 0.15
   blocklist_penalty: 0.2
+
+graph:
+  enabled: true
+  db_path: "~/.linkedin_agent/graph_db"
+  auto_similarity: true
+  similarity_threshold: 0.6
+  skill_extraction: true
+  cache_company_days: 7
+  embedding_model: "all-MiniLM-L6-v2"  # Local model via sentence-transformers
+  prompt_cache_enabled: true

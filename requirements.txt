@@ -7,3 +7,5 @@ apscheduler
 platformdirs
 rich
 httpx
+kuzu>=0.4.0
+sentence-transformers>=2.2.0
