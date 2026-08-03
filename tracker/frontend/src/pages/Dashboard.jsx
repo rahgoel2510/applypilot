@@ -936,12 +936,13 @@ export default function Dashboard() {
               {/* Body */}
               <Box sx={{ p: 3 }}>
                 {/* Match Explanation */}
-                {job.match_reason && (
-                  <Box sx={{ mb: 2.5, p: 2, borderRadius: '10px', bgcolor: '#f8fafb', border: '1px solid #eef0f2' }}>
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', mb: 0.5 }}>Why this matches you:</Typography>
-                    <Typography sx={{ fontSize: '0.82rem', color: '#4b5563' }}>{job.match_reason}</Typography>
-                  </Box>
-                )}
+                {/* Match Section — always visible */}
+                <Box sx={{ mb: 2.5, p: 2, borderRadius: '10px', bgcolor: '#f8fafb', border: '1px solid #eef0f2' }}>
+                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', mb: 0.5 }}>Match Analysis:</Typography>
+                  <Typography sx={{ fontSize: '0.82rem', color: '#4b5563' }}>
+                    {job.match_reason || `Match score: ${job.match_score || 0}%. Detailed skill-level breakdown will appear here once JD analysis is enabled.`}
+                  </Typography>
+                </Box>
 
                 {/* Status & InMail */}
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2.5 }}>
