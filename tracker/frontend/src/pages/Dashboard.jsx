@@ -21,6 +21,9 @@ import {
   Drawer,
   Slider,
   Switch,
+  Dialog,
+  DialogContent,
+  Divider,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -103,6 +106,7 @@ export default function Dashboard() {
   const [filterTab, setFilterTab] = useState(0);
   const [sortBy, setSortBy] = useState('score');
   const [expandedJob, setExpandedJob] = useState(null);
+  const [selectedJob, setSelectedJob] = useState(null);
   const [countdown, setCountdown] = useState(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
@@ -580,111 +584,33 @@ export default function Dashboard() {
               {filteredJobs.map((job) => {
                 const scorePct = getScorePercent(job.match_score);
                 const scoreColor = getScoreColor(scorePct);
-                const isExpanded = expandedJob === job.id;
-
                 return (
-                  <Box key={job.id} onClick={() => setExpandedJob(isExpanded ? null : job.id)}
+                  <Box key={job.id} onClick={() => setSelectedJob(job)}
                     sx={{
-                      p: 2, borderRadius: '12px', cursor: 'pointer',
-                      border: '1px solid', borderColor: isExpanded ? '#667eea40' : '#eef0f2',
-                      bgcolor: isExpanded ? '#f8f9ff' : '#fafbfc',
-                      transition: 'all 0.15s',
-                      '&:hover': { borderColor: '#667eea30', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' },
+                      display: 'flex', alignItems: 'center', gap: 1.5,
+                      py: 1, px: 1.5, borderRadius: '8px', cursor: 'pointer',
+                      transition: 'all 0.12s',
+                      '&:hover': { bgcolor: '#f8f9ff', transform: 'translateX(2px)' },
+                      borderLeft: `3px solid ${scorePct > 0 ? scoreColor : '#e5e7eb'}`,
                     }}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                      <Box sx={{ flex: 1, minWidth: 0, mr: 2 }}>
-                        <Typography noWrap sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e1b4b' }}>
-                          {job.title || 'Untitled'}
-                        </Typography>
-                        <Typography noWrap sx={{ fontSize: '0.73rem', color: '#6b7280', mt: 0.25 }}>
-                          {job.company || '—'}{job.location ? ` · 📍 ${job.location}` : ''}{` · ${job.created_at || job.date_added ? dayjs(job.created_at || job.date_added).fromNow() : ''}`}
-                        </Typography>
-                      </Box>
-                      {scorePct > 0 && (
-                        <Box sx={{ px: 1.25, py: 0.5, borderRadius: '8px', bgcolor: scoreColor + '12', border: `1px solid ${scoreColor}30`, flexShrink: 0 }}>
-                          <Typography sx={{ fontSize: '0.75rem', fontWeight: 800, color: scoreColor, lineHeight: 1 }}>
-                            {scorePct}% match
-                          </Typography>
-                        </Box>
-                      )}
-                    </Stack>
-                    {scorePct >= 80 && (
-                      <Typography sx={{ fontSize: '0.7rem', color: '#059669', mt: 0.75, fontWeight: 500 }}>
-                        💡 Strong match — aligns with your core skills and experience
-                      </Typography>
-                    )}
-                    {scorePct >= 60 && scorePct < 80 && (
-                      <Typography sx={{ fontSize: '0.7rem', color: '#d97706', mt: 0.75, fontWeight: 500 }}>
-                        💡 Partial match — some skills align, consider tailoring resume
-                      </Typography>
-                    )}
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
-                      <Chip label={job.stage ? (STAGE_LABELS[job.stage] || job.stage) : 'New'} size="small"
-                        sx={{ height: 20, fontSize: '0.63rem', fontWeight: 700, ...(STATUS_CHIP_STYLES[job.stage] || { bgcolor: '#f3f4f6', color: '#6b7280' }) }} />
-                      {job.inmail && (
-                        <Chip label={`✉️ InMail ${job.inmail.status}${job.inmail.recruiter ? ` → ${job.inmail.recruiter}` : ''}`} size="small"
-                          sx={{ height: 20, fontSize: '0.63rem', fontWeight: 600, bgcolor: '#f5f3ff', color: '#7c3aed' }} />
-                      )}
-                      {job.is_external && !job.inmail && (
-                        <Chip label="🔗 External" size="small" sx={{ height: 20, fontSize: '0.63rem', fontWeight: 600, bgcolor: '#eff6ff', color: '#3b82f6' }} />
-                      )}
-                    </Stack>
-                    <Collapse in={isExpanded}>
-                      <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px solid #f0f0f0' }}>
-                        {/* Primary actions */}
-                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                          <Button size="small" variant="contained" startIcon={<OpenInNewIcon />}
-                            href={job.posting_url || `https://www.linkedin.com/jobs/view/${job.id}/`} target="_blank"
-                            onClick={(e) => e.stopPropagation()}
-                            sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.73rem', borderRadius: '8px', bgcolor: scoreColor, '&:hover': { bgcolor: scoreColor + 'cc' } }}>
-                            {job.stage === 'applied' ? 'View Application' : scorePct >= 80 ? 'Apply Now' : 'View Listing'}
-                          </Button>
-                          {!job.inmail && scorePct >= 70 && (
-                            <Button size="small" variant="outlined" onClick={(e) => e.stopPropagation()}
-                              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.72rem', borderRadius: '8px' }}>✉️ Draft InMail</Button>
-                          )}
-                        </Stack>
-
-                        {/* Stage change buttons */}
-                        <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px dashed #e5e7eb' }}>
-                          <Typography sx={{ fontSize: '0.68rem', fontWeight: 600, color: '#9ca3af', mb: 0.75, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                            Move to:
-                          </Typography>
-                          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-                            {[
-                              { stage: 'applied', label: '✅ Applied', show: job.stage !== 'applied' },
-                              { stage: 'interviewing', label: '🎤 Interviewing', show: job.stage === 'applied' },
-                              { stage: 'offered', label: '🎉 Offered', show: job.stage === 'interviewing' },
-                              { stage: 'rejected', label: '❌ Rejected', show: ['applied', 'interviewing'].includes(job.stage) },
-                              { stage: 'saved', label: '📌 Saved', show: job.stage === 'discovered' },
-                            ].filter(s => s.show).map(s => (
-                              <Chip key={s.stage} label={s.label} size="small" clickable
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  try {
-                                    await fetch(`/api/jobs/${job.id}/stage`, {
-                                      method: 'PATCH',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ stage: s.stage }),
-                                    });
-                                    loadData(); // Refresh
-                                  } catch (err) { console.error(err); }
-                                }}
-                                sx={{ height: 24, fontSize: '0.68rem', fontWeight: 600, border: '1px solid #e5e7eb', '&:hover': { bgcolor: '#667eea10', borderColor: '#667eea50' } }}
-                              />
-                            ))}
-                          </Stack>
-                        </Box>
-
-                        {/* InMail preview */}
-                        {job.inmail?.draft_preview && (
-                          <Box sx={{ mt: 1.5, p: 1.5, borderRadius: '8px', bgcolor: '#faf8ff', border: '1px solid #ede9fe' }}>
-                            <Typography sx={{ fontSize: '0.68rem', color: '#7c3aed', fontWeight: 600 }}>✉️ InMail to {job.inmail.recruiter}:</Typography>
-                            <Typography sx={{ fontSize: '0.7rem', color: '#4b5563', mt: 0.25, fontStyle: 'italic' }}>"{job.inmail.draft_preview}..."</Typography>
-                          </Box>
-                        )}
-                      </Box>
-                    </Collapse>
+                    {/* Score */}
+                    <Box sx={{ width: 32, height: 24, borderRadius: '6px', bgcolor: scoreColor + '14', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, color: scoreColor }}>{scorePct || '—'}</Typography>
+                    </Box>
+                    {/* Title + Company */}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography noWrap sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e1b4b', lineHeight: 1.2 }}>{job.title || 'Untitled'}</Typography>
+                      <Typography noWrap sx={{ fontSize: '0.68rem', color: '#9ca3af' }}>{job.company || '—'}{job.location ? ` · ${job.location}` : ''}</Typography>
+                    </Box>
+                    {/* InMail indicator */}
+                    {job.inmail && <Typography sx={{ fontSize: '0.8rem' }} title="InMail sent">✉️</Typography>}
+                    {/* Stage */}
+                    <Chip label={STAGE_LABELS[job.stage] || job.stage || 'New'} size="small"
+                      sx={{ height: 18, fontSize: '0.58rem', fontWeight: 700, ...(STATUS_CHIP_STYLES[job.stage] || { bgcolor: '#f3f4f6', color: '#6b7280' }) }} />
+                    {/* Time */}
+                    <Typography sx={{ fontSize: '0.62rem', color: '#c9cdd3', minWidth: 25 }}>
+                      {job.date_added ? dayjs(job.date_added).fromNow().replace(/ ago$/, '').replace('a few seconds', 'now').replace('an hour', '1h').replace(' hours', 'h').replace(' minutes', 'm').replace(' days', 'd').replace('a day', '1d').replace('a minute', '1m') : ''}
+                    </Typography>
                   </Box>
                 );
               })}
@@ -975,6 +901,113 @@ export default function Dashboard() {
           </Box>
         </Box>
       </Drawer>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          JOB DETAIL MODAL
+      ═══════════════════════════════════════════════════════════════════════ */}
+      <Dialog open={!!selectedJob} onClose={() => setSelectedJob(null)} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: '16px', overflow: 'hidden' } }}>
+        {selectedJob && (() => {
+          const job = selectedJob;
+          const scorePct = getScorePercent(job.match_score);
+          const scoreColor = getScoreColor(scorePct);
+          return (
+            <DialogContent sx={{ p: 0 }}>
+              {/* Header */}
+              <Box sx={{ p: 3, pb: 2, background: `linear-gradient(135deg, ${scoreColor}08 0%, #fff 100%)`, borderBottom: '1px solid #f0f0f0' }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                  <Box sx={{ flex: 1, mr: 2 }}>
+                    <Typography variant="h6" fontWeight={800} sx={{ color: '#1e1b4b', lineHeight: 1.3 }}>
+                      {job.title}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.85rem', color: '#6b7280', mt: 0.5 }}>
+                      🏢 {job.company || '—'}{job.location ? ` · 📍 ${job.location}` : ''}
+                    </Typography>
+                  </Box>
+                  {scorePct > 0 && (
+                    <Box sx={{ px: 1.5, py: 1, borderRadius: '10px', bgcolor: scoreColor + '12', border: `1px solid ${scoreColor}30`, textAlign: 'center' }}>
+                      <Typography sx={{ fontSize: '1.2rem', fontWeight: 800, color: scoreColor, lineHeight: 1 }}>{scorePct}%</Typography>
+                      <Typography sx={{ fontSize: '0.6rem', color: scoreColor, fontWeight: 600 }}>match</Typography>
+                    </Box>
+                  )}
+                </Stack>
+              </Box>
+
+              {/* Body */}
+              <Box sx={{ p: 3 }}>
+                {/* Match Explanation */}
+                {job.match_reason && (
+                  <Box sx={{ mb: 2.5, p: 2, borderRadius: '10px', bgcolor: '#f8fafb', border: '1px solid #eef0f2' }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', mb: 0.5 }}>Why this matches you:</Typography>
+                    <Typography sx={{ fontSize: '0.82rem', color: '#4b5563' }}>{job.match_reason}</Typography>
+                  </Box>
+                )}
+
+                {/* Status & InMail */}
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2.5 }}>
+                  <Chip label={`Stage: ${STAGE_LABELS[job.stage] || job.stage || 'Discovered'}`} size="small"
+                    sx={{ height: 26, fontWeight: 600, ...(STATUS_CHIP_STYLES[job.stage] || {}) }} />
+                  {job.is_external && <Chip label="🔗 External Apply" size="small" sx={{ height: 26, fontWeight: 600, bgcolor: '#eff6ff', color: '#3b82f6' }} />}
+                  {job.inmail && <Chip label={`✉️ InMail ${job.inmail.status}`} size="small" sx={{ height: 26, fontWeight: 600, bgcolor: '#f5f3ff', color: '#7c3aed' }} />}
+                  {job.date_added && <Chip label={`Added ${dayjs(job.date_added).fromNow()}`} size="small" variant="outlined" sx={{ height: 26, fontSize: '0.7rem' }} />}
+                </Stack>
+
+                {/* InMail Preview */}
+                {job.inmail?.draft_preview && (
+                  <Box sx={{ mb: 2.5, p: 2, borderRadius: '10px', bgcolor: '#faf8ff', border: '1px solid #ede9fe' }}>
+                    <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: '#7c3aed', mb: 0.5 }}>✉️ InMail to {job.inmail.recruiter}:</Typography>
+                    <Typography sx={{ fontSize: '0.8rem', color: '#4b5563', fontStyle: 'italic' }}>"{job.inmail.draft_preview}..."</Typography>
+                  </Box>
+                )}
+
+                {/* JD placeholder */}
+                <Box sx={{ mb: 2.5, p: 2, borderRadius: '10px', bgcolor: '#f9fafb', border: '1px dashed #d1d5db' }}>
+                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#9ca3af' }}>📄 Job Description</Typography>
+                  <Typography sx={{ fontSize: '0.78rem', color: '#6b7280', mt: 0.5 }}>
+                    {job.notes || 'JD capture coming in next update — for now, click "View on LinkedIn" below.'}
+                  </Typography>
+                </Box>
+
+                <Divider sx={{ my: 2 }} />
+
+                {/* Actions */}
+                <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af', mb: 1, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Actions</Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+                  <Button size="small" variant="contained" startIcon={<OpenInNewIcon />}
+                    href={job.posting_url || `https://www.linkedin.com/jobs/view/${job.id}/`} target="_blank"
+                    sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '8px', bgcolor: scoreColor, '&:hover': { bgcolor: scoreColor + 'cc' } }}>
+                    {job.stage === 'applied' ? 'View Application' : 'View on LinkedIn'}
+                  </Button>
+                  {!job.inmail && scorePct >= 70 && (
+                    <Button size="small" variant="outlined" sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '8px' }}>✉️ Draft InMail</Button>
+                  )}
+                </Stack>
+
+                {/* Stage Change */}
+                <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af', mb: 1, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Move to</Typography>
+                <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                  {[
+                    { stage: 'applied', label: '✅ Applied', show: job.stage !== 'applied' && job.stage !== 'interviewing' && job.stage !== 'offered' },
+                    { stage: 'interviewing', label: '🎤 Interviewing', show: job.stage === 'applied' },
+                    { stage: 'offered', label: '🎉 Offered', show: job.stage === 'interviewing' },
+                    { stage: 'rejected', label: '❌ Rejected', show: ['applied', 'interviewing'].includes(job.stage) },
+                    { stage: 'saved', label: '📌 Save for Later', show: job.stage === 'discovered' },
+                  ].filter(s => s.show).map(s => (
+                    <Chip key={s.stage} label={s.label} size="small" clickable
+                      onClick={async () => {
+                        await fetch(`/api/jobs/${job.id}/stage`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: s.stage }) });
+                        setSelectedJob(null);
+                        loadData();
+                      }}
+                      sx={{ height: 28, fontSize: '0.72rem', fontWeight: 600, border: '1px solid #e5e7eb', '&:hover': { bgcolor: '#667eea10', borderColor: '#667eea50' } }}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+            </DialogContent>
+          );
+        })()}
+      </Dialog>
     </Box>
   );
 }
