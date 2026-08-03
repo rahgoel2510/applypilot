@@ -4,9 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 // Fade-in from bottom (for cards appearing)
 export const FadeInUp = ({ children, delay = 0, ...props }) => (
   <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.4, delay, ease: 'easeOut' }}
+    initial={{ opacity: 0, y: 12 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    transition={{ duration: 0.3, delay, ease: 'easeOut' }}
     {...props}
   >
     {children}

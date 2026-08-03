@@ -113,7 +113,7 @@ export default function Dashboard() {
   const { events: wsEvents, isConnected, liveStats } = useWebSocket();
 
   // ─── Data Loading ────────────────────────────────────────────────────────
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isInitial = false) => {
     try {
       const [statsData, jobsData, statusData, runsData] = await Promise.all([
         fetchStats(),
@@ -131,13 +131,13 @@ export default function Dashboard() {
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 20000);
+    loadData(true);
+    const interval = setInterval(() => loadData(false), 30000);
     return () => clearInterval(interval);
   }, [loadData]);
 
