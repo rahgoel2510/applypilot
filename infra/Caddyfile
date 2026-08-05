@@ -1,0 +1,75 @@
+# ApplyPilot — Caddy Reverse Proxy
+# Usage: caddy run --config infra/Caddyfile
+# Or with Docker: use caddy:2-alpine image
+
+# For local development (HTTP)
+:80 {
+    # Redirect to HTTPS in production
+    # redir https://{host}{uri} permanent
+
+    # Frontend (Vite dev server or built assets)
+    handle /assets/* {
+        reverse_proxy localhost:5173
+    }
+    
+    # API routes
+    handle /api/* {
+        reverse_proxy localhost:8000 {
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+    
+    # WebSocket
+    handle /ws/* {
+        reverse_proxy localhost:8000 {
+            header_up Connection {http.request.header.Connection}
+            header_up Upgrade {http.request.header.Upgrade}
+        }
+    }
+    
+    # Prometheus metrics (internal only)
+    handle /metrics {
+        respond "Forbidden" 403
+    }
+    
+    # SPA fallback
+    handle {
+        reverse_proxy localhost:5173
+    }
+    
+    # Security headers (Caddy adds these automatically with HTTPS)
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+    
+    # Rate limiting
+    rate_limit {
+        zone api {
+            key {remote_host}
+            events 100
+            window 1m
+        }
+    }
+}
+
+# Production with auto-HTTPS (uncomment and set your domain)
+# applypilot.yourdomain.com {
+#     tls {
+#         protocols tls1.2 tls1.3
+#     }
+#     
+#     handle /api/* {
+#         reverse_proxy localhost:8000
+#     }
+#     handle /ws/* {
+#         reverse_proxy localhost:8000
+#     }
+#     handle {
+#         reverse_proxy localhost:5173
+#     }
+# }

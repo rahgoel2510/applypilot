@@ -10,10 +10,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import secrets
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from auth_middleware import API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +134,7 @@ async def push_agent_status(status: str, message: str = "") -> None:
 
 @router.websocket("/ws/events")
 async def websocket_events(websocket: WebSocket):
-    """WebSocket endpoint for real-time pipeline events.
+    """WebSocket endpoint for real-time pipeline events. Requires token auth.
     
     Clients connect and receive JSON messages:
     - {type: 'pipeline_event', event_type: '...', data: {...}}
@@ -139,6 +142,12 @@ async def websocket_events(websocket: WebSocket):
     - {type: 'agent_status', data: {status: 'running'|'stopped'}}
     - {type: 'history', events: [...]}
     """
+    # Authenticate via query parameter
+    token = websocket.query_params.get("token", "")
+    if not token or not secrets.compare_digest(token, API_KEY):
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+
     await manager.connect(websocket)
     try:
         while True:

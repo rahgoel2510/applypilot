@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any, Literal
 
 import httpx
@@ -27,9 +28,51 @@ class TrackerClient:
         await tracker.log("cycle_start", "info", "Scan cycle started — 50 jobs to process")
     """
 
-    def __init__(self, base_url: str = DEFAULT_TRACKER_URL, timeout: float = 5.0) -> None:
+    def __init__(
+        self,
+        base_url: str = DEFAULT_TRACKER_URL,
+        timeout: float = 5.0,
+        verify_tls: bool = True,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
+        self._api_key = os.environ.get("APPLYPILOT_API_KEY", "")
+        self._client: httpx.AsyncClient | None = None
+
+        # TLS verification configuration
+        tls_env = os.environ.get("TRACKER_TLS_VERIFY", "true").lower()
+        if tls_env == "false":
+            self._verify_tls = False
+        else:
+            self._verify_tls = verify_tls
+
+    @property
+    def _headers(self) -> dict[str, str]:
+        """Return default headers including API key if set."""
+        headers: dict[str, str] = {}
+        if self._api_key:
+            headers["X-API-Key"] = self._api_key
+        return headers
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Get or create the HTTP client with TLS configuration."""
+        if self._client is None:
+            verify: bool | str = self._verify_tls
+            ca_bundle = os.environ.get("TRACKER_CA_BUNDLE", "")
+            if ca_bundle and os.path.exists(ca_bundle):
+                verify = ca_bundle
+            self._client = httpx.AsyncClient(
+                timeout=self._timeout,
+                verify=verify,
+                headers=self._headers,
+            )
+        return self._client
+
+    async def close(self) -> None:
+        """Close the HTTP client cleanly."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
     # ------------------------------------------------------------------
     # Job event webhook (creates job + log entry on backend)
@@ -224,8 +267,8 @@ class TrackerClient:
     async def _post(self, url: str, payload: dict) -> bool:
         """Fire-and-forget POST. Returns True on success, False otherwise."""
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(url, json=payload)
+            client = await self._get_client()
+            response = await client.post(url, json=payload)
 
             if response.status_code in (200, 201):
                 logger.debug("Tracker POST %s → %d", url, response.status_code)

@@ -17,6 +17,8 @@ from typing import Any
 from openai import AsyncOpenAI, APIError, RateLimitError, APIConnectionError
 
 from linkedin_agent.config import Settings
+from linkedin_agent.pii_redactor import redact_pii, safe_candidate_context
+from linkedin_agent.prompt_sanitizer import sanitize_for_prompt, sanitize_job_context
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +151,12 @@ class InMailDrafter:
         Returns:
             A ready-to-send InMail message string.
         """
+        # Sanitize untrusted inputs before prompt construction
+        job_title = sanitize_for_prompt(job_title, max_length=200)
+        company = sanitize_for_prompt(company, max_length=200)
+        recruiter_name = sanitize_for_prompt(recruiter_name, max_length=200)
+        job_description = sanitize_for_prompt(job_description, max_length=2000)
+
         cache_key = self._cache_key(job_title, company, recruiter_name)
 
         # Return cached draft if available
@@ -196,6 +204,11 @@ class InMailDrafter:
         Returns:
             A connection note string, guaranteed ≤ 300 characters.
         """
+        # Sanitize untrusted inputs before prompt construction
+        recruiter_name = sanitize_for_prompt(recruiter_name, max_length=200)
+        job_title = sanitize_for_prompt(job_title, max_length=200)
+        company = sanitize_for_prompt(company, max_length=200)
+
         cache_key = self._cache_key(f"conn_{job_title}", company, recruiter_name)
 
         if cache_key in self._cache:
@@ -242,28 +255,34 @@ class InMailDrafter:
     def get_candidate_summary(self) -> str:
         """Build a brief candidate summary from config profile.
 
+        Uses safe_candidate_context to exclude raw PII (email, phone)
+        from text sent to third-party AI services.
+
         Returns:
             A concise string summarizing the candidate's background.
         """
         c = self._config.candidate
-        parts: list[str] = []
 
-        if c.name:
-            parts.append(f"Name: {c.name}")
-        if c.email:
-            parts.append(f"Email: {c.email}")
-        if c.phone:
-            parts.append(f"Phone: {c.phone}")
-        if c.notice_period:
-            parts.append(f"Notice period: {c.notice_period}")
+        # Build privacy-safe context — no email or phone sent to AI
+        summary = safe_candidate_context(
+            name=c.name,
+            skills=getattr(c, 'skills', None),
+            notice_period=c.notice_period if c.notice_period else None,
+            experience_years=getattr(c, 'experience_years', None),
+            willing_to_relocate=c.willing_to_relocate if c.willing_to_relocate else None,
+        )
+
+        # Append non-PII fields that help the AI write better InMails
+        extra_parts: list[str] = []
         if c.work_authorization:
-            parts.append(f"Work authorization: {c.work_authorization}")
+            extra_parts.append(f"Work authorization: {c.work_authorization}")
         if c.preferred_cities:
-            parts.append(f"Preferred locations: {', '.join(c.preferred_cities)}")
-        if c.willing_to_relocate:
-            parts.append("Open to relocation")
+            extra_parts.append(f"Preferred locations: {', '.join(c.preferred_cities)}")
 
-        return " | ".join(parts) if parts else "Experienced professional seeking new opportunities."
+        if extra_parts:
+            summary = summary + " | " + " | ".join(extra_parts)
+
+        return summary
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -280,9 +299,12 @@ class InMailDrafter:
         """Build the user prompt for InMail generation."""
         candidate_first = self._config.candidate.name.split()[0] if self._config.candidate.name else "the candidate"
 
+        # Redact any PII that may appear in job description text
+        safe_jd = redact_pii(job_description[:2000])
+
         return (
             f"Draft an InMail to {recruiter_name} about the {job_title} position at {company}.\n\n"
-            f"Job description:\n{job_description[:2000]}\n\n"
+            f"Job description:\n{safe_jd}\n\n"
             f"Candidate background:\n{candidate_summary}\n\n"
             f"Sign off with just the first name: {candidate_first}\n"
             f"Keep it under {self._max_length} words. Tone: {self._tone}."

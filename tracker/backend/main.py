@@ -16,7 +16,13 @@ from service_routes import router as service_router
 from agents_routes import router as agents_router
 from websocket_routes import router as ws_router
 from todo_routes import router as todo_router
+from privacy_routes import router as privacy_router
+from audit_log import router as audit_router, AuditEntry, ConsentRecord  # noqa: F401
+from health_routes import router as health_router
 from models import Job, ActivityLog, AppSetting, AgentRun, FeedbackSignal, InMailDraft, Todo  # noqa: F401 — ensure models are registered before create_all
+
+# Ensure all tables exist (covers test/import scenarios where lifespan may not fire)
+Base.metadata.create_all(bind=engine)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -42,6 +48,10 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
+    # Start background data retention cleanup scheduler
+    from cleanup_scheduler import start_cleanup_scheduler
+    start_cleanup_scheduler()
+
     yield
 
 
@@ -52,14 +62,40 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware — allow all origins
+# CORS middleware — restrict to known origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:80",
+        "http://localhost:8000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:80",
+        "http://127.0.0.1:8000",
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
+
+from request_tracing import request_tracing_middleware
+app.middleware("http")(request_tracing_middleware)
+
+from security_headers import security_headers_middleware
+app.middleware("http")(security_headers_middleware)
+
+from auth_middleware import api_key_middleware
+app.middleware("http")(api_key_middleware)
+
+from rate_limiter import limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+from metrics import metrics_middleware, metrics_route
+app.middleware("http")(metrics_middleware)
 
 # Include API routes
 app.include_router(router)
@@ -69,6 +105,14 @@ app.include_router(service_router)
 app.include_router(agents_router)
 app.include_router(ws_router)
 app.include_router(todo_router)
+app.include_router(privacy_router)
+app.include_router(audit_router)
+app.include_router(health_router)
+
+from cleanup_scheduler import cleanup_router
+app.include_router(cleanup_router)
+
+app.routes.append(metrics_route)
 
 
 # Serve static frontend (when running in Docker with built assets)

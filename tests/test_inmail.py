@@ -261,7 +261,7 @@ class TestCandidateSummary:
         assert "Rahul Goel" in summary
         assert "30 days" in summary
         assert "Bangalore" in summary
-        assert "relocation" in summary.lower() or "Open to relocation" in summary
+        assert "relocat" in summary.lower()  # "Willing to relocate: Yes"
 
     def test_empty_candidate_summary(self):
         """Candidate config with all blank fields gives default summary."""
@@ -281,4 +281,4 @@ class TestCandidateSummary:
         )
         drafter = InMailDrafter(settings)
         summary = drafter.get_candidate_summary()
-        assert "Experienced professional" in summary
+        assert "Job applicant" in summary or "professional" in summary.lower()

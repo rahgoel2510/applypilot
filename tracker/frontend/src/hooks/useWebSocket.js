@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { getApiKey } from '../api';
 
 /**
  * Custom hook for WebSocket connection to the pipeline event stream.
  * Auto-reconnects on disconnect. Provides real-time events.
+ * Passes API key as token query parameter for authentication.
  */
 export function useWebSocket() {
   const [events, setEvents] = useState([]);
@@ -14,7 +16,8 @@ export function useWebSocket() {
 
   const connect = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/events`;
+    const token = getApiKey();
+    const wsUrl = `${protocol}//${window.location.host}/ws/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 
     try {
       const ws = new WebSocket(wsUrl);

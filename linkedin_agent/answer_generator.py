@@ -12,6 +12,9 @@ from typing import Optional
 
 import httpx
 
+from linkedin_agent.pii_redactor import redact_pii
+from linkedin_agent.prompt_sanitizer import sanitize_for_prompt, sanitize_job_context
+
 logger = logging.getLogger(__name__)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -31,10 +34,9 @@ AI_ANSWERABLE_PATTERNS = [
 SYSTEM_PROMPT = """You are a professional job applicant writing brief, compelling answers for job application forms.
 
 Candidate profile:
-- Name: {name}
 - Role focus: {keywords}
 - Key skills: {skills}
-- Experience: {notice_period} notice period (currently employed)
+- Currently employed with {notice_period} notice period
 
 Rules:
 - Keep answers concise (2-4 sentences max for short fields, 5-8 for cover letters)
@@ -73,16 +75,23 @@ class AnswerGenerator:
         if not self._api_key or self._api_key.startswith('placeholder'):
             return None
         
+        # Sanitize untrusted inputs before prompt construction
+        job_title = sanitize_for_prompt(job_title, max_length=200)
+        company = sanitize_for_prompt(company, max_length=200)
+        field_label = sanitize_for_prompt(field_label, max_length=500)
+        
         system = SYSTEM_PROMPT.format(
-            name=self._config.get('name', 'the candidate'),
             keywords=', '.join(self._config.get('keywords', [])),
             skills=', '.join(self._config.get('skills', []))[:200],
             notice_period=self._config.get('notice_period', 'N/A'),
         )
         
+        # Redact any PII that may appear in field labels from job postings
+        safe_field_label = redact_pii(field_label)
+        
         user_prompt = (
             f"Write a response for this application field:\n"
-            f"Field: \"{field_label}\"\n"
+            f"Field: \"{safe_field_label}\"\n"
             f"Job: {job_title} at {company}\n\n"
             f"Keep it under {max_length} characters. Be specific to the role."
         )

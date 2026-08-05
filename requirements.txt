@@ -9,3 +9,5 @@ rich
 httpx
 kuzu>=0.4.0
 sentence-transformers>=2.2.0
+structlog>=24.1.0
+cryptography>=42.0.0

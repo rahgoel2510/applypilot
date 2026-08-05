@@ -3,7 +3,7 @@
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -63,6 +63,18 @@ DEFAULT_AGENTS = [
             "quiet_hours_end": "08:00",
         },
     },
+    {
+        "id": "naukri_freshener",
+        "name": "Naukri Profile Freshener",
+        "description": "Keeps Naukri profile fresh by toggling summary and re-uploading resume daily.",
+        "enabled": False,
+        "config": {
+            "frequency": "daily",
+            "update_time": "08:00",
+            "toggle_summary": True,
+            "reupload_resume": True,
+        },
+    },
 ]
 
 
@@ -72,6 +84,11 @@ class AgentConfigUpdate(BaseModel):
 
 class AgentToggle(BaseModel):
     enabled: bool
+
+
+class AgentScheduleUpdate(BaseModel):
+    schedule_minutes: Optional[int] = None
+    schedule_time: Optional[str] = None
 
 
 def _get_agents(db: Session) -> list[dict]:
@@ -102,6 +119,97 @@ def _find_agent(agents: list[dict], agent_id: str) -> tuple[int, dict | None]:
         if agent["id"] == agent_id:
             return idx, agent
     return -1, None
+
+
+def _get_orchestrator_safe():
+    """Import and return the orchestrator instance, or None if unavailable."""
+    try:
+        from linkedin_agent.multi_agent_orchestrator import get_orchestrator
+
+        return get_orchestrator()
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator endpoints (placed BEFORE parameterized routes to avoid conflicts)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/orchestrator/status")
+def get_orchestrator_status():
+    """Get orchestrator status (running, agent count, etc)."""
+    orchestrator = _get_orchestrator_safe()
+    if orchestrator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not available — module not initialized",
+        )
+
+    try:
+        agent_statuses = orchestrator.get_all_statuses()
+        return {
+            "running": orchestrator._running,
+            "agent_count": len(agent_statuses),
+            "agents": agent_statuses,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Orchestrator error: {exc}")
+
+
+@router.post("/orchestrator/start")
+async def start_orchestrator():
+    """Start the orchestrator scheduler loop."""
+    orchestrator = _get_orchestrator_safe()
+    if orchestrator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not available — module not initialized",
+        )
+
+    try:
+        if orchestrator._running:
+            raise HTTPException(
+                status_code=409, detail="Orchestrator is already running"
+            )
+        await orchestrator.start()
+        return {"message": "Orchestrator started", "running": True}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to start orchestrator: {exc}"
+        )
+
+
+@router.post("/orchestrator/stop")
+async def stop_orchestrator():
+    """Stop the orchestrator and all running agents."""
+    orchestrator = _get_orchestrator_safe()
+    if orchestrator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not available — module not initialized",
+        )
+
+    try:
+        if not orchestrator._running:
+            raise HTTPException(
+                status_code=409, detail="Orchestrator is not running"
+            )
+        await orchestrator.stop()
+        return {"message": "Orchestrator stopped", "running": False}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to stop orchestrator: {exc}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Existing CRUD endpoints
+# ---------------------------------------------------------------------------
 
 
 @router.get("")
@@ -138,3 +246,166 @@ def toggle_agent(agent_id: str, req: AgentToggle, db: Session = Depends(get_db))
     _save_agents(db, agents)
 
     return {"message": f"Agent '{agent_id}' {'enabled' if req.enabled else 'disabled'}", "agent": agents[idx]}
+
+
+# ---------------------------------------------------------------------------
+# Multi-agent orchestrator endpoints (parameterized)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{agent_id}/trigger")
+async def trigger_agent(agent_id: str):
+    """Manually trigger an agent run (ignoring its schedule)."""
+    orchestrator = _get_orchestrator_safe()
+    if orchestrator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not available — module not initialized",
+        )
+
+    try:
+        result = await orchestrator.trigger_agent(agent_id)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent '{agent_id}' not registered in orchestrator",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Trigger failed: {exc}")
+
+    if not result.get("ok"):
+        error_msg = result.get("error", "Unknown error")
+        # Determine appropriate status code
+        if "already running" in error_msg:
+            raise HTTPException(status_code=409, detail=error_msg)
+        elif "disabled" in error_msg:
+            raise HTTPException(status_code=409, detail=error_msg)
+        else:
+            raise HTTPException(status_code=400, detail=error_msg)
+
+    return result
+
+
+@router.post("/{agent_id}/stop")
+async def stop_agent(agent_id: str):
+    """Stop a running agent."""
+    orchestrator = _get_orchestrator_safe()
+    if orchestrator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not available — module not initialized",
+        )
+
+    try:
+        result = await orchestrator.stop_agent(agent_id)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent '{agent_id}' not registered in orchestrator",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Stop failed: {exc}")
+
+    if not result.get("ok"):
+        error_msg = result.get("error", "Unknown error")
+        if "not running" in error_msg:
+            raise HTTPException(status_code=409, detail=error_msg)
+        else:
+            raise HTTPException(status_code=400, detail=error_msg)
+
+    return result
+
+
+@router.get("/{agent_id}/status")
+def get_agent_status(agent_id: str):
+    """Get detailed status of a specific agent (state, last_run, next_run, consecutive_failures)."""
+    orchestrator = _get_orchestrator_safe()
+    if orchestrator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not available — module not initialized",
+        )
+
+    try:
+        return orchestrator.get_agent_status(agent_id)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent '{agent_id}' not registered in orchestrator",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Status query failed: {exc}")
+
+
+@router.get("/{agent_id}/history")
+def get_agent_history(agent_id: str):
+    """Get run history for an agent (most recent first)."""
+    orchestrator = _get_orchestrator_safe()
+    if orchestrator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not available — module not initialized",
+        )
+
+    try:
+        return orchestrator.get_agent_history(agent_id)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent '{agent_id}' not registered in orchestrator",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"History query failed: {exc}")
+
+
+@router.get("/{agent_id}/logs")
+def get_agent_logs(agent_id: str, limit: int = Query(default=50, ge=1, le=500)):
+    """Get recent logs for an agent."""
+    orchestrator = _get_orchestrator_safe()
+    if orchestrator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not available — module not initialized",
+        )
+
+    try:
+        logs = orchestrator.get_agent_logs(agent_id, limit=limit)
+        return {"agent_id": agent_id, "logs": logs, "count": len(logs)}
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent '{agent_id}' not registered in orchestrator",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Logs query failed: {exc}")
+
+
+@router.put("/{agent_id}/schedule")
+def update_agent_schedule(agent_id: str, req: AgentScheduleUpdate):
+    """Update an agent's schedule (interval and/or preferred run time)."""
+    orchestrator = _get_orchestrator_safe()
+    if orchestrator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Orchestrator not available — module not initialized",
+        )
+
+    try:
+        orchestrator.update_schedule(
+            agent_id,
+            schedule_minutes=req.schedule_minutes,
+            schedule_time=req.schedule_time,
+        )
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent '{agent_id}' not registered in orchestrator",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Schedule update failed: {exc}")
+
+    # Return updated status
+    status = orchestrator.get_agent_status(agent_id)
+    return {"message": f"Schedule updated for '{agent_id}'", "agent": status}

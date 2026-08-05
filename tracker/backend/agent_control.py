@@ -106,7 +106,11 @@ class AgentController:
         env = os.environ.copy()
         try:
             import httpx as _httpx
-            resp = _httpx.get("http://127.0.0.1:8000/api/settings/env", timeout=5)
+            _headers = {}
+            _api_key = os.environ.get("APPLYPILOT_API_KEY", "")
+            if _api_key:
+                _headers["X-API-Key"] = _api_key
+            resp = _httpx.get("http://127.0.0.1:8000/api/settings/env", timeout=5, headers=_headers)
             if resp.status_code == 200:
                 for key, value in resp.json().items():
                     if value:

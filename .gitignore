@@ -31,6 +31,7 @@ tracker/frontend/dist/
 tracker/backend/tracker.db
 logs/
 screenshots/
+resumes/
 
 # Test
 .pytest_cache/

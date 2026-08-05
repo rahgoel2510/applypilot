@@ -695,6 +695,7 @@ def get_feedback_summary(db: Session = Depends(get_db)):
 
 from pydantic import BaseModel as PydanticBaseModel
 from agent_control import get_controller, AgentState
+from rate_limiter import limiter
 
 
 class AgentTriggerRequest(PydanticBaseModel):
@@ -707,7 +708,8 @@ class AgentTriggerRequest(PydanticBaseModel):
 
 
 @router.post("/agent/trigger")
-def trigger_agent(req: AgentTriggerRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def trigger_agent(request: Request, req: AgentTriggerRequest, db: Session = Depends(get_db)):
     """Trigger the LinkedIn agent to start scanning."""
     controller = get_controller()
     result = controller.trigger(

@@ -16,7 +16,7 @@ from typing import Optional
 
 import yaml
 from dotenv import dotenv_values
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -347,8 +347,13 @@ def get_missing_settings(db: Session = Depends(get_db)):
 
 
 @router.get("/env")
-def get_settings_as_env(db: Session = Depends(get_db)):
-    """Internal: returns all settings as key-value for the agent subprocess."""
+def get_settings_as_env(request: Request, db: Session = Depends(get_db)):
+    """Internal: returns settings for agent subprocess. Restricted to localhost."""
+    # Security: Only allow from localhost (agent subprocess)
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="This endpoint is restricted to localhost")
     _seed_from_sources(db)
     return _get_all_settings(db)
 
@@ -412,24 +417,33 @@ async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_
     if ext not in allowed_extensions:
         return {"error": f"Unsupported file type: {ext}. Allowed: {', '.join(allowed_extensions)}"}
 
-    # Save file
-    RESUME_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = RESUME_DIR / file.filename
+    # Sanitize filename — prevent path traversal
+    safe_name = Path(file.filename).name  # strips any directory components
+    if not safe_name or safe_name.startswith('.') or '/' in file.filename or '\\' in file.filename:
+        return {"error": "Invalid filename"}
+    
+    # Enforce file size limit (10MB)
     content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        return {"error": "File too large. Maximum size is 10MB."}
+
+    # Save file with safe name
+    RESUME_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = RESUME_DIR / safe_name
     with open(file_path, "wb") as f:
         f.write(content)
 
     # Update DB setting
     existing = db.query(AppSetting).filter(AppSetting.key == "RESUME_FILENAME").first()
     if existing:
-        existing.value = file.filename
+        existing.value = safe_name
     else:
-        db.add(AppSetting(key="RESUME_FILENAME", value=file.filename))
+        db.add(AppSetting(key="RESUME_FILENAME", value=safe_name))
     db.commit()
 
     return {
-        "message": f"Resume uploaded: {file.filename}",
-        "filename": file.filename,
+        "message": f"Resume uploaded: {safe_name}",
+        "filename": safe_name,
         "size_kb": round(len(content) / 1024, 1),
         "path": str(file_path),
     }

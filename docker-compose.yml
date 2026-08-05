@@ -1,7 +1,7 @@
 version: "3.8"
 
 # ═══════════════════════════════════════════════════════════════
-# ApplyPilot — Docker Compose
+# ApplyPilot — Docker Compose (Security-Hardened)
 # ═══════════════════════════════════════════════════════════════
 # This runs the TRACKER (web UI) only.
 # The AGENT runs natively on your machine (where LinkedIn session lives).
@@ -26,7 +26,7 @@ services:
       - .env
     volumes:
       - applypilot-data:/app/data
-      - applypilot-browser:/root/.local/share/linkedin_agent
+      - applypilot-browser:/home/applypilot/.local/share/linkedin_agent
     restart: unless-stopped
     environment:
       - DATABASE_URL=sqlite:///./data/tracker.db
@@ -37,6 +37,18 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    # Security hardening
+    user: "1000:1000"
+    security_opt:
+      - "no-new-privileges:true"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/data
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    cpus: '2.0'
 
 volumes:
   applypilot-data:

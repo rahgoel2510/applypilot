@@ -1,5 +1,50 @@
 const BASE_URL = '/api';
 
+// ---------------------------------------------------------------------------
+// API Key Management
+// ---------------------------------------------------------------------------
+
+const API_KEY_STORAGE_KEY = 'applypilot_api_key';
+
+/**
+ * Get the API key from localStorage.
+ * On first visit, user must enter it via the Settings page.
+ */
+export function getApiKey() {
+  return localStorage.getItem(API_KEY_STORAGE_KEY) || '';
+}
+
+export function setApiKey(key) {
+  localStorage.setItem(API_KEY_STORAGE_KEY, key);
+}
+
+export function clearApiKey() {
+  localStorage.removeItem(API_KEY_STORAGE_KEY);
+}
+
+/**
+ * Authenticated fetch wrapper — adds X-API-Key header to all requests.
+ */
+async function authFetch(url, options = {}) {
+  const key = getApiKey();
+  const headers = {
+    ...options.headers,
+  };
+  if (key) {
+    headers['X-API-Key'] = key;
+  }
+  const res = await authFetch(url, { ...options, headers });
+  if (res.status === 401) {
+    // Dispatch a custom event so the UI can show a login prompt
+    window.dispatchEvent(new CustomEvent('applypilot:unauthorized'));
+  }
+  return res;
+}
+
+// ---------------------------------------------------------------------------
+// Jobs API
+// ---------------------------------------------------------------------------
+
 export async function fetchJobs({ stage, company, search, sort } = {}) {
   const params = new URLSearchParams();
   if (stage && stage !== 'all') params.append('stage', stage);
@@ -7,7 +52,7 @@ export async function fetchJobs({ stage, company, search, sort } = {}) {
   if (search) params.append('search', search);
   if (sort) params.append('sort', sort);
 
-  const res = await fetch(`${BASE_URL}/jobs?${params}`);
+  const res = await authFetch(`${BASE_URL}/jobs?${params}`);
   if (!res.ok) throw new Error('Failed to fetch jobs');
   return res.json();
 }
@@ -16,19 +61,19 @@ export async function fetchJobsEnriched({ stage, sort } = {}) {
   const params = new URLSearchParams();
   if (stage && stage !== 'all') params.append('stage', stage);
   if (sort) params.append('sort', sort);
-  const res = await fetch(`${BASE_URL}/jobs/enriched?${params}`);
+  const res = await authFetch(`${BASE_URL}/jobs/enriched?${params}`);
   if (!res.ok) throw new Error('Failed to fetch enriched jobs');
   return res.json();
 }
 
 export async function fetchStats() {
-  const res = await fetch(`${BASE_URL}/stats`);
+  const res = await authFetch(`${BASE_URL}/stats`);
   if (!res.ok) throw new Error('Failed to fetch stats');
   return res.json();
 }
 
 export async function createJob(job) {
-  const res = await fetch(`${BASE_URL}/jobs`, {
+  const res = await authFetch(`${BASE_URL}/jobs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(job),
@@ -38,7 +83,7 @@ export async function createJob(job) {
 }
 
 export async function updateJob(id, job) {
-  const res = await fetch(`${BASE_URL}/jobs/${id}`, {
+  const res = await authFetch(`${BASE_URL}/jobs/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(job),
@@ -48,7 +93,7 @@ export async function updateJob(id, job) {
 }
 
 export async function updateJobStage(id, stage) {
-  const res = await fetch(`${BASE_URL}/jobs/${id}/stage`, {
+  const res = await authFetch(`${BASE_URL}/jobs/${id}/stage`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ stage }),
@@ -58,7 +103,7 @@ export async function updateJobStage(id, stage) {
 }
 
 export async function deleteJob(id) {
-  const res = await fetch(`${BASE_URL}/jobs/${id}`, { method: 'DELETE' });
+  const res = await authFetch(`${BASE_URL}/jobs/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete job');
 }
 
@@ -70,14 +115,14 @@ export async function fetchLogs({ page = 1, pageSize = 50, eventType, severity, 
   if (severity) params.append('severity', severity);
   if (search) params.append('search', search);
 
-  const res = await fetch(`${BASE_URL}/logs?${params}`);
+  const res = await authFetch(`${BASE_URL}/logs?${params}`);
   if (!res.ok) throw new Error('Failed to fetch logs');
   return res.json();
 }
 
 // Agent Control API
 export async function triggerAgent({ mode = 'single', dryRun = true, limit = null, matchThreshold = null, collection = 'Recommended', searchMode = null } = {}) {
-  const res = await fetch(`${BASE_URL}/agent/trigger`, {
+  const res = await authFetch(`${BASE_URL}/agent/trigger`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -94,62 +139,62 @@ export async function triggerAgent({ mode = 'single', dryRun = true, limit = nul
 }
 
 export async function stopAgent() {
-  const res = await fetch(`${BASE_URL}/agent/stop`, { method: 'POST' });
+  const res = await authFetch(`${BASE_URL}/agent/stop`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to stop agent');
   return res.json();
 }
 
 export async function getAgentStatus() {
-  const res = await fetch(`${BASE_URL}/agent/status`);
+  const res = await authFetch(`${BASE_URL}/agent/status`);
   if (!res.ok) throw new Error('Failed to get agent status');
   return res.json();
 }
 
 export async function getAgentOutput(tail = 100) {
-  const res = await fetch(`${BASE_URL}/agent/output?tail=${tail}`);
+  const res = await authFetch(`${BASE_URL}/agent/output?tail=${tail}`);
   if (!res.ok) throw new Error('Failed to get agent output');
   return res.json();
 }
 
 export async function getAgentRuns(limit = 20) {
-  const res = await fetch(`${BASE_URL}/agent/runs?limit=${limit}`);
+  const res = await authFetch(`${BASE_URL}/agent/runs?limit=${limit}`);
   if (!res.ok) throw new Error('Failed to get agent runs');
   return res.json();
 }
 
 export async function getAgentRunDetail(runId) {
-  const res = await fetch(`${BASE_URL}/agent/runs/${runId}`);
+  const res = await authFetch(`${BASE_URL}/agent/runs/${runId}`);
   if (!res.ok) throw new Error('Failed to get run detail');
   return res.json();
 }
 
 export async function getRunAnalysis(runId) {
-  const res = await fetch(`${BASE_URL}/agent/runs/${runId}/analysis`);
+  const res = await authFetch(`${BASE_URL}/agent/runs/${runId}/analysis`);
   if (!res.ok) throw new Error('Failed to get run analysis');
   return res.json();
 }
 
 export async function diagnoseRun(runId) {
-  const res = await fetch(`${BASE_URL}/agent/diagnose/${runId}`, { method: 'POST' });
+  const res = await authFetch(`${BASE_URL}/agent/diagnose/${runId}`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to diagnose');
   return res.json();
 }
 
 export async function autoRepair() {
-  const res = await fetch(`${BASE_URL}/agent/repair`, { method: 'POST' });
+  const res = await authFetch(`${BASE_URL}/agent/repair`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to auto-repair');
   return res.json();
 }
 
 // Settings API
 export async function getSettings() {
-  const res = await fetch(`${BASE_URL}/settings`);
+  const res = await authFetch(`${BASE_URL}/settings`);
   if (!res.ok) throw new Error('Failed to get settings');
   return res.json();
 }
 
 export async function updateSettings(values) {
-  const res = await fetch(`${BASE_URL}/settings`, {
+  const res = await authFetch(`${BASE_URL}/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ values }),
@@ -159,13 +204,13 @@ export async function updateSettings(values) {
 }
 
 export async function testConnection(service) {
-  const res = await fetch(`${BASE_URL}/settings/test/${service}`, { method: 'POST' });
+  const res = await authFetch(`${BASE_URL}/settings/test/${service}`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to test connection');
   return res.json();
 }
 
 export async function fetchFreeModels() {
-  const res = await fetch(`${BASE_URL}/settings/models`);
+  const res = await authFetch(`${BASE_URL}/settings/models`);
   if (!res.ok) throw new Error('Failed to fetch models');
   return res.json();
 }
@@ -175,13 +220,13 @@ export async function fetchFreeModels() {
 // ===========================================================================
 
 export async function getSchedule() {
-  const res = await fetch(`${BASE_URL}/scheduler`);
+  const res = await authFetch(`${BASE_URL}/scheduler`);
   if (!res.ok) throw new Error('Failed to get schedule');
   return res.json();
 }
 
 export async function updateSchedule(config) {
-  const res = await fetch(`${BASE_URL}/scheduler`, {
+  const res = await authFetch(`${BASE_URL}/scheduler`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
@@ -191,7 +236,7 @@ export async function updateSchedule(config) {
 }
 
 export async function getNextRuns() {
-  const res = await fetch(`${BASE_URL}/scheduler/next-runs`);
+  const res = await authFetch(`${BASE_URL}/scheduler/next-runs`);
   if (!res.ok) throw new Error('Failed to get next runs');
   return res.json();
 }
@@ -201,25 +246,25 @@ export async function getNextRuns() {
 // ===========================================================================
 
 export async function getServiceStatus() {
-  const res = await fetch(`${BASE_URL}/service/status`);
+  const res = await authFetch(`${BASE_URL}/service/status`);
   if (!res.ok) throw new Error('Failed to get service status');
   return res.json();
 }
 
 export async function startService() {
-  const res = await fetch(`${BASE_URL}/service/start`, { method: 'POST' });
+  const res = await authFetch(`${BASE_URL}/service/start`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to start service');
   return res.json();
 }
 
 export async function stopService() {
-  const res = await fetch(`${BASE_URL}/service/stop`, { method: 'POST' });
+  const res = await authFetch(`${BASE_URL}/service/stop`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to stop service');
   return res.json();
 }
 
 export async function setAutoStart(enabled) {
-  const res = await fetch(`${BASE_URL}/service/auto-start`, {
+  const res = await authFetch(`${BASE_URL}/service/auto-start`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled }),
@@ -233,13 +278,13 @@ export async function setAutoStart(enabled) {
 // ===========================================================================
 
 export async function getAgentTypes() {
-  const res = await fetch(`${BASE_URL}/agents`);
+  const res = await authFetch(`${BASE_URL}/agents`);
   if (!res.ok) throw new Error('Failed to get agent types');
   return res.json();
 }
 
 export async function updateAgentConfig(agentId, config) {
-  const res = await fetch(`${BASE_URL}/agents/${agentId}`, {
+  const res = await authFetch(`${BASE_URL}/agents/${agentId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ config }),
@@ -249,7 +294,7 @@ export async function updateAgentConfig(agentId, config) {
 }
 
 export async function toggleAgent(agentId, enabled) {
-  const res = await fetch(`${BASE_URL}/agents/${agentId}/toggle`, {
+  const res = await authFetch(`${BASE_URL}/agents/${agentId}/toggle`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled }),
@@ -263,7 +308,7 @@ export async function toggleAgent(agentId, enabled) {
 // ===========================================================================
 
 export async function getFeedbackSummary() {
-  const res = await fetch(`${BASE_URL}/feedback/summary`);
+  const res = await authFetch(`${BASE_URL}/feedback/summary`);
   if (!res.ok) throw new Error('Failed to get feedback summary');
   return res.json();
 }
@@ -273,17 +318,79 @@ export async function getFeedbackSummary() {
 // ===========================================================================
 
 export async function getConfigYaml() {
-  const res = await fetch(`${BASE_URL}/settings/config`);
+  const res = await authFetch(`${BASE_URL}/settings/config`);
   if (!res.ok) throw new Error('Failed to get config');
   return res.json();
 }
 
 export async function updateConfigYaml(config) {
-  const res = await fetch(`${BASE_URL}/settings/config`, {
+  const res = await authFetch(`${BASE_URL}/settings/config`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   });
   if (!res.ok) throw new Error('Failed to update config');
+  return res.json();
+}
+
+// ===========================================================================
+// Multi-Agent Orchestrator API
+// ===========================================================================
+
+export async function getMultiAgentStatus(agentId) {
+  const res = await authFetch(`${BASE_URL}/agents/${agentId}/status`);
+  if (!res.ok) throw new Error('Failed to get agent status');
+  return res.json();
+}
+
+export async function triggerAgentRun(agentId) {
+  const res = await authFetch(`${BASE_URL}/agents/${agentId}/trigger`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to trigger agent run');
+  return res.json();
+}
+
+export async function stopAgentRun(agentId) {
+  const res = await authFetch(`${BASE_URL}/agents/${agentId}/stop`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to stop agent');
+  return res.json();
+}
+
+export async function getAgentLogs(agentId, limit = 50) {
+  const res = await authFetch(`${BASE_URL}/agents/${agentId}/logs?limit=${limit}`);
+  if (!res.ok) throw new Error('Failed to get agent logs');
+  return res.json();
+}
+
+export async function getAgentHistory(agentId) {
+  const res = await authFetch(`${BASE_URL}/agents/${agentId}/history`);
+  if (!res.ok) throw new Error('Failed to get agent history');
+  return res.json();
+}
+
+export async function updateAgentSchedule(agentId, schedule) {
+  const res = await authFetch(`${BASE_URL}/agents/${agentId}/schedule`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(schedule),
+  });
+  if (!res.ok) throw new Error('Failed to update agent schedule');
+  return res.json();
+}
+
+export async function getOrchestratorStatus() {
+  const res = await authFetch(`${BASE_URL}/agents/orchestrator/status`);
+  if (!res.ok) throw new Error('Failed to get orchestrator status');
+  return res.json();
+}
+
+export async function startOrchestrator() {
+  const res = await authFetch(`${BASE_URL}/agents/orchestrator/start`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to start orchestrator');
+  return res.json();
+}
+
+export async function stopOrchestrator() {
+  const res = await authFetch(`${BASE_URL}/agents/orchestrator/stop`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to stop orchestrator');
   return res.json();
 }

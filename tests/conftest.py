@@ -29,6 +29,16 @@ from linkedin_agent.config import Settings, get_config, reset_config
 
 
 @pytest.fixture(autouse=True)
+def _clean_circuit_breaker_state(tmp_path):
+    """Ensure circuit breaker persistence doesn't leak between tests."""
+    from linkedin_agent.resilience.circuit_breaker import CircuitBreaker
+    original_path = CircuitBreaker._persist_path
+    CircuitBreaker._persist_path = tmp_path / "circuit_breakers.json"
+    yield
+    CircuitBreaker._persist_path = original_path
+
+
+@pytest.fixture(autouse=True)
 def reset_config_singleton():
     """Reset the config singleton between tests."""
     reset_config()

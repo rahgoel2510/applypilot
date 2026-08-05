@@ -1,5 +1,6 @@
 # ─── ApplyPilot Full (Tracker + Agent + Chromium) ─────────────
 # Everything in one container. Agent can scan from the UI.
+# Security-hardened: non-root user, minimal capabilities, read-only FS
 
 FROM node:20-alpine AS frontend-build
 WORKDIR /app/frontend
@@ -10,8 +11,16 @@ RUN npm run build
 
 FROM mcr.microsoft.com/playwright/python:v1.61.0-noble
 
+# Security labels
+LABEL org.opencontainers.image.title="ApplyPilot"
+LABEL org.opencontainers.image.description="Autonomous LinkedIn Job Application Agent"
+LABEL org.opencontainers.image.vendor="Rahul"
+LABEL org.opencontainers.image.source="https://github.com/rahgoel2510/applypilot"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL security.hardened="true"
+LABEL security.non-root="true"
+
 USER root
-ENV HOME=/root
 WORKDIR /app
 
 # Install all Python dependencies
@@ -31,14 +40,24 @@ COPY tracker/backend/ ./tracker/backend/
 # Copy built frontend
 COPY --from=frontend-build /app/frontend/dist ./tracker/backend/static
 
-# Create directories
-RUN mkdir -p /app/data /app/logs /app/screenshots \
-    /root/.local/share/linkedin_agent/browser_data
+# Create directories with proper permissions
+RUN mkdir -p /app/data /app/logs /app/screenshots /tmp/applypilot \
+    && groupadd -g 1000 applypilot \
+    && useradd -u 1000 -g 1000 -m -s /bin/bash applypilot \
+    && mkdir -p /home/applypilot/.local/share/linkedin_agent/browser_data \
+    && chown -R 1000:1000 /app /home/applypilot/.local
+
+# Set proper file ownership
+RUN chown -R 1000:1000 /app/data /app/logs /app/screenshots /tmp/applypilot
 
 ENV DATABASE_URL=sqlite:///./data/tracker.db
 ENV PYTHONPATH=/app
+ENV HOME=/home/applypilot
 
 EXPOSE 8000
+
+# Switch to non-root user
+USER applypilot
 
 WORKDIR /app/tracker/backend
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
