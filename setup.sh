@@ -128,7 +128,7 @@ ok "Virtual env activated"
 log "Installing Python packages..."
 pip install --upgrade pip -q
 pip install -r requirements.txt -q
-pip install -r tracker/backend/requirements.txt -q 2>/dev/null || true
+pip install -r tracker/backend/requirements.txt -q
 
 # Optional: Turso cloud dedup
 log "Trying optional libsql-experimental (cloud dedup)..."
@@ -160,6 +160,14 @@ if [[ ! -f ".env" ]]; then
   warn "Edit .env with your Telegram bot token and LinkedIn credentials"
 else
   ok ".env exists"
+fi
+
+if [[ ! -f "config.yaml" ]]; then
+  log "Creating config.yaml from template..."
+  cp config.yaml.example config.yaml
+  warn "Edit config.yaml with your candidate info, keywords, and locations"
+else
+  ok "config.yaml exists"
 fi
 
 # ─── 7. Database Setup (Isolated per environment) ────────────────────

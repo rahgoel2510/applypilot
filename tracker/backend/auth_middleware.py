@@ -46,6 +46,7 @@ else:
 _PUBLIC_PATHS: set[str] = {
     "/api/stats",
     "/api/health",
+    "/api/onboarding/status",
     "/docs",
     "/openapi.json",
     "/",

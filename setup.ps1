@@ -134,6 +134,16 @@ if (-not (Test-Path ".env")) {
     Write-Host "        .env exists" -ForegroundColor Green
 }
 
+if (-not (Test-Path "config.yaml")) {
+    if (Test-Path "config.yaml.example") {
+        Copy-Item "config.yaml.example" "config.yaml"
+        Write-Host "        Created config.yaml from template" -ForegroundColor Yellow
+        Write-Host "        ⚠ Edit config.yaml with your candidate info!" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "        config.yaml exists" -ForegroundColor Green
+}
+
 # ─── Done! ───────────────────────────────────────────────
 
 Write-Host ""

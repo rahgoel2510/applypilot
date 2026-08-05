@@ -19,6 +19,7 @@ from todo_routes import router as todo_router
 from privacy_routes import router as privacy_router
 from audit_log import router as audit_router, AuditEntry, ConsentRecord  # noqa: F401
 from health_routes import router as health_router
+from onboarding import router as onboarding_router
 from models import Job, ActivityLog, AppSetting, AgentRun, FeedbackSignal, InMailDraft, Todo  # noqa: F401 — ensure models are registered before create_all
 
 # Ensure all tables exist (covers test/import scenarios where lifespan may not fire)
@@ -108,6 +109,7 @@ app.include_router(todo_router)
 app.include_router(privacy_router)
 app.include_router(audit_router)
 app.include_router(health_router)
+app.include_router(onboarding_router)
 
 from cleanup_scheduler import cleanup_router
 app.include_router(cleanup_router)

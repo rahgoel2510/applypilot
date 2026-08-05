@@ -1,0 +1,90 @@
+# ApplyPilot Configuration
+# Copy this file to config.yaml and fill in your details:
+#   cp config.yaml.example config.yaml
+#
+# All settings can also be configured from the Dashboard → Settings page.
+# This file is only needed for CLI usage.
+
+candidate:
+  name: "Your Name"
+  email: ""
+  phone: ""
+  resume_filename: "resume.pdf"
+  notice_period: "30 days"
+  willing_to_relocate: true
+  work_authorization: ""
+  preferred_cities:
+    - "Your City"
+  skills:
+    - "your skill 1"
+    - "your skill 2"
+    - "your skill 3"
+  sensitive_field_answers:
+    salary_expectation: "As per company standards"
+    current_ctc: "Confidential - happy to discuss"
+    expected_ctc: "Negotiable based on role"
+    years_of_experience: "5"
+    gender: "Prefer not to say"
+    veteran_status: "No"
+    disability: "No"
+    race_ethnicity: "Prefer not to say"
+  human_input_timeout: 300
+
+job_search:
+  keywords:
+    - "Software Engineer"
+    - "Senior Developer"
+  custom_urls: []
+  locations:
+    - "Your Country"
+    - "Your City"
+    - "Remote"
+  match_threshold: 0.70
+  max_postings_per_run: 50
+  collection: "Recommended"
+  skip_external_apply: false
+  track_external_apply: true
+  posted_within: "24h"
+  fallback_scoring: true
+  initial_scan_window: "week"
+  daily_application_limit: 80
+  search_mode: "active"
+  auto_apply_external: false
+
+scheduler:
+  interval_minutes: 60
+  active_hours_start: 9
+  active_hours_end: 22
+  urgent_mode: false
+  urgent_interval_minutes: 30
+  urgent_max_postings: 100
+  urgent_duration_days: 7
+
+telegram:
+  notify_on_submit: true
+  notify_on_pause: true
+  notify_on_skip: false
+  tally_interval_minutes: 30
+
+inmail:
+  enabled: true
+  tone: "professional"
+  max_length: 300
+
+self_learning:
+  target_companies:
+    - "Company You Love"
+  blocklist_companies:
+    - "Company You Want to Avoid"
+  target_boost: 0.15
+  blocklist_penalty: 0.20
+
+graph:
+  enabled: false
+  db_path: "~/.linkedin_agent/graph_db"
+  auto_similarity: true
+  similarity_threshold: 0.6
+  skill_extraction: true
+  cache_company_days: 7
+  embedding_model: "all-MiniLM-L6-v2"
+  prompt_cache_enabled: true
