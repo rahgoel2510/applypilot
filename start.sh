@@ -22,12 +22,8 @@ fi
 FIRST_RUN=false
 
 if [[ ! -f ".env" ]]; then
-  echo "⚠️  No .env file found!"
-  echo ""
-  echo "   Run setup first:  bash setup.sh"
-  echo "   Or copy manually: cp .env.example .env"
-  echo ""
-  exit 1
+  echo "📋 No .env file — credentials will be entered via the dashboard Settings page."
+  FIRST_RUN=true
 fi
 
 if [[ ! -f "config.yaml" ]]; then
@@ -42,8 +38,13 @@ fi
 if [[ -z "${APPLYPILOT_API_KEY:-}" ]]; then
   GENERATED_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))" 2>/dev/null || echo "")
   if [[ -n "$GENERATED_KEY" ]]; then
-    echo "APPLYPILOT_API_KEY=$GENERATED_KEY" >> .env
     export APPLYPILOT_API_KEY="$GENERATED_KEY"
+    # Save to .env if it exists, otherwise create minimal .env
+    if [[ -f ".env" ]]; then
+      echo "APPLYPILOT_API_KEY=$GENERATED_KEY" >> .env
+    else
+      echo "APPLYPILOT_API_KEY=$GENERATED_KEY" > .env
+    fi
     echo "🔑 Generated API key (saved to .env)"
   fi
 fi

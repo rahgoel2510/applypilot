@@ -198,15 +198,18 @@ def _normalize_threshold(value: float) -> float:
 
 
 def _validate_env() -> None:
-    """Ensure all required environment variables are set.
-
-    Raises ConfigError with a descriptive message listing missing vars.
+    """Check for required environment variables.
+    
+    Logs a warning for missing vars but does NOT raise.
+    Settings may be configured via the dashboard DB instead of .env.
     """
     missing = [var for var in REQUIRED_ENV_VARS if not os.environ.get(var)]
     if missing:
-        raise ConfigError(
-            f"Missing required environment variables: {', '.join(missing)}. "
-            f"Please set them in {ENV_FILE} or export them in your shell."
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"Environment vars not set: {', '.join(missing)}. "
+            f"These may be configured via the dashboard Settings page."
         )
 
 
@@ -357,7 +360,8 @@ def get_config(*, validate: bool = True, reload: bool = False) -> Settings:
         return _settings_instance
 
     # Load .env into os.environ (existing env vars take precedence)
-    load_dotenv(ENV_FILE, override=False)
+    if ENV_FILE.exists():
+        load_dotenv(ENV_FILE, override=False)
 
     if validate:
         _validate_env()

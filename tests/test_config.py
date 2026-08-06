@@ -154,6 +154,11 @@ class TestGetConfig:
         assert c1 is not c2
 
     def test_validation_raises_on_missing_vars(self, monkeypatch):
+        """Missing env vars no longer crash — settings can come from DB instead.
+        
+        _validate_env() now logs a warning instead of raising ConfigError.
+        get_config() should succeed and return a Settings object with defaults.
+        """
         # Clear all required env vars AND prevent .env from reloading them
         required = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "OPENAI_API_KEY",
                     "LINKEDIN_EMAIL", "LINKEDIN_PASSWORD"]
@@ -163,8 +168,9 @@ class TestGetConfig:
         # Patch load_dotenv to prevent it from re-reading .env file
         with patch("linkedin_agent.config.load_dotenv"):
             reset_config()
-            with pytest.raises(ConfigError, match="Missing required"):
-                get_config(validate=True, reload=True)
+            # Should NOT raise — just returns settings with empty credential fields
+            settings = get_config(validate=True, reload=True)
+            assert settings is not None
 
 
 class TestSettingsImmutability:

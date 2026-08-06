@@ -306,11 +306,24 @@ def update_settings(req: SettingsUpdateRequest, db: Session = Depends(get_db)):
         # Never save masked values (contain bullet chars from the UI display)
         if "••" in value or value == "••••••••":
             continue
+
+        # Encrypt sensitive values before storing
+        store_value = value.strip()
+        item = next((i for i in SETTINGS_KEYS if i["key"] == key), {})
+        if item.get("sensitive", False):
+            try:
+                from settings_service import SENSITIVE_KEYS
+                if key in SENSITIVE_KEYS:
+                    from linkedin_agent.credential_vault import vault
+                    store_value = vault.encrypt(store_value)
+            except Exception:
+                pass  # Store plaintext if vault unavailable
+
         existing = db.query(AppSetting).filter(AppSetting.key == key).first()
         if existing:
-            existing.value = value.strip()
+            existing.value = store_value
         else:
-            db.add(AppSetting(key=key, value=value.strip()))
+            db.add(AppSetting(key=key, value=store_value))
         updated.append(key)
 
     db.commit()
@@ -355,7 +368,19 @@ def get_settings_as_env(request: Request, db: Session = Depends(get_db)):
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="This endpoint is restricted to localhost")
     _seed_from_sources(db)
-    return _get_all_settings(db)
+    all_settings = _get_all_settings(db)
+
+    # Decrypt sensitive values before returning to agent
+    try:
+        from linkedin_agent.credential_vault import vault
+        for key in all_settings:
+            if key in ('LINKEDIN_PASSWORD', 'TELEGRAM_BOT_TOKEN', 'OPENAI_API_KEY'):
+                if vault.is_encrypted(all_settings[key]):
+                    all_settings[key] = vault.decrypt(all_settings[key])
+    except Exception:
+        pass
+
+    return all_settings
 
 
 # ===========================================================================

@@ -52,8 +52,8 @@ class AlertManager:
             AlertRule(name='consecutive_failures', consecutive_failures_threshold=3, cooldown_seconds=300),
             AlertRule(name='critical_failures', consecutive_failures_threshold=5, cooldown_seconds=600),
         ]
-        self._telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-        self._telegram_chat_id = os.environ.get('TELEGRAM_CHAT_ID', '')
+        self._telegram_token: str = ''
+        self._telegram_chat_id: str = ''
     
     def record_success(self):
         """Record a successful job processing."""
@@ -89,17 +89,25 @@ class AlertManager:
         emoji = {'warning': '\u26a0\ufe0f', 'critical': '\U0001f6a8', 'recovery': '\u2705'}[severity.value]
         text = f"{emoji} ApplyPilot Alert [{severity.value.upper()}]\n\n{message}\n\nStats: {self.state.total_successes} ok / {self.state.total_failures} failed"
         
-        if self._telegram_token and self._telegram_chat_id:
-            self._send_telegram(text)
+        # Lazy credential read (picks up runtime config)
+        token = self._telegram_token or os.environ.get('TELEGRAM_BOT_TOKEN', '')
+        chat_id = self._telegram_chat_id or os.environ.get('TELEGRAM_CHAT_ID', '')
+        
+        if token and chat_id:
+            self._send_telegram(text, token, chat_id)
         else:
             logger.warning(f'Alert (no Telegram configured): {text}')
     
-    def _send_telegram(self, text: str):
+    def _send_telegram(self, text: str, token: str = '', chat_id: str = ''):
         """Send message via Telegram Bot API (sync, best-effort)."""
+        token = token or self._telegram_token or os.environ.get('TELEGRAM_BOT_TOKEN', '')
+        chat_id = chat_id or self._telegram_chat_id or os.environ.get('TELEGRAM_CHAT_ID', '')
+        if not token or not chat_id:
+            return
         try:
             import httpx
-            url = f'https://api.telegram.org/bot{self._telegram_token}/sendMessage'
-            httpx.post(url, json={'chat_id': self._telegram_chat_id, 'text': text, 'parse_mode': 'HTML'}, timeout=10)
+            url = f'https://api.telegram.org/bot{token}/sendMessage'
+            httpx.post(url, json={'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'}, timeout=10)
         except Exception as e:
             logger.error(f'Failed to send Telegram alert: {e}')
     

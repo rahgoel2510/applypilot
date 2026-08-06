@@ -62,12 +62,13 @@ cd applypilot
 # 2. Run setup (installs Python deps, Node deps, Playwright Chromium)
 bash setup.sh
 
-# 3. Configure your credentials
+# 3. (Optional) Pre-configure credentials
+# You can skip this and configure everything from the dashboard UI instead.
 cp .env.example .env
 nano .env   # Fill in your LinkedIn email/password and Telegram bot token
 ```
 
-**`.env` file (required):**
+**`.env` file (optional — or configure via dashboard):**
 ```
 LINKEDIN_EMAIL=your-email@gmail.com
 LINKEDIN_PASSWORD=your-password
@@ -109,12 +110,13 @@ cd applypilot
 # 2. Run setup (creates venv, installs deps, downloads Chromium)
 pwsh ./setup.ps1
 
-# 3. Configure credentials
+# 3. (Optional) Pre-configure credentials
+# You can skip this and configure everything from the dashboard UI instead.
 Copy-Item .env.example .env
 notepad .env   # Fill in LinkedIn, Telegram, and AI keys
 ```
 
-**`.env` file (required):**
+**`.env` file (optional — or configure via dashboard):**
 ```
 LINKEDIN_EMAIL=your-email@gmail.com
 LINKEDIN_PASSWORD=your-password
